@@ -96,7 +96,7 @@ dsh plugin --profile web add dsh-email
 | `provider` | 无 | 预设名，自动填 imap/smtp 地址；显式写的 host/port/secure 优先 |
 | `user` | 必填 | 登录邮箱地址 |
 | `password` | 必填* | 授权码/应用专用密码；*也可用环境变量 `DSH_EMAIL_PASSWORD` |
-| `imap.host/port/secure` | 按预设 | 收信服务器 |
+| `imap.host/port/secure` | 按预设 | 收信服务器（另有 connectionTimeoutMs/socketTimeoutMs 可调超时） |
 | `smtp.host/port/secure` | 按预设 | 发信服务器 |
 | `inboxFolder` | `INBOX` | 收发工具默认使用的文件夹 |
 | `sendApproval` | `true` | 发信前弹确认（强烈建议保留） |
@@ -127,7 +127,7 @@ dsh plugin --profile web add dsh-email
 
 - **连接复用**：IMAP 按账号池化（空闲自动回收），SMTP 用 nodemailer 连接池；同一账号的并发调用会排队串行（一个连接一次只服务一个操作，这是有意的）。
 - **多账号**：每个账号独立连接池；一个 `tool-email` 行可以配任意多个账号。设置页编辑的是默认账号；`accounts` 映射仍需写 cordis.patch.yml。
-- **附件下载**：email_attachment 按序号下载（与 email_read 的 attachments 顺序一致）；文件名会被清洗防路径穿越，已有同名文件自动加后缀，大小受 maxAttachmentBytes 限制。
+- **附件下载**：email_attachment 按 email_read 的附件列表定位（先按文件名、再按类型+大小匹配到 IMAP 部件，定位失败会报错而不是下载错文件）；内嵌图片暂不支持下载；文件名会被清洗防路径穿越，已有同名文件自动加后缀，大小受 maxAttachmentBytes 限制。
 - **不支持 OAuth2**：强制 OAuth 的企业环境（部分 M365/Google Workspace）暂不可用。
 - 正文搜索不提供：多数服务器（如 QQ）的 IMAP `TEXT`/`HEADER` 搜索要么全量匹配要么不支持，所以只搜主题/发件人/收件人；正文搜索列入后续版本（需客户端下载解析，较慢）。
 - **密码落盘形式**：设置页保存的授权码以明文写在本机 `settings.yaml`（schema 标记 secret 只是保证它不进日志/导出/诊断，不做磁盘加密）。请勿把 settings.yaml 交给不信任的人。
@@ -138,7 +138,7 @@ dsh plugin --profile web add dsh-email
 ```sh
 pnpm install
 pnpm run build   # tsc → lib/
-pnpm test        # 构建 + node --test（配置/解析/注册与审批门，31 个用例，无需真实邮箱）
+pnpm test        # 构建 + node --test（配置/解析/注册与审批门，34 个用例，无需真实邮箱）
 ```
 
 ## 协议

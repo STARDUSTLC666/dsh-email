@@ -47,7 +47,6 @@ export function truncateText(text: string, maxChars: number): { text: string; tr
  */
 export function sanitizeFilename(raw: unknown, fallback = 'attachment.bin'): string {
   let name = String(raw ?? '').replace(/\\/g, '/').split('/').pop() ?? ''
-  // eslint-disable-next-line no-control-regex
   name = name.replace(/[\u0000-\u001f\u007f]/g, '').trim()
   if (name === '' || name === '.' || name === '..') name = fallback
   if (name.length > 120) {

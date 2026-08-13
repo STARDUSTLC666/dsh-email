@@ -86,3 +86,23 @@ test('parseRawMessage truncates oversized bodies', async () => {
   assert.equal(body.truncated, true)
   assert.ok(body.text.length < 600)
 })
+
+test('selectAttachmentPart maps the mailparser list onto bodyStructure parts', async () => {
+  const { selectAttachmentPart } = await import('../lib/index.js')
+  const read = [
+    { filename: 'img.png', contentType: 'image/png', size: 2048, part: 'attachment-0' },
+    { filename: 'report.pdf', contentType: 'application/pdf', size: 100, part: 'attachment-1' },
+  ]
+  const parts = [
+    { part: '2', filename: 'report.pdf', contentType: 'application/pdf', size: 104 },
+  ]
+  // name match beats index position (inline image shifted the list)
+  assert.equal(selectAttachmentPart(read, parts, 1).part, '2')
+  // no match for the inline image -> undefined, never the wrong file
+  assert.equal(selectAttachmentPart(read, parts, 0), undefined)
+  // out of range
+  assert.equal(selectAttachmentPart(read, parts, 5), undefined)
+  // type + tolerant size fallback when the name differs
+  const renamed = [{ filename: 'renamed.bin', contentType: 'application/pdf', size: 95, part: 'attachment-0' }]
+  assert.equal(selectAttachmentPart(renamed, parts, 0).part, '2')
+})

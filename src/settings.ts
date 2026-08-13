@@ -68,27 +68,41 @@ export function toSettingsBase(config: EmailConfig): Partial<EmailSettingsValue>
   }
 }
 
-/** Project a settings value back into EmailConfig shape ('' becomes unset). */
-export function toEmailConfig(value: EmailSettingsValue): EmailConfig {
-  return {
-    ...(value.provider !== '' ? { provider: value.provider as EmailConfig['provider'] } : {}),
-    ...(value.user !== '' ? { user: value.user } : {}),
-    ...(value.password !== '' ? { password: value.password } : {}),
-    ...(value.inboxFolder !== '' && value.inboxFolder !== 'INBOX' ? { inboxFolder: value.inboxFolder } : {}),
-    sendApproval: value.sendApproval,
-    maxBodyChars: value.maxBodyChars,
-    ...(value.downloadDir !== '' ? { downloadDir: value.downloadDir } : {}),
-    imap: {
-      ...(value.imap.host !== '' ? { host: value.imap.host } : {}),
-      port: value.imap.port,
-      secure: value.imap.secure,
-    },
-    smtp: {
-      ...(value.smtp.host !== '' ? { host: value.smtp.host } : {}),
-      port: value.smtp.port,
-      secure: value.smtp.secure,
-    },
+/**
+ * Project a settings value back into EmailConfig shape.
+ *
+ * `user` is the raw stored user section: only fields the user actually set
+ * are projected, so schema defaults never shadow the row config or the
+ * provider presets (choosing outlook must NOT force smtp port 465 over the
+ * preset's 587). Pass `null` to project every field (draft paths).
+ */
+export function toEmailConfig(value: EmailSettingsValue, user?: Partial<EmailSettingsValue> | null): EmailConfig {
+  const has = (key: keyof EmailSettingsValue): boolean => user === null || user?.[key] !== undefined
+  const out: EmailConfig = {}
+  if (has('provider')) out.provider = value.provider === '' ? undefined : value.provider as EmailConfig['provider']
+  if (has('user')) out.user = value.user
+  if (has('password')) out.password = value.password
+  if (has('inboxFolder')) out.inboxFolder = value.inboxFolder
+  if (has('sendApproval')) out.sendApproval = value.sendApproval
+  if (has('maxBodyChars')) out.maxBodyChars = value.maxBodyChars
+  if (has('downloadDir')) out.downloadDir = value.downloadDir
+  if (user === null || user?.imap !== undefined) {
+    const fields: Partial<EmailSettingsValue['imap']> = user === null ? value.imap : (user.imap ?? {})
+    const imap: EmailConfig['imap'] = {}
+    if (fields.host !== undefined) imap.host = value.imap.host
+    if (fields.port !== undefined) imap.port = value.imap.port
+    if (fields.secure !== undefined) imap.secure = value.imap.secure
+    out.imap = imap
   }
+  if (user === null || user?.smtp !== undefined) {
+    const fields: Partial<EmailSettingsValue['smtp']> = user === null ? value.smtp : (user.smtp ?? {})
+    const smtp: EmailConfig['smtp'] = {}
+    if (fields.host !== undefined) smtp.host = value.smtp.host
+    if (fields.port !== undefined) smtp.port = value.smtp.port
+    if (fields.secure !== undefined) smtp.secure = value.smtp.secure
+    out.smtp = smtp
+  }
+  return out
 }
 
 /**

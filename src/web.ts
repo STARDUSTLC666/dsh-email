@@ -5,10 +5,6 @@ import { EmailPool, messageOf } from './mail-client.js'
 /** Same-origin route the browser settings section talks to. */
 export const SETTINGS_ROUTE = '/_dsh/dsh-email/settings'
 
-function messageOf2(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
-
 /**
  * Browser-facing backend: snapshot the settings namespace, save it with
  * optimistic concurrency, and test a draft account over a live IMAP login.
@@ -16,8 +12,14 @@ function messageOf2(error: unknown): string {
 export class EmailSettingsBackend {
   constructor(private readonly ctx: any, private readonly scope: any, private readonly rowConfig: EmailConfig) {}
 
-  private effective(value: EmailSettingsValue): EmailConfig {
-    return { ...this.rowConfig, ...toEmailConfig(value) }
+  private userSection(): Partial<EmailSettingsValue> | undefined {
+    const descriptor = (this.ctx.settings.describe?.() ?? []).find((row: any) => row.ns === SETTINGS_NAMESPACE)
+    return descriptor?.user as Partial<EmailSettingsValue> | undefined
+  }
+
+  /** Effective config for the stored value (row + user-set fields only). */
+  private effectiveStored(): EmailConfig {
+    return { ...this.rowConfig, ...toEmailConfig(this.scope.get() as EmailSettingsValue, this.userSection()) }
   }
 
   async snapshot() {
@@ -36,7 +38,7 @@ export class EmailSettingsBackend {
 
   private effectiveAccounts(): Map<string, unknown> {
     try {
-      return resolveEmailSettings(this.effective(this.scope.get() as EmailSettingsValue)).accounts
+      return resolveEmailSettings(this.effectiveStored()).accounts
     } catch {
       return new Map()
     }
@@ -51,7 +53,8 @@ export class EmailSettingsBackend {
 
   async test(value: EmailSettingsValue) {
     validateSettingsValue(value)
-    const settings = resolveEmailSettings(this.effective(value))
+    // null projects the complete draft: test the form as the user typed it.
+    const settings = resolveEmailSettings({ ...this.rowConfig, ...toEmailConfig(value, null) })
     const pool = new EmailPool(settings)
     try {
       const started = Date.now()
@@ -76,7 +79,7 @@ export class EmailSettingsBackend {
       try {
         this.responseJson(res, 200, { ok: true, value: await this.snapshot() })
       } catch (error) {
-        this.responseJson(res, 503, { ok: false, error: { code: 'unavailable', message: messageOf2(error) } })
+        this.responseJson(res, 503, { ok: false, error: { code: 'unavailable', message: messageOf(error, 'unknown error') } })
       }
       return
     }
@@ -95,7 +98,7 @@ export class EmailSettingsBackend {
       }
       body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
     } catch (error) {
-      this.responseJson(res, 400, { ok: false, error: { code: 'invalid-request', message: messageOf2(error) } })
+      this.responseJson(res, 400, { ok: false, error: { code: 'invalid-request', message: messageOf(error, 'unknown error') } })
       return
     }
     try {
@@ -111,7 +114,7 @@ export class EmailSettingsBackend {
       const conflict = (error as any)?.code === 'SETTINGS_CONFLICT'
       this.responseJson(res, conflict ? 409 : 400, {
         ok: false,
-        error: { code: conflict ? 'settings-conflict' : 'rejected', message: messageOf2(error) },
+        error: { code: conflict ? 'settings-conflict' : 'rejected', message: messageOf(error, 'unknown error') },
       })
     }
   }

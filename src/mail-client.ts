@@ -6,6 +6,7 @@ import type { Readable } from 'node:stream'
 import type { ResolvedEmailConfig, ResolvedEmailSettings } from './config.js'
 import { flattenAddresses, parseRawMessage, sanitizeFilename } from './parse.js'
 import type {
+  EmailAttachmentMeta,
   EmailAttachmentResult,
   EmailFoldersResult,
   EmailListResult,
@@ -57,6 +58,27 @@ function collectAttachmentParts(node: any, out: AttachmentPart[] = []): Attachme
   const children = Array.isArray(node.childNodes) ? node.childNodes : []
   for (const child of children) collectAttachmentParts(child, out)
   return out
+}
+
+/**
+ * Map the index in the mailparser attachment list (what email_read showed the
+ * model) onto a bodyStructure part. Name first, then type + tolerant size;
+ * an inline image that our walk excludes simply fails instead of downloading
+ * the wrong part.
+ */
+export function selectAttachmentPart(
+  readAttachments: EmailAttachmentMeta[],
+  parts: AttachmentPart[],
+  index: number,
+): AttachmentPart | undefined {
+  const meta = readAttachments[index]
+  if (meta === undefined) return undefined
+  const byName = parts.find(part => part.filename === meta.filename || sanitizeFilename(part.filename) === meta.filename)
+  if (byName !== undefined) return byName
+  const tolerance = Math.max(64, Math.ceil(meta.size * 0.5))
+  const byTypeAndSize = parts.find(part =>
+    part.contentType === meta.contentType && Math.abs(part.size - meta.size) <= tolerance)
+  return byTypeAndSize
 }
 
 function toIso(date: Date | null | undefined): string {
@@ -313,22 +335,28 @@ export class EmailPool {
     const cfg = this.account(name)
     const folderName = folder || cfg.inboxFolder
     return this.withImap(name, folderName, async (client) => {
-      const message = await client.fetchOne(uid, { uid: true, bodyStructure: true }, { uid: true })
-      if (message === false) {
+      const message = await client.fetchOne(uid, { uid: true, bodyStructure: true, source: true }, { uid: true })
+      if (message === false || message.source === undefined) {
         throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folderName + '"）')
       }
-      const attachments = collectAttachmentParts(message.bodyStructure)
-      if (attachments.length === 0) throw new MailError('该邮件没有附件')
-      const att = attachments[index]
+      // The mailparser list is authoritative for the index email_read showed;
+      // the bodyStructure walk supplies the IMAP part to download.
+      const body = await parseRawMessage(message.source, this.settings.maxBodyChars)
+      const parts = collectAttachmentParts(message.bodyStructure)
+      if (body.attachments.length === 0) throw new MailError('该邮件没有附件')
+      if (body.attachments[index] === undefined) {
+        throw new MailError('附件序号 ' + index + ' 越界：共 ' + body.attachments.length + ' 个附件（序号从 0 开始，与 email_read 返回的 attachments 顺序一致）')
+      }
+      const att = selectAttachmentPart(body.attachments, parts, index)
       if (att === undefined) {
-        throw new MailError('附件序号 ' + index + ' 越界：共 ' + attachments.length + ' 个附件（序号从 0 开始，与 email_read 返回的 attachments 顺序一致）')
+        throw new MailError('附件 #' + index + '（' + body.attachments[index].filename + '）无法在邮件结构中定位（可能是内嵌图片，暂不支持下载）')
       }
       if (att.size > this.settings.maxAttachmentBytes) {
         throw new MailError('附件 "' + att.filename + '" 大小 ' + att.size + ' 字节，超过上限 maxAttachmentBytes=' + this.settings.maxAttachmentBytes)
       }
       const dl = await client.download(uid, att.part, { uid: true, maxBytes: this.settings.maxAttachmentBytes })
       const buf = await collectStream(dl.content, this.settings.maxAttachmentBytes)
-      const safeName = sanitizeFilename(dl.meta.filename ?? att.filename)
+      const safeName = sanitizeFilename(dl.meta.filename ?? att.filename ?? body.attachments[index].filename)
       const dir = this.settings.downloadDir
       await mkdir(dir, { recursive: true })
       const dest = await uniquePath(join(dir, safeName))

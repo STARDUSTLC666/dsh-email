@@ -217,8 +217,12 @@ export function apply(ctx: any, config: Config = {}): void {
   let pool: EmailPool | null = null
   let poolFingerprint = ''
   const getPool = (): EmailPool => {
+    // Only fields the user actually set in the settings page override the row
+    // config; untouched fields fall back to the row and the provider presets.
+    const descriptor = (ctx.settings.describe?.() ?? []).find((row: any) => row.ns === SETTINGS_NAMESPACE)
+    const userSection = descriptor?.user as Partial<EmailSettingsValue> | undefined
     const value = settingsScope.get() as EmailSettingsValue
-    const effective = resolveEmailSettings({ ...config, ...toEmailConfig(value) })
+    const effective = resolveEmailSettings({ ...config, ...toEmailConfig(value, userSection) })
     const fp = fingerprintSettings(effective)
     if (pool === null || fp !== poolFingerprint) {
       pool?.dispose()
@@ -388,10 +392,12 @@ export function apply(ctx: any, config: Config = {}): void {
   // when the account itself is not configured yet.
   ctx.on('tools/pre-execute', async (exec: any, next: () => Promise<any>) => {
     if (exec?.name !== 'email_send') return next()
+    const descriptor = (ctx.settings.describe?.() ?? []).find((row: any) => row.ns === SETTINGS_NAMESPACE)
+    const userSection = descriptor?.user as Partial<EmailSettingsValue> | undefined
     const value = settingsScope.get() as EmailSettingsValue
     if (value.sendApproval === false) return next()
     try {
-      resolveEmailSettings({ ...config, ...toEmailConfig(value) })
+      resolveEmailSettings({ ...config, ...toEmailConfig(value, userSection) })
     } catch {
       return next() // unconfigured: let the tool report the actionable hint
     }
@@ -405,4 +411,6 @@ export function apply(ctx: any, config: Config = {}): void {
 export { PROVIDER_NAMES, EMAIL_PASSWORD_ENV } from './config.js'
 export { resolveEmailConfig, resolveEmailSettings, clampInt, defaultDownloadDir } from './config.js'
 export { stripHtml, truncateText, flattenAddresses, sanitizeFilename, parseRawMessage } from './parse.js'
-export { EmailPool, MailError, messageOf, validateAttachmentPaths } from './mail-client.js'
+export { EmailPool, MailError, messageOf, validateAttachmentPaths, selectAttachmentPart } from './mail-client.js'
+export { SETTINGS_NAMESPACE, EmailSettingsSchema, toSettingsBase, toEmailConfig, validateSettingsValue } from './settings.js'
+export { SETTINGS_ROUTE, EmailSettingsBackend, installEmailSettingsWeb } from './web.js'

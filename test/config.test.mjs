@@ -130,3 +130,46 @@ test('clampInt clamps into bounds and rejects garbage', () => {
   assert.equal(clampInt('nope', 20, 1, 100), 20)
   assert.equal(clampInt(2.9, 20, 1, 100), 2)
 })
+test('toEmailConfig projects only user-set fields (untouched UI never shadows row or preset)', async () => {
+  const { toEmailConfig, resolveEmailSettings } = await import('../lib/index.js')
+  const defaults = {
+    provider: 'outlook', user: 'me@outlook.com', password: 'p', inboxFolder: 'INBOX',
+    sendApproval: true, maxBodyChars: 20000, downloadDir: '',
+    imap: { host: '', port: 993, secure: true },
+    smtp: { host: '', port: 465, secure: true },
+  }
+  // untouched smtp.port must NOT project: the outlook preset keeps 587
+  const gated = toEmailConfig(defaults, { provider: 'outlook', user: 'me@outlook.com', password: 'p' })
+  assert.equal(gated.smtp, undefined)
+  const resolved = resolveEmailSettings(gated)
+  assert.equal(resolved.accounts.get('default').smtp.port, 587)
+  assert.equal(resolved.accounts.get('default').smtp.secure, false)
+
+  // user-set port wins over the preset (the merged value already carries 25)
+  const mergedWithPort = { ...defaults, smtp: { ...defaults.smtp, port: 25 } }
+  const explicit = toEmailConfig(mergedWithPort, { provider: 'outlook', user: 'me@outlook.com', password: 'p', smtp: { port: 25 } })
+  assert.equal(resolveEmailSettings(explicit).accounts.get('default').smtp.port, 25)
+
+  // row custom inboxFolder survives an untouched UI; an explicit UI value wins
+  const untouched = toEmailConfig(defaults, { provider: 'outlook', user: 'me@outlook.com', password: 'p' })
+  assert.equal(untouched.inboxFolder, undefined)
+  const merged = resolveEmailSettings({ inboxFolder: 'Archive', ...untouched })
+  assert.equal(merged.accounts.get('default').inboxFolder, 'Archive')
+  const reset = toEmailConfig(defaults, { inboxFolder: 'INBOX' })
+  assert.equal(reset.inboxFolder, 'INBOX')
+})
+
+test('toEmailConfig with null projects the full draft', async () => {
+  const { toEmailConfig } = await import('../lib/index.js')
+  const draft = {
+    provider: 'qq', user: 'me@qq.com', password: 'p', inboxFolder: 'MyBox',
+    sendApproval: false, maxBodyChars: 5000, downloadDir: 'D:/dl',
+    imap: { host: '', port: 993, secure: true },
+    smtp: { host: '', port: 465, secure: true },
+  }
+  const out = toEmailConfig(draft, null)
+  assert.equal(out.sendApproval, false)
+  assert.equal(out.inboxFolder, 'MyBox')
+  assert.equal(out.maxBodyChars, 5000)
+  assert.equal(out.imap.port, 993)
+})
