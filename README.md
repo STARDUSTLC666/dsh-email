@@ -118,18 +118,20 @@ dsh plugin --profile web add dsh-email
 
 ## 安全须知
 
-- **授权码就是你的邮箱钥匙**。它写在 profile 的 `cordis.patch.yml` 里，请勿把它提交到任何 Git 仓库；更推荐用环境变量 `DSH_EMAIL_PASSWORD`。
+- **授权码就是你的邮箱钥匙**。它写在本机（profile 的 `cordis.patch.yml` 或 `settings.yaml`），请勿提交到任何 Git 仓库；更推荐用环境变量 `DSH_EMAIL_PASSWORD`。
 - `email_send` 默认走 DSH 审批通道：每次发信都显示「发送邮件给 xx，主题「xx」」，你批准才发出。没有审批通道的环境（如无 UI 的 headless）会**直接拒绝发信**，这是安全默认。
 - 注意：会话处于 **Full Access（完全访问）** 模式时，harness 会把审批策略置为 never，`email_send` 会被**静默拒绝**（不弹框）。想发信请把访问模式切回 Read Only 或 Write。
 - 本插件不做任何联网上报，凭证只在内存中用于连接你的邮箱服务器。
 
-## 已知限制（v0.2）
+## 已知限制（v0.3）
 
 - **连接复用**：IMAP 按账号池化（空闲自动回收），SMTP 用 nodemailer 连接池；同一账号的并发调用会排队串行（一个连接一次只服务一个操作，这是有意的）。
 - **多账号**：每个账号独立连接池；一个 `tool-email` 行可以配任意多个账号。设置页编辑的是默认账号；`accounts` 映射仍需写 cordis.patch.yml。
 - **附件下载**：email_attachment 按序号下载（与 email_read 的 attachments 顺序一致）；文件名会被清洗防路径穿越，已有同名文件自动加后缀，大小受 maxAttachmentBytes 限制。
 - **不支持 OAuth2**：强制 OAuth 的企业环境（部分 M365/Google Workspace）暂不可用。
 - 正文搜索不提供：多数服务器（如 QQ）的 IMAP `TEXT`/`HEADER` 搜索要么全量匹配要么不支持，所以只搜主题/发件人/收件人；正文搜索列入后续版本（需客户端下载解析，较慢）。
+- **密码落盘形式**：设置页保存的授权码以明文写在本机 `settings.yaml`（schema 标记 secret 只是保证它不进日志/导出/诊断，不做磁盘加密）。请勿把 settings.yaml 交给不信任的人。
+- **设置页与插件集变更**：设置页保存后工具**立即生效**（live），无需重启；但升级/增删插件（组合树变化）仍需重启 `dsh web`。
 
 ## 开发
 
