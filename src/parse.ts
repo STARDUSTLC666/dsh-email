@@ -1,5 +1,5 @@
 import { simpleParser } from 'mailparser'
-import type { AddressEntry, ReadMessageBody } from './types.js'
+import type { AddressEntry, EmailAttachmentMeta, ReadMessageBody } from './types.js'
 
 export function flattenAddresses(input: unknown): AddressEntry[] {
   if (input === null || input === undefined) return []
@@ -38,7 +38,24 @@ export function truncateText(text: string, maxChars: number): { text: string; tr
   if (text.length <= maxChars) return { text, truncated: false }
   const cut = text.slice(0, maxChars)
   const lastBreak = Math.max(cut.lastIndexOf('\n'), cut.lastIndexOf(' '), 0)
-  return { text: cut.slice(0, lastBreak) + `\n\n…[正文过长，已截断，共 ${text.length} 字符]`, truncated: true }
+  return { text: cut.slice(0, lastBreak) + '\n\n…[正文过长，已截断，共 ' + text.length + ' 字符]', truncated: true }
+}
+
+/**
+ * Turn an untrusted attachment filename into a safe basename: no directory
+ * separators, no traversal, no control characters, bounded length.
+ */
+export function sanitizeFilename(raw: unknown, fallback = 'attachment.bin'): string {
+  let name = String(raw ?? '').replace(/\\/g, '/').split('/').pop() ?? ''
+  // eslint-disable-next-line no-control-regex
+  name = name.replace(/[\u0000-\u001f\u007f]/g, '').trim()
+  if (name === '' || name === '.' || name === '..') name = fallback
+  if (name.length > 120) {
+    const dot = name.lastIndexOf('.')
+    const ext = dot > 0 && dot >= name.length - 12 ? name.slice(dot) : ''
+    name = name.slice(0, 120 - ext.length) + ext
+  }
+  return name
 }
 
 /** Parse a raw RFC822 message source into the read-result body. */
@@ -49,6 +66,12 @@ export async function parseRawMessage(source: Buffer, maxBodyChars: number): Pro
     text = stripHtml(parsed.html)
   }
   const limited = truncateText(text, maxBodyChars)
+  const attachments: EmailAttachmentMeta[] = (parsed.attachments ?? []).map((att, index) => ({
+    filename: att.filename ?? '(unnamed)',
+    contentType: att.contentType,
+    size: att.size,
+    part: 'attachment-' + index,
+  }))
   return {
     date: parsed.date instanceof Date ? parsed.date.toISOString() : '',
     from: flattenAddresses(parsed.from),
@@ -56,11 +79,7 @@ export async function parseRawMessage(source: Buffer, maxBodyChars: number): Pro
     cc: flattenAddresses(parsed.cc),
     subject: parsed.subject ?? '',
     text: limited.text,
-    attachments: (parsed.attachments ?? []).map(att => ({
-      filename: att.filename ?? '(unnamed)',
-      contentType: att.contentType,
-      size: att.size,
-    })),
+    attachments,
     truncated: limited.truncated,
   }
 }

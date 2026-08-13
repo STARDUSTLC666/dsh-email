@@ -17,6 +17,15 @@ export interface ListedMessage {
   hasAttachments: boolean
 }
 
+/** One attachment of a read message (metadata only). */
+export interface EmailAttachmentMeta {
+  filename: string
+  contentType: string
+  size: number
+  /** IMAP body part identifier used by email_attachment. */
+  part: string
+}
+
 /** One fully read message body. */
 export interface ReadMessageBody {
   date: string
@@ -26,22 +35,25 @@ export interface ReadMessageBody {
   subject: string
   /** Plain-text body; HTML mail is converted. Truncated at maxBodyChars. */
   text: string
-  attachments: Array<{ filename: string; contentType: string; size: number }>
+  attachments: EmailAttachmentMeta[]
   truncated: boolean
 }
 
 export interface EmailListResult {
+  account: string
   count: number
   folder: string
   messages: ListedMessage[]
 }
 
 export interface EmailReadResult extends ReadMessageBody {
+  account: string
   uid: number
   folder: string
 }
 
 export interface EmailSearchResult {
+  account: string
   query: string
   count: number
   folder: string
@@ -49,33 +61,74 @@ export interface EmailSearchResult {
 }
 
 export interface EmailSendResult {
+  account: string
   messageId: string
   accepted: string[]
   rejected: string[]
   response: string
 }
 
-export interface EmailListArgs {
+export interface EmailFolderRow {
+  name: string
+  path: string
+  specialUse: string
+  subscribed: boolean
+}
+
+export interface EmailFoldersResult {
+  account: string
+  folders: EmailFolderRow[]
+}
+
+export interface EmailAttachmentResult {
+  account: string
+  uid: number
+  filename: string
+  contentType: string
+  size: number
+  /** Absolute path the attachment was written to. */
+  path: string
+}
+
+/** Every tool accepts an optional account selector. */
+export interface AccountArg {
+  account?: string
+}
+
+export interface EmailListArgs extends AccountArg {
   folder?: string
   limit?: number
   offset?: number
   unreadOnly?: boolean
 }
 
-export interface EmailReadArgs {
+export interface EmailReadArgs extends AccountArg {
   uid: number
   folder?: string
 }
 
-export interface EmailSearchArgs {
+export interface EmailSearchArgs extends AccountArg {
   query: string
   folder?: string
   limit?: number
 }
 
-export interface EmailSendArgs {
+export interface EmailSendArgs extends AccountArg {
   to: string
   subject: string
   text?: string
   cc?: string
+  /** Absolute paths (or paths relative to the dsh process cwd) to attach. */
+  attachments?: string[]
+}
+
+export interface EmailFoldersArgs extends AccountArg {
+  subscribedOnly?: boolean
+}
+
+export interface EmailAttachmentArgs extends AccountArg {
+  uid: number
+  /** 0-based index into the attachments of email_read. Default 0. */
+  index?: number
+  folder?: string
 }

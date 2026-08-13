@@ -1,6 +1,6 @@
 {
   "name": "dsh-email",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "IMAP/SMTP email tools for DeepSeek Harness: list, read, search and send mail, with QQ/163/126/Sina/Aliyun/Gmail/Outlook/iCloud presets.",
   "type": "module",
   "main": "lib/index.js",
@@ -31,7 +31,16 @@
     "smtp"
   ],
   "author": "stardustlc",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/STARDUSTLC666/dsh-email"
+  },
+  "bugs": {
+    "url": "https://github.com/STARDUSTLC666/dsh-email/issues"
+  },
+  "homepage": "https://github.com/STARDUSTLC666/dsh-email#readme",
   "license": "MIT",
+  "packageManager": "pnpm@11.7.0",
   "engines": {
     "node": ">=20"
   },

@@ -1,3 +1,8 @@
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+
+export type ProviderName = 'qq' | '163' | '126' | 'sina' | 'aliyun' | 'gmail' | 'outlook' | 'icloud'
+
 export interface ImapConfig {
   host?: string
   port?: number
@@ -12,21 +17,31 @@ export interface SmtpConfig {
   secure?: boolean
 }
 
-export interface EmailConfig {
-  /** Built-in preset that fills imap/smtp host+port+secure. */
-  provider?: 'qq' | '163' | '126' | 'sina' | 'aliyun' | 'gmail' | 'outlook' | 'icloud'
-  /** Login address, e.g. you@qq.com. */
+/** One mailbox account. Top-level shorthand fields act as shared defaults. */
+export interface AccountConfig {
+  provider?: ProviderName
   user?: string
-  /** App password / authorization code. Falls back to $DSH_EMAIL_PASSWORD. */
   password?: string
   imap?: ImapConfig
   smtp?: SmtpConfig
-  /** Mailbox used by the read/search/list tools. Default 'INBOX'. */
   inboxFolder?: string
+}
+
+export interface EmailConfig extends AccountConfig {
   /** Ask the user for approval before email_send. Default true. */
   sendApproval?: boolean
   /** Plain-text body cap for email_read. Default 20000. */
   maxBodyChars?: number
+  /** Named accounts. Account-level fields override the top-level shorthand. */
+  accounts?: Record<string, AccountConfig>
+  /** Which account tools use when the call omits account. Required with 2+ accounts. */
+  defaultAccount?: string
+  /** Directory email_attachment writes into. Default $DSH_HOME/email-downloads. */
+  downloadDir?: string
+  /** Per-attachment and total-attachment byte cap. Default 20 MiB. */
+  maxAttachmentBytes?: number
+  /** Unused IMAP connections close after this many ms. Default 60000. */
+  idleTimeoutMs?: number
 }
 
 export interface ProviderPreset {
@@ -49,16 +64,32 @@ export const PROVIDER_NAMES = Object.keys(PROVIDER_PRESETS)
 
 export const EMAIL_PASSWORD_ENV = 'DSH_EMAIL_PASSWORD'
 
-/** Fully resolved, validated configuration. */
+const DEFAULT_MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
+const DEFAULT_IDLE_TIMEOUT_MS = 60000
+
+/** Fully resolved, validated configuration for one account. */
 export interface ResolvedEmailConfig {
   user: string
   password: string
   imap: ImapConfig & { host: string; port: number; secure: boolean }
   smtp: SmtpConfig & { host: string; port: number; secure: boolean }
   inboxFolder: string
+}
+
+/** Fully resolved plugin settings: the account map plus shared policy. */
+export interface ResolvedEmailSettings {
+  accounts: Map<string, ResolvedEmailConfig>
+  defaultAccount: string
   sendApproval: boolean
   maxBodyChars: number
-  providerName: string | null
+  downloadDir: string
+  maxAttachmentBytes: number
+  idleTimeoutMs: number
+}
+
+export function defaultDownloadDir(): string {
+  const home = process.env.DSH_HOME ?? join(homedir(), '.dsh')
+  return join(home, 'email-downloads')
 }
 
 /**
@@ -66,31 +97,76 @@ export interface ResolvedEmailConfig {
  * (in Chinese, since it is what the user and the model both read) when the
  * account is not fully specified.
  */
-export function resolveEmailConfig(config: EmailConfig | undefined): ResolvedEmailConfig {
+export function resolveEmailSettings(config: EmailConfig | undefined): ResolvedEmailSettings {
   const raw = config ?? {}
-  const preset = raw.provider === undefined ? undefined : PROVIDER_PRESETS[raw.provider]
-  if (raw.provider !== undefined && preset === undefined) {
-    throw new Error(`dsh-email：未知的邮箱服务商 "${raw.provider}"，可选：${PROVIDER_NAMES.join('/')}；或省略 provider，直接填写 imap.host 与 smtp.host`)
+  const common: AccountConfig = {
+    provider: raw.provider,
+    user: raw.user,
+    password: raw.password,
+    imap: raw.imap,
+    smtp: raw.smtp,
+    inboxFolder: raw.inboxFolder,
   }
-  const user = raw.user?.trim() ?? ''
-  const password = raw.password ?? process.env[EMAIL_PASSWORD_ENV] ?? ''
+  const entries = raw.accounts === undefined || Object.keys(raw.accounts).length === 0
+    ? undefined
+    : raw.accounts
+  const accounts = new Map<string, ResolvedEmailConfig>()
+  if (entries === undefined) {
+    accounts.set('default', resolveAccount('default', common, {}, true))
+  } else {
+    for (const [name, acc] of Object.entries(entries)) {
+      accounts.set(name, resolveAccount(name, common, acc ?? {}, false))
+    }
+  }
+  let defaultName: string
+  if (raw.defaultAccount !== undefined && raw.defaultAccount !== '') {
+    if (!accounts.has(raw.defaultAccount)) {
+      throw new Error(`dsh-email：defaultAccount "${raw.defaultAccount}" 不存在，可用账号：${[...accounts.keys()].join('、')}`)
+    }
+    defaultName = raw.defaultAccount
+  } else if (accounts.size === 1) {
+    defaultName = [...accounts.keys()][0]
+  } else if (accounts.has('default')) {
+    defaultName = 'default'
+  } else {
+    throw new Error(`dsh-email：配置了多个账号（${[...accounts.keys()].join('、')}），请设置 defaultAccount 指定默认账号`)
+  }
+  return {
+    accounts,
+    defaultAccount: defaultName,
+    sendApproval: raw.sendApproval !== false,
+    maxBodyChars: clampInt(raw.maxBodyChars, 20000, 1000, 200000),
+    downloadDir: raw.downloadDir?.trim() || defaultDownloadDir(),
+    maxAttachmentBytes: clampInt(raw.maxAttachmentBytes, DEFAULT_MAX_ATTACHMENT_BYTES, 1024, 512 * 1024 * 1024),
+    idleTimeoutMs: clampInt(raw.idleTimeoutMs, DEFAULT_IDLE_TIMEOUT_MS, 5000, 600000),
+  }
+}
+
+/** Merge one account over the shared shorthand and validate it. */
+function resolveAccount(name: string, common: AccountConfig, acc: AccountConfig, allowEnvPassword: boolean): ResolvedEmailConfig {
+  const preset = acc.provider === undefined ? PROVIDER_PRESETS[common.provider ?? ''] : PROVIDER_PRESETS[acc.provider]
+  if ((acc.provider ?? common.provider) !== undefined && preset === undefined) {
+    throw new Error(`dsh-email：账号 "${name}" 的 provider "${acc.provider ?? common.provider}" 未知，可选：${PROVIDER_NAMES.join('/')}；或省略 provider 直接填 imap.host 与 smtp.host`)
+  }
+  const user = (acc.user ?? common.user ?? '').trim()
+  const password = acc.password ?? common.password ?? (allowEnvPassword ? process.env[EMAIL_PASSWORD_ENV] ?? '' : '')
   const imap = {
-    host: raw.imap?.host ?? preset?.imap.host,
-    port: raw.imap?.port ?? preset?.imap.port,
-    secure: raw.imap?.secure ?? preset?.imap.secure,
-    connectionTimeoutMs: raw.imap?.connectionTimeoutMs,
-    socketTimeoutMs: raw.imap?.socketTimeoutMs,
+    host: acc.imap?.host ?? common.imap?.host ?? preset?.imap.host,
+    port: acc.imap?.port ?? common.imap?.port ?? preset?.imap.port,
+    secure: acc.imap?.secure ?? common.imap?.secure ?? preset?.imap.secure,
+    connectionTimeoutMs: acc.imap?.connectionTimeoutMs ?? common.imap?.connectionTimeoutMs,
+    socketTimeoutMs: acc.imap?.socketTimeoutMs ?? common.imap?.socketTimeoutMs,
   }
   const smtp = {
-    host: raw.smtp?.host ?? preset?.smtp.host,
-    port: raw.smtp?.port ?? preset?.smtp.port,
-    secure: raw.smtp?.secure ?? preset?.smtp.secure,
+    host: acc.smtp?.host ?? common.smtp?.host ?? preset?.smtp.host,
+    port: acc.smtp?.port ?? common.smtp?.port ?? preset?.smtp.port,
+    secure: acc.smtp?.secure ?? common.smtp?.secure ?? preset?.smtp.secure,
   }
   const problems: string[] = []
-  if (user === '') problems.push('user（邮箱地址）未填写')
-  if (password === '') problems.push(`password 未填写（或用环境变量 ${EMAIL_PASSWORD_ENV}）`)
-  if (imap.host === undefined || imap.host === '') problems.push(`imap.host 未填写（可填 provider 预设：${PROVIDER_NAMES.join('/')}）`)
-  if (smtp.host === undefined || smtp.host === '') problems.push('smtp.host 未填写（同上）')
+  if (user === '') problems.push(`账号 "${name}" 的 user（邮箱地址）未填写`)
+  if (password === '') problems.push(`账号 "${name}" 的 password 未填写（单账号可用环境变量 ${EMAIL_PASSWORD_ENV}）`)
+  if (imap.host === undefined || imap.host === '') problems.push(`账号 "${name}" 的 imap.host 未填写（可填 provider 预设：${PROVIDER_NAMES.join('/')}）`)
+  if (smtp.host === undefined || smtp.host === '') problems.push(`账号 "${name}" 的 smtp.host 未填写（同上）`)
   if (problems.length > 0) {
     throw new Error(`dsh-email 未配置：${problems.join('；')}。请在 profile 的 cordis.patch.yml 中覆盖 tool-email 行并重启（见插件 README）`)
   }
@@ -99,11 +175,14 @@ export function resolveEmailConfig(config: EmailConfig | undefined): ResolvedEma
     password,
     imap: { ...imap, host: imap.host!, port: imap.port!, secure: imap.secure! },
     smtp: { ...smtp, host: smtp.host!, port: smtp.port!, secure: smtp.secure! },
-    inboxFolder: raw.inboxFolder?.trim() || 'INBOX',
-    sendApproval: raw.sendApproval !== false,
-    maxBodyChars: clampInt(raw.maxBodyChars, 20000, 1000, 200000),
-    providerName: raw.provider ?? null,
+    inboxFolder: (acc.inboxFolder ?? common.inboxFolder ?? '').trim() || 'INBOX',
   }
+}
+
+/** v0.1-compatible wrapper: resolve the single (or default) account. */
+export function resolveEmailConfig(config: EmailConfig | undefined): ResolvedEmailConfig {
+  const settings = resolveEmailSettings(config)
+  return settings.accounts.get(settings.defaultAccount)!
 }
 
 export function clampInt(value: unknown, fallback: number, min: number, max: number): number {

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { stripHtml, truncateText, flattenAddresses, parseRawMessage } from '../lib/index.js'
+import { stripHtml, truncateText, flattenAddresses, sanitizeFilename, parseRawMessage } from '../lib/index.js'
 
 test('stripHtml drops tags, keeps text, turns block tags into newlines', () => {
   const html = '<html><head><style>x{}</style></head><body><p>第一段</p><p>第二<br>行</p><script>bad()</script>尾</body></html>'
@@ -32,6 +32,23 @@ test('flattenAddresses accepts both array and {value} shapes', () => {
   assert.deepEqual(flattenAddresses(undefined), [])
 })
 
+test('sanitizeFilename blocks traversal and separators', () => {
+  assert.equal(sanitizeFilename('../../etc/passwd'), 'passwd')
+  assert.equal(sanitizeFilename('C:\\evil\\file.exe'), 'file.exe')
+  assert.equal(sanitizeFilename('a/b/c.txt'), 'c.txt')
+  assert.equal(sanitizeFilename('..'), 'attachment.bin')
+  assert.equal(sanitizeFilename(''), 'attachment.bin')
+  assert.equal(sanitizeFilename('  name with spaces.pdf  '), 'name with spaces.pdf')
+})
+
+test('sanitizeFilename strips control chars and bounds length', () => {
+  assert.equal(sanitizeFilename('a\u0000b.txt'), 'ab.txt')
+  const long = 'x'.repeat(300) + '.pdf'
+  const out = sanitizeFilename(long)
+  assert.ok(out.length <= 120)
+  assert.ok(out.endsWith('.pdf'))
+})
+
 test('parseRawMessage extracts subject/from/text and attachment metadata', async () => {
   const source = Buffer.from([
     'From: Alice <alice@example.com>',
@@ -58,6 +75,7 @@ test('parseRawMessage extracts subject/from/text and attachment metadata', async
   assert.equal(body.text.trim(), '你好世界')
   assert.equal(body.attachments.length, 1)
   assert.equal(body.attachments[0].filename, 'report.pdf')
+  assert.equal(body.attachments[0].part, 'attachment-0')
   assert.equal(body.truncated, false)
 })
 

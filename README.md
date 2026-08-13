@@ -1,6 +1,6 @@
 # dsh-email
 
-DeepSeek Harness 邮件工具插件：让 agent 能**查收件箱、读邮件、搜邮件、代发邮件**。纯插件实现，零核心改动，安装即可用。
+DeepSeek Harness 邮件工具插件：让 agent 能**查收件箱、读邮件、搜邮件、代发邮件、收发附件**。纯插件实现，零核心改动，安装即可用。
 
 Email tools for DeepSeek Harness: list, read, search and send mail through standard IMAP/SMTP — with one-line presets for QQ / 163 / 126 / Sina / Aliyun / Gmail / Outlook / iCloud.
 
@@ -13,7 +13,9 @@ Email tools for DeepSeek Harness: list, read, search and send mail through stand
 | `email_list` | 列出文件夹里最新的邮件（未读过滤、分页、只看摘要不带正文） |
 | `email_read` | 按 uid 读取一封邮件的全文（HTML 邮件自动转纯文本，超长截断） |
 | `email_search` | 按关键词搜索发件人/收件人/主题（服务器端 IMAP SEARCH，不搜正文） |
-| `email_send` | 代发邮件。**默认发信前会弹确认**，显示收件人和主题，由你批准后才发出 |
+| `email_send` | 代发邮件（支持带附件）。**默认发信前会弹确认**，显示收件人、主题和附件数，由你批准后才发出 |
+| `email_folders` | 列出邮箱的文件夹（INBOX/已发送/垃圾邮件/自定义…），拿 path 喂给其他工具 |
+| `email_attachment` | 按序号下载邮件附件到本地文件（大小受 maxAttachmentBytes 限制） |
 
 示例对话：
 
@@ -53,6 +55,20 @@ dsh plugin --profile web add dsh-email
     inboxFolder: INBOX
 ```
 
+多账号：一个 `tool-email` 行可以配多个邮箱，工具调用时用 `account` 参数选择：
+
+```yaml
+- id: tool-email
+  config:
+    accounts:
+      work: { provider: qq, user: work@qq.com, password: 授权码1 }
+      home: { provider: '163', user: home@163.com, password: 授权码2 }
+    defaultAccount: work        # 省略 account 参数时用这个
+    downloadDir: E:/attachments # 可选，默认 $DSH_HOME/email-downloads
+```
+
+顶层的 `provider`/`user`/`password`/`imap`/`smtp`/`inboxFolder` 仍然可用，作为各账号的共享默认值（v0.1 单账号写法完全兼容）。
+
 ### 常用邮箱预设
 
 | provider | IMAP | SMTP |
@@ -78,6 +94,11 @@ dsh plugin --profile web add dsh-email
 | `inboxFolder` | `INBOX` | 收发工具默认使用的文件夹 |
 | `sendApproval` | `true` | 发信前弹确认（强烈建议保留） |
 | `maxBodyChars` | `20000` | email_read 正文截断上限（1000–200000） |
+| `accounts` | 无 | 具名账号表；账号级字段覆盖顶层简写 |
+| `defaultAccount` | 单账号时自动 | 工具省略 account 参数时使用的账号（多账号必填） |
+| `downloadDir` | `$DSH_HOME/email-downloads` | email_attachment 的落盘目录 |
+| `maxAttachmentBytes` | 20 MiB | 单个附件与附件总大小上限（1024–512 MiB） |
+| `idleTimeoutMs` | `60000` | IMAP 空闲连接回收时间（连接复用，连续操作更快） |
 
 ## 第一步：拿到授权码
 
@@ -95,20 +116,20 @@ dsh plugin --profile web add dsh-email
 - 注意：会话处于 **Full Access（完全访问）** 模式时，harness 会把审批策略置为 never，`email_send` 会被**静默拒绝**（不弹框）。想发信请把访问模式切回 Read Only 或 Write。
 - 本插件不做任何联网上报，凭证只在内存中用于连接你的邮箱服务器。
 
-## 已知限制（v0.1）
+## 已知限制（v0.2）
 
-- **每个工具调用独立建立/关闭连接**：正确、无状态，但连续读多封会比常驻连接慢一点。
-- **单账号**：一个 `tool-email` 行对应一个邮箱；多账号可复制多行（改 id 即可）。
-- **附件只给元数据**（文件名/类型/大小），不下载内容；下载附件列入后续版本。
+- **连接复用**：IMAP 按账号池化（空闲自动回收），SMTP 用 nodemailer 连接池；同一账号的并发调用会排队串行（一个连接一次只服务一个操作，这是有意的）。
+- **多账号**：每个账号独立连接池；一个 `tool-email` 行可以配任意多个账号。
+- **附件下载**：email_attachment 按序号下载（与 email_read 的 attachments 顺序一致）；文件名会被清洗防路径穿越，已有同名文件自动加后缀，大小受 maxAttachmentBytes 限制。
 - **不支持 OAuth2**：强制 OAuth 的企业环境（部分 M365/Google Workspace）暂不可用。
-- 正文搜索不提供：多数服务器（如 QQ）的 IMAP `TEXT`/`HEADER` 搜索要么全量匹配要么不支持，所以 v0.1 只搜主题/发件人/收件人；正文搜索列入后续版本（需客户端下载解析，较慢）。
+- 正文搜索不提供：多数服务器（如 QQ）的 IMAP `TEXT`/`HEADER` 搜索要么全量匹配要么不支持，所以只搜主题/发件人/收件人；正文搜索列入后续版本（需客户端下载解析，较慢）。
 
 ## 开发
 
 ```sh
 pnpm install
 pnpm run build   # tsc → lib/
-pnpm test        # 构建 + node --test（配置/解析/注册与审批门，19 个用例，无需真实邮箱）
+pnpm test        # 构建 + node --test（配置/解析/注册与审批门，27 个用例，无需真实邮箱）
 ```
 
 ## 协议
