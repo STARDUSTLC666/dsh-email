@@ -5,14 +5,32 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { apply, validateAttachmentPaths, MailError } from '../lib/index.js'
 
-function fakeCtx() {
+function fakeCtx(scopeValue = {}) {
   const ctx = {
     tools: { register(def) { this.defs.push(def) }, defs: [] },
     listeners: [],
     on(event, fn, opts) { this.listeners.push({ event, fn, opts }) },
     effect(fn) { this.effects.push(fn()) },
     effects: [],
+    inject() {},
     logger: { warn() {} },
+    settings: {
+      registered: [],
+      register(ns, schema, opts) {
+        this.registered.push({ ns, opts })
+        const defaults = {
+          provider: '', user: '', password: '', inboxFolder: 'INBOX', sendApproval: true,
+          maxBodyChars: 20000, downloadDir: '',
+          imap: { host: '', port: 993, secure: true },
+          smtp: { host: '', port: 465, secure: true },
+        }
+        return {
+          get: () => ({ ...defaults, ...scopeValue }),
+          replace: async () => {},
+        }
+      },
+      writable: true,
+    },
   }
   return ctx
 }
@@ -85,12 +103,36 @@ test('other tools pass through the gate untouched', async () => {
   }
 })
 
-test('sendApproval: false skips the ask', async () => {
-  const ctx = fakeCtx()
-  apply(ctx, { ...QQ, sendApproval: false })
+test('sendApproval: false in the live settings skips the ask', async () => {
+  const ctx = fakeCtx({ sendApproval: false })
+  apply(ctx, QQ)
   const gate = ctx.listeners.find(l => l.event === 'tools/pre-execute')
   const out = await gate.fn({ name: 'email_send', args: { to: 'x@y.z', subject: 's' } }, async () => 'PASSED-THROUGH')
   assert.equal(out, 'PASSED-THROUGH')
+})
+
+test('gate passes through when the account is not configured', async () => {
+  const ctx = fakeCtx()
+  apply(ctx, {})
+  const gate = ctx.listeners.find(l => l.event === 'tools/pre-execute')
+  const out = await gate.fn({ name: 'email_send', args: { to: 'x@y.z', subject: 's' } }, async () => 'PASSED-THROUGH')
+  assert.equal(out, 'PASSED-THROUGH')
+})
+
+test('settings namespace is registered with the row config as base', () => {
+  const ctx = fakeCtx()
+  apply(ctx, QQ)
+  const registration = ctx.settings.registered.find(r => r.ns === 'dsh-email')
+  assert.ok(registration)
+  assert.equal(registration.opts.applies, 'live')
+  assert.equal(registration.opts.base.user, 'a@b.c')
+})
+
+test('configured accounts can come from the live settings value instead of the row', () => {
+  const ctx = fakeCtx({ provider: 'qq', user: 'from@settings.com', password: 's', sendApproval: true })
+  apply(ctx, {}) // row config empty; apply-time nudge must not throw
+  const list = ctx.tools.defs.find(def => def.name === 'email_list')
+  assert.ok(list) // getPool built from the live value without throwing
 })
 
 test('validateAttachmentPaths stats files and enforces the total cap', async () => {

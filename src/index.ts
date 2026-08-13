@@ -1,5 +1,7 @@
-import { clampInt, resolveEmailSettings, type EmailConfig, PROVIDER_NAMES } from './config.js'
+import { clampInt, resolveEmailSettings, type EmailConfig, type ResolvedEmailSettings, PROVIDER_NAMES } from './config.js'
 import { EmailPool, messageOf } from './mail-client.js'
+import { EmailSettingsSchema, SETTINGS_NAMESPACE, toEmailConfig, toSettingsBase, validateSettingsValue, type EmailSettingsValue } from './settings.js'
+import { EmailSettingsBackend, installEmailSettingsWeb } from './web.js'
 import type {
   EmailAttachmentArgs,
   EmailAttachmentResult,
@@ -16,7 +18,7 @@ import type {
 } from './types.js'
 
 export const name = 'tool-email'
-export const inject = ['tools']
+export const inject = ['settings', 'tools']
 export type Config = EmailConfig
 
 const MAX_LIMIT = 100
@@ -190,28 +192,56 @@ function renderAttachment(value: EmailAttachmentResult): TextBlock[] {
   return oneText('账号 ' + value.account + ' 已下载附件 "' + value.filename + '"（' + value.contentType + '，' + value.size + ' 字节）到：\n' + value.path + '\n可用 read 工具读取该文件。')
 }
 
+function fingerprintSettings(settings: ResolvedEmailSettings): string {
+  return JSON.stringify({
+    accounts: [...settings.accounts.entries()].map(([name, account]) => [name, account]),
+    defaultAccount: settings.defaultAccount,
+    sendApproval: settings.sendApproval,
+    maxBodyChars: settings.maxBodyChars,
+    downloadDir: settings.downloadDir,
+    maxAttachmentBytes: settings.maxAttachmentBytes,
+    idleTimeoutMs: settings.idleTimeoutMs,
+  })
+}
+
 export function apply(ctx: any, config: Config = {}): void {
-  let settingsError = ''
-  let settings: ReturnType<typeof resolveEmailSettings> | null = null
-  try {
-    settings = resolveEmailSettings(config)
-  } catch (error) {
-    settingsError = messageOf(error, 'dsh-email 配置无效')
-    ctx.logger?.warn?.('[dsh-email] ' + settingsError)
-  }
+  // The settings namespace is the single source for the default account: the
+  // row config (cordis.patch.yml) is its base layer, the Web settings page
+  // writes the user layer, and resolveEmailSettings merges both at use time.
+  const settingsScope = ctx.settings.register(SETTINGS_NAMESPACE, EmailSettingsSchema, {
+    base: toSettingsBase(config),
+    applies: 'live',
+    validate: (value: unknown) => validateSettingsValue(value as EmailSettingsValue),
+  })
+
   let pool: EmailPool | null = null
+  let poolFingerprint = ''
   const getPool = (): EmailPool => {
-    if (settingsError !== '') throw new Error(settingsError)
-    if (pool === null) {
-      pool = new EmailPool(settings!)
+    const value = settingsScope.get() as EmailSettingsValue
+    const effective = resolveEmailSettings({ ...config, ...toEmailConfig(value) })
+    const fp = fingerprintSettings(effective)
+    if (pool === null || fp !== poolFingerprint) {
+      pool?.dispose()
+      pool = new EmailPool(effective)
       pool.startIdleSweep()
+      poolFingerprint = fp
     }
     return pool
   }
+
+  // Load-time nudge only: never break boot, tools report the details instead.
+  try {
+    getPool()
+  } catch (error) {
+    ctx.logger?.warn?.('[dsh-email] ' + messageOf(error, '未配置邮箱账号'))
+  }
+
   ctx.effect(() => () => {
     pool?.dispose()
     pool = null
   })
+
+  installEmailSettingsWeb(ctx, new EmailSettingsBackend(ctx, settingsScope, config))
 
   ctx.tools.register({
     name: 'email_list',
@@ -358,8 +388,13 @@ export function apply(ctx: any, config: Config = {}): void {
   // when the account itself is not configured yet.
   ctx.on('tools/pre-execute', async (exec: any, next: () => Promise<any>) => {
     if (exec?.name !== 'email_send') return next()
-    if (config.sendApproval === false) return next()
-    if (settingsError !== '') return next()
+    const value = settingsScope.get() as EmailSettingsValue
+    if (value.sendApproval === false) return next()
+    try {
+      resolveEmailSettings({ ...config, ...toEmailConfig(value) })
+    } catch {
+      return next() // unconfigured: let the tool report the actionable hint
+    }
     const args = (exec.args ?? {}) as EmailSendArgs
     const attachCount = Array.isArray(args.attachments) ? args.attachments.length : 0
     const reason = '发送邮件给 ' + args.to + '，主题「' + args.subject + '」' + (attachCount > 0 ? '，附件 ' + attachCount + ' 个' : '')
