@@ -1,0 +1,26 @@
+# dsh-email: IMAP/SMTP email tools for DeepSeek Harness.
+#
+# The row ships with an EMPTY config so installing the bundle never breaks
+# boot; each email_* tool reports a configuration hint until you fill the
+# account. Configure it in your profile's cordis.patch.yml by overriding this
+# row (later layers win), for example:
+#
+#   - id: tool-email
+#     config:
+#       provider: qq          # qq | 163 | 126 | sina | aliyun | gmail | outlook | icloud
+#       user: you@qq.com
+#       password: 你的授权码   # 或改用环境变量 DSH_EMAIL_PASSWORD
+#       # sendApproval: true  # 发信前弹确认（默认开启，强烈建议保留）
+#
+# Or skip the preset and spell out any IMAP/SMTP server:
+#
+#   - id: tool-email
+#     config:
+#       user: you@corp.example
+#       password: 你的授权码
+#       imap: { host: imap.corp.example, port: 993, secure: true }
+#       smtp: { host: smtp.corp.example, port: 465, secure: true }
+- insert:
+    - id: tool-email
+      name: dsh-email
+      config: {}
