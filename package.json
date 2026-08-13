@@ -1,6 +1,6 @@
 {
   "name": "dsh-email",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "IMAP/SMTP email tools for DeepSeek Harness: list, read, search and send mail, with QQ/163/126/Sina/Aliyun/Gmail/Outlook/iCloud presets.",
   "type": "module",
   "main": "lib/index.js",
@@ -60,10 +60,11 @@
     }
   },
   "dependencies": {
-    "schemastery": "^3.18.0",
     "imapflow": "^1.7.0",
     "mailparser": "^3.9.15",
-    "nodemailer": "^9.0.5"
+    "nodemailer": "^9.0.5",
+    "schemastery": "^3.18.0",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

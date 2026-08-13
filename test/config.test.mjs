@@ -193,3 +193,26 @@ test('body search fallback defaults and clamps', async () => {
   assert.equal(t.downloadDirExplicit, true)
   assert.equal(t.downloadDir, 'D:/dl')
 })
+test('accountsYaml parses the map, extracts defaultAccount, and wins over accounts', async () => {
+  const { resolveEmailSettings, parseAccountsYaml } = await import('../lib/index.js')
+  const yaml = "work: { provider: qq, user: w@qq.com, password: p1 }\nhome: { provider: '163', user: h@163.com, password: p2 }\ndefaultAccount: work\n"
+  const parsed = parseAccountsYaml(yaml)
+  assert.deepEqual(Object.keys(parsed.map), ['work', 'home'])
+  assert.equal(parsed.defaultAccount, 'work')
+  const s = resolveEmailSettings({ accountsYaml: yaml, accounts: { legacy: { provider: 'qq', user: 'l@qq.com', password: 'x' } } })
+  assert.deepEqual([...s.accounts.keys()].sort(), ['home', 'work'])
+  assert.equal(s.defaultAccount, 'work')
+})
+
+test('accountsYaml rejects invalid YAML and non-object documents', async () => {
+  const { resolveEmailSettings, parseAccountsYaml } = await import('../lib/index.js')
+  assert.throws(() => parseAccountsYaml('work: [unclosed'), /不是合法的 YAML/)
+  assert.throws(() => parseAccountsYaml('- a\n- b\n'), /对象映射/)
+  assert.throws(() => resolveEmailSettings({ accountsYaml: 'x: { provider: qq, user: a@b.c, password: p }\ny: { provider: qq, user: b@c.d, password: p }' }), /请设置 defaultAccount/)
+})
+
+test('empty accountsYaml leaves the row accounts untouched', async () => {
+  const { resolveEmailSettings } = await import('../lib/index.js')
+  const s = resolveEmailSettings({ accountsYaml: '   ', accounts: { a: { provider: 'qq', user: 'a@b.c', password: 'p' } } })
+  assert.deepEqual([...s.accounts.keys()], ['a'])
+})

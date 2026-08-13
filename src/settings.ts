@@ -17,6 +17,7 @@ export const EmailSettingsSchema = z.object({
   sendApproval: z.boolean().default(true),
   maxBodyChars: z.number().default(20000),
   downloadDir: z.string().default(''),
+  accountsYaml: z.string().role('secret').default(''),
   imap: z.object({
     host: z.string().default(''),
     port: z.number().default(993),
@@ -37,6 +38,7 @@ export interface EmailSettingsValue {
   sendApproval: boolean
   maxBodyChars: number
   downloadDir: string
+  accountsYaml: string
   imap: { host: string; port: number; secure: boolean }
   smtp: { host: string; port: number; secure: boolean }
 }
@@ -86,6 +88,7 @@ export function toEmailConfig(value: EmailSettingsValue, user?: Partial<EmailSet
   if (has('sendApproval')) out.sendApproval = value.sendApproval
   if (has('maxBodyChars')) out.maxBodyChars = value.maxBodyChars
   if (has('downloadDir')) out.downloadDir = value.downloadDir
+  if (has('accountsYaml')) out.accountsYaml = value.accountsYaml
   if (user === null || user?.imap !== undefined) {
     const fields: Partial<EmailSettingsValue['imap']> = user === null ? value.imap : (user.imap ?? {})
     const imap: EmailConfig['imap'] = {}

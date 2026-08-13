@@ -1,4 +1,5 @@
 import { homedir } from 'node:os'
+import { parse as parseYaml } from 'yaml'
 import { join } from 'node:path'
 
 export type ProviderName = 'qq' | '163' | '126' | 'sina' | 'aliyun' | 'gmail' | 'outlook' | 'icloud'
@@ -34,6 +35,8 @@ export interface EmailConfig extends AccountConfig {
   maxBodyChars?: number
   /** Named accounts. Account-level fields override the top-level shorthand. */
   accounts?: Record<string, AccountConfig>
+  /** YAML text of the accounts map, editable from the settings page. Wins over accounts when non-empty. */
+  accountsYaml?: string
   /** Which account tools use when the call omits account. Required with 2+ accounts. */
   defaultAccount?: string
   /** Directory email_attachment writes into. Default: the session workspace's .dsh-email-downloads (falls back to $DSH_HOME/email-downloads). */
@@ -101,6 +104,32 @@ export function defaultDownloadDir(): string {
 }
 
 /**
+ * Parse the settings-page accounts YAML: an object map (name -> account),
+ * optionally with a reserved string key defaultAccount that is extracted.
+ */
+export function parseAccountsYaml(text: string): { map: Record<string, AccountConfig>; defaultAccount?: string } {
+  let doc: unknown
+  try {
+    doc = parseYaml(text)
+  } catch (error) {
+    throw new Error('dsh-email：accountsYaml 不是合法的 YAML：' + (error instanceof Error ? error.message : String(error)))
+  }
+  if (doc === null || typeof doc !== 'object' || Array.isArray(doc)) {
+    throw new Error('dsh-email：accountsYaml 必须是一个对象映射（账号名 -> 账号配置），例如 work: { provider: qq, user: a@b.c, password: xxx }')
+  }
+  const map: Record<string, AccountConfig> = {}
+  let defaultAccount: string | undefined
+  for (const [key, value] of Object.entries(doc as Record<string, unknown>)) {
+    if (key === 'defaultAccount') {
+      if (typeof value === 'string' && value !== '') defaultAccount = value
+      continue
+    }
+    map[key] = value as AccountConfig
+  }
+  return { map, defaultAccount }
+}
+
+/**
  * Resolve and validate the raw row config. Throws with an actionable message
  * (in Chinese, since it is what the user and the model both read) when the
  * account is not fully specified.
@@ -115,9 +144,10 @@ export function resolveEmailSettings(config: EmailConfig | undefined): ResolvedE
     smtp: raw.smtp,
     inboxFolder: raw.inboxFolder,
   }
-  const entries = raw.accounts === undefined || Object.keys(raw.accounts).length === 0
-    ? undefined
-    : raw.accounts
+  const parsedYaml = raw.accountsYaml?.trim() ? parseAccountsYaml(raw.accountsYaml) : undefined
+  const entries = parsedYaml !== undefined
+    ? parsedYaml.map
+    : (raw.accounts === undefined || Object.keys(raw.accounts).length === 0 ? undefined : raw.accounts)
   const accounts = new Map<string, ResolvedEmailConfig>()
   if (entries === undefined) {
     accounts.set('default', resolveAccount('default', common, {}, true))
@@ -134,6 +164,8 @@ export function resolveEmailSettings(config: EmailConfig | undefined): ResolvedE
     defaultName = raw.defaultAccount
   } else if (accounts.size === 1) {
     defaultName = [...accounts.keys()][0]
+  } else if (parsedYaml?.defaultAccount !== undefined && accounts.has(parsedYaml.defaultAccount)) {
+    defaultName = parsedYaml.defaultAccount
   } else if (accounts.has('default')) {
     defaultName = 'default'
   } else {

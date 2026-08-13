@@ -37,7 +37,7 @@ dsh plugin --profile web add dsh-email
 **配置方式有两种（任选其一）：**
 
 1. **网页设置（推荐）**：重启后打开 **设置 → 邮件 (dsh-email)**，表单里填邮箱地址和授权码，点「保存并应用」，还带「测试连接」按钮。零 YAML、零重启。
-2. **YAML**：按下面的 cordis.patch.yml 模板手写（多账号 accounts 映射目前只支持这种方式）。
+2. **YAML**：按下面的 cordis.patch.yml 模板手写；设置页的「多账号（高级，YAML）」文本框也能填账号映射（覆盖 YAML 里的 accounts）。
 
 设置页保存的值存在 `settings.yaml` 的 `dsh-email` 命名空间里，覆盖 YAML 的默认账号配置；密码字段标记为 secret（不会出现在任何导出/诊断里）。
 
@@ -105,6 +105,7 @@ dsh plugin --profile web add dsh-email
 | `sendApproval` | `true` | 发信前弹确认（强烈建议保留） |
 | `maxBodyChars` | `20000` | email_read 正文截断上限（1000–200000） |
 | `accounts` | 无 | 具名账号表；账号级字段覆盖顶层简写 |
+| `accountsYaml` | 无 | 设置页「多账号（高级）」文本框的 YAML 文本；非空时覆盖 accounts |
 | `defaultAccount` | 单账号时自动 | 工具省略 account 参数时使用的账号（多账号必填） |
 | `downloadDir` | 会话工作区下 .dsh-email-downloads（回退 $DSH_HOME/email-downloads） | email_attachment 的落盘目录；显式设置后固定 |
 | `maxAttachmentBytes` | 20 MiB | 单个附件与附件总大小上限（1024–512 MiB） |
@@ -131,7 +132,7 @@ dsh plugin --profile web add dsh-email
 ## 已知限制（v0.3）
 
 - **连接复用**：IMAP 按账号池化（空闲自动回收），SMTP 用 nodemailer 连接池；同一账号的并发调用会排队串行（一个连接一次只服务一个操作，这是有意的）。
-- **多账号**：每个账号独立连接池；一个 `tool-email` 行可以配任意多个账号。设置页编辑的是默认账号；`accounts` 映射仍需写 cordis.patch.yml。
+- **多账号**：每个账号独立连接池；一个 `tool-email` 行可以配任意多个账号。设置页的「多账号（高级，YAML）」文本框可直接编辑映射（可含 defaultAccount 键），覆盖 cordis.patch.yml 的 accounts。
 - **附件下载**：email_attachment 按 email_read 的附件列表定位（先按文件名、再按类型+大小匹配到 IMAP 部件，定位失败会报错而不是下载错文件）；内嵌图片暂不支持下载；文件名会被清洗防路径穿越，已有同名文件自动加后缀，大小受 maxAttachmentBytes 限制。
 - **不支持 OAuth2**：强制 OAuth 的企业环境（部分 M365/Google Workspace）暂不可用。
 - 正文搜索走客户端回退：多数服务器（如 QQ）的 IMAP `TEXT`/`HEADER` 搜索不可靠，所以服务器端只搜主题/发件人/收件人；无结果时回退到最近 `bodySearchLimit` 封的正文扫描（较慢，可关 `bodySearchFallback`）。
@@ -143,7 +144,7 @@ dsh plugin --profile web add dsh-email
 ```sh
 pnpm install
 pnpm run build   # tsc → lib/
-pnpm test        # 构建 + node --test（配置/解析/注册与审批门，40 个用例，无需真实邮箱）
+pnpm test        # 构建 + node --test（配置/解析/注册与审批门，43 个用例，无需真实邮箱）
 ```
 
 ## 协议
