@@ -138,7 +138,7 @@ dsh plugin --profile web add dsh-email
 ```sh
 pnpm install
 pnpm run build   # tsc → lib/
-pnpm test        # 构建 + node --test（配置/解析/注册与审批门，37 个用例，无需真实邮箱）
+pnpm test        # 构建 + node --test（配置/解析/注册与审批门，38 个用例，无需真实邮箱）
 ```
 
 ## 协议

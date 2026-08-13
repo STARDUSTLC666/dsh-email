@@ -7,10 +7,8 @@ import { apply, validateAttachmentPaths, MailError } from '../lib/index.js'
 
 function fakeCtx(scopeValue = {}) {
   const ctx = {
-    permissionPresets: {
-      current() { return { sandbox: 'workspace-write', approval: 'ask' } },
-    },
-    get(name) { if (name === 'permissionPresets') return this.permissionPresets; return undefined },
+    approval: { request: async () => 'allowed-once' },
+    get(name) { if (name === 'approval') return this.approval; return undefined },
     tools: { register(def) { this.defs.push(def) }, defs: [] },
     listeners: [],
     on(event, fn, opts) { this.listeners.push({ event, fn, opts }) },
@@ -84,17 +82,22 @@ test('execute validates args without touching the network', async () => {
   await assert.rejects(() => attach.execute({ uid: 0 }), /uid 必须是正整数/)
 })
 
-test('email_send asks for approval with recipient, subject and attachment count', async () => {
+test('email_send runs the approval round-trip with recipient, subject and attachment count', async () => {
   const ctx = fakeCtx()
+  const seen = []
+  ctx.approval.request = async (req) => { seen.push(req); return 'allowed-once' }
   apply(ctx, QQ)
   const gate = ctx.listeners.find(l => l.event === 'tools/pre-execute')
   assert.ok(gate)
   assert.equal(gate.opts.prepend, true)
-  const decision = await gate.fn(
+  const out = await gate.fn(
     { name: 'email_send', args: { to: 'boss@corp.com', subject: '周报', attachments: ['a.txt', 'b.txt'] } },
     async () => 'PASSED-THROUGH',
   )
-  assert.deepEqual(decision, { kind: 'ask', reason: '发送邮件给 boss@corp.com，主题「周报」，附件 2 个' })
+  assert.equal(out, 'PASSED-THROUGH')
+  assert.equal(seen.length, 1)
+  assert.equal(seen[0].toolName, 'email_send')
+  assert.equal(seen[0].reason, '发送邮件给 boss@corp.com，主题「周报」，附件 2 个')
 })
 
 test('other tools pass through the gate untouched', async () => {
@@ -159,9 +162,9 @@ test('validateAttachmentPaths stats files and enforces the total cap', async () 
   }
 })
 
-test('Full Access (policy never) refuses email_send with an actionable message', async () => {
+test('approval "rejected" denies with an actionable message covering Full Access', async () => {
   const ctx = fakeCtx()
-  ctx.permissionPresets.current = () => ({ sandbox: 'danger-full-access', approval: 'never' })
+  ctx.approval.request = async () => 'rejected'
   apply(ctx, QQ)
   const gate = ctx.listeners.find(l => l.event === 'tools/pre-execute')
   const decision = await gate.fn(
@@ -173,20 +176,30 @@ test('Full Access (policy never) refuses email_send with an actionable message',
   assert.match(decision.reason, /sendApproval/)
 })
 
-test('policy ask keeps the approval ask', async () => {
+test('approval "allowed-once" proceeds to the tool', async () => {
   const ctx = fakeCtx()
-  ctx.permissionPresets.current = () => ({ sandbox: 'workspace-write', approval: 'ask' })
-  apply(ctx, QQ)
-  const gate = ctx.listeners.find(l => l.event === 'tools/pre-execute')
-  const decision = await gate.fn({ name: 'email_send', args: { to: 'x@y.z', subject: 's' } }, async () => 'PASSED-THROUGH')
-  assert.equal(decision.kind, 'ask')
-})
-
-test('policy never + sendApproval: false still allows sending', async () => {
-  const ctx = fakeCtx({ sendApproval: false })
-  ctx.permissionPresets.current = () => ({ sandbox: 'danger-full-access', approval: 'never' })
+  ctx.approval.request = async () => 'allowed-once'
   apply(ctx, QQ)
   const gate = ctx.listeners.find(l => l.event === 'tools/pre-execute')
   const out = await gate.fn({ name: 'email_send', args: { to: 'x@y.z', subject: 's' } }, async () => 'PASSED-THROUGH')
   assert.equal(out, 'PASSED-THROUGH')
+})
+
+test('sendApproval: false bypasses the approval round-trip entirely', async () => {
+  const ctx = fakeCtx({ sendApproval: false })
+  ctx.approval.request = async () => { throw new Error('must not be called') }
+  apply(ctx, QQ)
+  const gate = ctx.listeners.find(l => l.event === 'tools/pre-execute')
+  const out = await gate.fn({ name: 'email_send', args: { to: 'x@y.z', subject: 's' } }, async () => 'PASSED-THROUGH')
+  assert.equal(out, 'PASSED-THROUGH')
+})
+
+test('no approval channel denies with the headless hint', async () => {
+  const ctx = fakeCtx()
+  ctx.approval = undefined
+  apply(ctx, QQ)
+  const gate = ctx.listeners.find(l => l.event === 'tools/pre-execute')
+  const decision = await gate.fn({ name: 'email_send', args: { to: 'x@y.z', subject: 's' } }, async () => 'PASSED-THROUGH')
+  assert.equal(decision.kind, 'deny')
+  assert.match(decision.reason, /headless|审批通道/)
 })

@@ -192,20 +192,6 @@ function renderAttachment(value: EmailAttachmentResult): TextBlock[] {
   return oneText('账号 ' + value.account + ' 已下载附件 "' + value.filename + '"（' + value.contentType + '，' + value.size + ' 字节）到：\n' + value.path + '\n可用 read 工具读取该文件。')
 }
 
-/**
- * Best-effort read of the session's effective approval policy. Duck-typed on
- * the permission-presets seam; any drift or absence yields undefined and the
- * gate falls back to the plain ask flow.
- */
-function effectiveApprovalPolicy(ctx: any, exec: any): string | undefined {
-  try {
-    const preset = ctx.get?.('permissionPresets')?.current?.(exec?.agent?.session?.events)
-    return typeof preset?.approval === 'string' ? preset.approval : undefined
-  } catch {
-    return undefined
-  }
-}
-
 function fingerprintSettings(settings: ResolvedEmailSettings): string {
   return JSON.stringify({
     accounts: [...settings.accounts.entries()].map(([name, account]) => [name, account]),
@@ -418,16 +404,31 @@ export function apply(ctx: any, config: Config = {}): void {
     const args = (exec.args ?? {}) as EmailSendArgs
     const attachCount = Array.isArray(args.attachments) ? args.attachments.length : 0
     const reason = '发送邮件给 ' + args.to + '，主题「' + args.subject + '」' + (attachCount > 0 ? '，附件 ' + attachCount + ' 个' : '')
-    // Full Access (approval policy 'never') rejects asks before any answerer
-    // runs, so surface the actionable explanation instead of a misleading
-    // "the user rejected" failure.
-    if (effectiveApprovalPolicy(ctx, exec) === 'never') {
+    // Gate-owned approval: we run the approval round-trip ourselves so the
+    // denial reason is always honest and actionable — including the Full
+    // Access case where the harness policy answers 'rejected' without ever
+    // showing a dialog.
+    const approval = ctx.get('approval')
+    if (approval === undefined) {
       return {
         kind: 'deny',
-        reason: 'email_send 需要确认，但当前会话处于 Full Access（审批策略 never），不会弹出确认框。两条路：① 把访问模式切回 Read Only 或 Write 再发；② 在设置页关闭「发信前确认」（sendApproval: false），自行承担风险。',
+        reason: 'email_send 需要确认，但当前环境没有审批通道（如 headless）。如确定安全，可在配置中设置 sendApproval: false 后直接发送。',
       }
     }
-    return { kind: 'ask', reason }
+    const outcome = await approval.request({
+      agent: exec.agent,
+      toolName: exec.name,
+      callId: exec.callId,
+      reason,
+      signal: exec.signal,
+    })
+    if (outcome === 'allowed-once') return next()
+    if (outcome === 'cancelled') return { kind: 'deny', reason: '发信确认被取消，邮件未发送。' }
+    if (outcome === 'unavailable') return { kind: 'deny', reason: '发信确认不可用（没有可用的审批界面），邮件未发送。' }
+    return {
+      kind: 'deny',
+      reason: '发信未获批准：要么你拒绝了，要么当前会话处于 Full Access（审批策略 never，不会弹框）。若在 Full Access：切到 Read Only / Write 再发，或关闭 sendApproval（自行承担风险）。',
+    }
   }, { prepend: true })
 }
 
