@@ -34,7 +34,7 @@ After installing, restart `dsh web`. The plugin ships with an empty config and *
 **Two configuration methods (pick one):**
 
 1. **Web settings (recommended)**: after restart, open **Settings → Mail (dsh-email)**, fill in the email address and authorization code, and click "Save & Apply"; a "Test connection" button is also provided. Zero YAML, zero restart.
-2. **YAML**: hand-write the cordis.patch.yml template below (the multi-account `accounts` map currently only supports this method).
+2. **YAML**: hand-write the cordis.patch.yml template below; the settings page's "Multiple accounts (advanced, YAML)" textbox can also hold the account map (overriding `accounts` in YAML).
 
 Values saved in the settings page live in the `dsh-email` namespace of `settings.yaml` and override the YAML default-account config; password fields are marked secret (they never appear in exports or diagnostics).
 
@@ -105,10 +105,10 @@ Every provider requires an authorization code / app-specific password instead of
 - When the session is in **Full Access** mode, the harness approval policy is never (no confirmation dialogs) — `email_send` is **blocked with a clear hint**. Two ways out: ① switch the access mode back to Read Only / Write; ② turn off `sendApproval` (uncheck "Confirm before sending" in the settings page), explicitly declaring you accept the risk.
 - This plugin performs no outbound telemetry; credentials are used in memory only to connect to your mail servers.
 
-## Known limitations (v0.5.1)
+## Known limitations (v0.6)
 
 - **Connection reuse**: IMAP is pooled per account (idle connections auto-recycled); SMTP uses nodemailer's connection pool. Concurrent calls for the same account queue serially (one connection serves one operation at a time — intentional).
-- **Multiple accounts**: each account has its own connection pool; one `tool-email` line can hold any number of accounts. The settings page edits the default account; the `accounts` map still requires cordis.patch.yml.
+- **Multiple accounts**: each account has its own connection pool; one `tool-email` line can hold any number of accounts. The settings page's "Multiple accounts (advanced, YAML)" textbox can directly edit the map (including a `defaultAccount` key), overriding `accounts` in cordis.patch.yml.
 - **Attachment download**: `email_attachment` locates attachments from `email_read`'s attachment list (matching by filename first, then type+size to the IMAP part; a failed match errors instead of downloading the wrong file); inline images aren't downloadable yet; filenames are sanitized against path traversal, existing names get a suffix, and size is capped by `maxAttachmentBytes`.
 - **No OAuth2**: enterprise environments that force OAuth (some M365/Google Workspace) aren't usable yet.
 - **Body search uses client-side fallback**: most servers (e.g. QQ) have unreliable IMAP `TEXT`/`HEADER` search, so the server side only searches subject/sender/recipient; with no results it falls back to a body scan of the most recent `bodySearchLimit` messages (slower; disable with `bodySearchFallback`).
@@ -120,7 +120,7 @@ Every provider requires an authorization code / app-specific password instead of
 ```sh
 pnpm install
 pnpm run build   # tsc → lib/
-pnpm test        # 构建 + node --test（配置/解析/注册与审批门，40 个用例，无需真实邮箱）
+pnpm test        # 构建 + node --test（配置/解析/注册与审批门，43 个用例，无需真实邮箱）
 ```
 
 ## License
