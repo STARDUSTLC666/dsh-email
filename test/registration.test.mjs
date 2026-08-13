@@ -19,6 +19,22 @@ function fakeCtx() {
 
 const QQ = { provider: 'qq', user: 'a@b.c', password: 'p' }
 
+test('every registered tool parameters value is a compiled JSON Schema (native wire contract)', () => {
+  const ctx = fakeCtx()
+  apply(ctx, {})
+  for (const def of ctx.tools.defs) {
+    assert.equal(def.parameters.type, 'object', def.name + ' parameters root must be type object')
+    assert.ok(def.parameters.properties && typeof def.parameters.properties === 'object', def.name + ' must have properties')
+    for (const [key, node] of Object.entries(def.parameters.properties)) {
+      assert.ok(typeof node.type === 'string', def.name + '.' + key + ' must declare a type')
+    }
+  }
+  const read = ctx.tools.defs.find(def => def.name === 'email_read')
+  assert.deepEqual(read.parameters.required, ['uid'])
+  const send = ctx.tools.defs.find(def => def.name === 'email_send')
+  assert.deepEqual(send.parameters.properties.attachments.items, { type: 'string' })
+})
+
 test('apply registers the six email tools even without config', () => {
   const ctx = fakeCtx()
   apply(ctx, {})

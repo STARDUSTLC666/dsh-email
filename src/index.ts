@@ -22,6 +22,30 @@ export type Config = EmailConfig
 const MAX_LIMIT = 100
 const ACCOUNT_HINT = '账号名（配置了 accounts 多个账号时选择），省略时用 defaultAccount。可用账号见 email_folders 的报错或插件 README'
 
+/**
+ * Compile the author DSL map into a raw JSON Schema object, exactly what
+ * defineTool stores as definition.parameters. The native wire request sends
+ * this value verbatim, so a raw DSL here would be rejected by the model API
+ * ("schema must be a JSON Schema of 'type: object'").
+ */
+function compileParameters(spec: Record<string, any>): Record<string, unknown> {
+  const properties: Record<string, unknown> = {}
+  const required: string[] = []
+  for (const [key, prop] of Object.entries(spec)) {
+    if (prop?.required === true) required.push(key)
+    const node: Record<string, unknown> = {}
+    if (typeof prop?.type === 'string') node.type = prop.type
+    if (typeof prop?.description === 'string') node.description = prop.description
+    if (prop?.type === 'array' && prop.items !== null && typeof prop.items === 'object') {
+      const items: Record<string, unknown> = { type: 'string' }
+      if (prop.items.type === 'object') items.additionalProperties = true
+      node.items = items
+    }
+    properties[key] = node
+  }
+  return { type: 'object', properties, ...(required.length > 0 ? { required } : {}) }
+}
+
 const strArray = { type: 'array', items: { type: 'string' } }
 const addrArray = { type: 'array', items: { type: 'object', additionalProperties: true } }
 const messageShape = {
@@ -193,13 +217,13 @@ export function apply(ctx: any, config: Config = {}): void {
     name: 'email_list',
     description: 'List recent emails in a mailbox folder (newest first). Returns uid, date, sender, subject and flags without message bodies; use email_read with a uid to fetch the full text.'
 ,
-    parameters: {
+    parameters: compileParameters({
       folder: { type: 'string', description: 'IMAP folder path (see email_folders); defaults to the account inboxFolder' },
       limit: { type: 'integer', description: 'How many messages to return, 1-100, default 20' },
       offset: { type: 'integer', description: 'Skip this many newest messages first, default 0' },
       unreadOnly: { type: 'boolean', description: 'Only list unread messages, default false' },
       account: { type: 'string', description: ACCOUNT_HINT },
-    },
+    }),
     output: {
       schema: listSchema,
       render: (_args: unknown, value: unknown) => renderList(value as EmailListResult),
@@ -216,11 +240,11 @@ export function apply(ctx: any, config: Config = {}): void {
     name: 'email_read',
     description: 'Read one full email message by its uid (from email_list or email_search). Returns the plain-text body (HTML mail is converted; oversized bodies are truncated) plus attachment metadata; use email_attachment to download one.'
 ,
-    parameters: {
+    parameters: compileParameters({
       uid: { type: 'integer', required: true, description: 'Message uid from email_list or email_search' },
       folder: { type: 'string', description: 'IMAP folder the uid belongs to; defaults to the account inboxFolder' },
       account: { type: 'string', description: ACCOUNT_HINT },
-    },
+    }),
     output: {
       schema: readSchema,
       render: (_args: unknown, value: unknown) => renderRead(value as EmailReadResult),
@@ -238,12 +262,12 @@ export function apply(ctx: any, config: Config = {}): void {
     name: 'email_search',
     description: 'Search emails by a keyword matched against sender, recipient and subject (server-side IMAP SEARCH). Body search is not supported by every server and is not attempted; returns the same compact rows as email_list.'
 ,
-    parameters: {
+    parameters: compileParameters({
       query: { type: 'string', required: true, description: 'Keyword to search for' },
       folder: { type: 'string', description: 'IMAP folder to search in; defaults to the account inboxFolder' },
       limit: { type: 'integer', description: 'How many matches to return, 1-100, default 10' },
       account: { type: 'string', description: ACCOUNT_HINT },
-    },
+    }),
     output: {
       schema: listSchema,
       render: (_args: unknown, value: unknown) => renderSearch(value as EmailSearchResult),
@@ -260,14 +284,14 @@ export function apply(ctx: any, config: Config = {}): void {
     name: 'email_send',
     description: 'Send an email from a configured account, optionally with file attachments (absolute paths, or relative to the dsh process cwd). Sending first asks the user for approval (recipient, subject and attachment count are shown) unless sendApproval is disabled; never invent recipients or content without the user\'s instruction.'
 ,
-    parameters: {
+    parameters: compileParameters({
       to: { type: 'string', required: true, description: 'Recipient(s), comma-separated' },
       subject: { type: 'string', required: true, description: 'Email subject' },
       text: { type: 'string', description: 'Plain-text body' },
       cc: { type: 'string', description: 'CC recipient(s), comma-separated' },
       attachments: { type: 'array', items: { type: 'string' }, description: 'File paths to attach (absolute, or relative to the dsh process cwd)' },
       account: { type: 'string', description: ACCOUNT_HINT },
-    },
+    }),
     output: {
       schema: sendSchema,
       render: (_args: unknown, value: unknown) => renderSend(value as EmailSendResult),
@@ -291,10 +315,10 @@ export function apply(ctx: any, config: Config = {}): void {
     name: 'email_folders',
     description: 'List the mailbox folders of an account (INBOX, Sent, Trash, custom folders, ...). Use the returned path values as the folder argument of the other email tools.'
 ,
-    parameters: {
+    parameters: compileParameters({
       subscribedOnly: { type: 'boolean', description: 'Only subscribed folders, default false' },
       account: { type: 'string', description: ACCOUNT_HINT },
-    },
+    }),
     output: {
       schema: foldersSchema,
       render: (_args: unknown, value: unknown) => renderFolders(value as EmailFoldersResult),
@@ -309,12 +333,12 @@ export function apply(ctx: any, config: Config = {}): void {
     name: 'email_attachment',
     description: 'Download one attachment of a message to a local file (size capped by maxAttachmentBytes). The index matches the attachments array of email_read. Returns the absolute path of the written file.'
 ,
-    parameters: {
+    parameters: compileParameters({
       uid: { type: 'integer', required: true, description: 'Message uid from email_list or email_search' },
       index: { type: 'integer', description: '0-based attachment index, as listed by email_read; default 0' },
       folder: { type: 'string', description: 'IMAP folder the uid belongs to; defaults to the account inboxFolder' },
       account: { type: 'string', description: ACCOUNT_HINT },
-    },
+    }),
     output: {
       schema: attachmentSchema,
       render: (_args: unknown, value: unknown) => renderAttachment(value as EmailAttachmentResult),
