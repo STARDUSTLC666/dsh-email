@@ -199,7 +199,10 @@ function fingerprintSettings(settings: ResolvedEmailSettings): string {
     sendApproval: settings.sendApproval,
     maxBodyChars: settings.maxBodyChars,
     downloadDir: settings.downloadDir,
+    downloadDirExplicit: settings.downloadDirExplicit,
     maxAttachmentBytes: settings.maxAttachmentBytes,
+    bodySearchFallback: settings.bodySearchFallback,
+    bodySearchLimit: settings.bodySearchLimit,
     idleTimeoutMs: settings.idleTimeoutMs,
   })
 }
@@ -377,13 +380,14 @@ export function apply(ctx: any, config: Config = {}): void {
       schema: attachmentSchema,
       render: (_args: unknown, value: unknown) => renderAttachment(value as EmailAttachmentResult),
     },
-    async execute(rawArgs: unknown) {
+    async execute(rawArgs: unknown, exec: any) {
       const args = rawArgs as EmailAttachmentArgs
       if (typeof args.uid !== 'number' || !Number.isInteger(args.uid) || args.uid <= 0) {
         throw new Error('uid 必须是正整数（用 email_list 获取）')
       }
       const index = clampInt(args.index, 0, 0, 999)
-      return await getPool().downloadAttachment(args.account, args.folder?.trim() || '', args.uid, index)
+      const workspaceHint = typeof exec?.agent?.session?.header?.cwd === 'string' ? exec.agent.session.header.cwd : undefined
+      return await getPool().downloadAttachment(args.account, args.folder?.trim() || '', args.uid, index, workspaceHint)
     },
   })
 
@@ -435,6 +439,6 @@ export function apply(ctx: any, config: Config = {}): void {
 export { PROVIDER_NAMES, EMAIL_PASSWORD_ENV } from './config.js'
 export { resolveEmailConfig, resolveEmailSettings, clampInt, defaultDownloadDir } from './config.js'
 export { stripHtml, truncateText, flattenAddresses, sanitizeFilename, parseRawMessage } from './parse.js'
-export { EmailPool, MailError, messageOf, validateAttachmentPaths, selectAttachmentPart } from './mail-client.js'
+export { EmailPool, MailError, messageOf, validateAttachmentPaths, selectAttachmentPart, messageMatchesQuery } from './mail-client.js'
 export { SETTINGS_NAMESPACE, EmailSettingsSchema, toSettingsBase, toEmailConfig, validateSettingsValue } from './settings.js'
 export { SETTINGS_ROUTE, EmailSettingsBackend, installEmailSettingsWeb } from './web.js'

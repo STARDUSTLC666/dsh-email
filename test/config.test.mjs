@@ -173,3 +173,23 @@ test('toEmailConfig with null projects the full draft', async () => {
   assert.equal(out.maxBodyChars, 5000)
   assert.equal(out.imap.port, 993)
 })
+
+test('messageMatchesQuery matches subject, from and body case-insensitively', async () => {
+  const { messageMatchesQuery } = await import('../lib/index.js')
+  assert.equal(messageMatchesQuery('账号登录验证', '', '', '验证'), true)
+  assert.equal(messageMatchesQuery('', 'Alice <a@x.com>', '', 'alice'), true)
+  assert.equal(messageMatchesQuery('', '', '详见附件说明', '附件'), true)
+  assert.equal(messageMatchesQuery('nothing', 'nothing', 'nothing', '验证'), false)
+})
+
+test('body search fallback defaults and clamps', async () => {
+  const { resolveEmailSettings } = await import('../lib/index.js')
+  const s = resolveEmailSettings({ provider: 'qq', user: 'a@b.c', password: 'p' })
+  assert.equal(s.bodySearchFallback, true)
+  assert.equal(s.bodySearchLimit, 30)
+  assert.equal(s.downloadDirExplicit, false)
+  const t = resolveEmailSettings({ provider: 'qq', user: 'a@b.c', password: 'p', bodySearchLimit: 5000, downloadDir: 'D:/dl' })
+  assert.equal(t.bodySearchLimit, 200)
+  assert.equal(t.downloadDirExplicit, true)
+  assert.equal(t.downloadDir, 'D:/dl')
+})

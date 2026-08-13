@@ -81,6 +81,14 @@ export function selectAttachmentPart(
   return byTypeAndSize
 }
 
+/** Case-insensitive match of a query against subject/from/body text. */
+export function messageMatchesQuery(subject: string, fromText: string, body: string, query: string): boolean {
+  const q = query.toLowerCase()
+  return subject.toLowerCase().includes(q)
+    || fromText.toLowerCase().includes(q)
+    || body.toLowerCase().includes(q)
+}
+
 function toIso(date: Date | null | undefined): string {
   return date instanceof Date ? date.toISOString() : ''
 }
@@ -285,9 +293,43 @@ export class EmailPool {
       ])
       const uids = [...new Set(found.flatMap(result => result === false ? [] : result))].sort((a, b) => a - b)
       uids.reverse()
+      if (uids.length === 0 && this.settings.bodySearchFallback) {
+        // Server-side search found nothing: fall back to a client-side scan of
+        // the most recent messages (subject/from/body), capped for time.
+        const messages = await this.searchBodies(client, query, folderName, limit)
+        return { account: name, query, count: messages.length, folder: folderName, messages }
+      }
       const messages = await this.fetchListed(client, uids.slice(0, limit))
       return { account: name, query, count: uids.length, folder: folderName, messages }
     })
+  }
+
+  /** Client-side scan of the tail of the mailbox, newest first. */
+  private async searchBodies(client: ImapFlow, query: string, folder: string, limit: number): Promise<ListedMessage[]> {
+    const mailbox = client.mailbox
+    const total = mailbox === false ? 0 : mailbox.exists
+    if (total === 0) return []
+    const start = Math.max(1, total - this.settings.bodySearchLimit + 1)
+    const fetched = await client.fetchAll(
+      start + ':*',
+      { uid: true, envelope: true, flags: true, size: true, bodyStructure: true, source: true },
+      { uid: true },
+    )
+    const out: ListedMessage[] = []
+    for (const message of [...fetched].reverse()) {
+      if (out.length >= limit) break
+      const subject = message.envelope?.subject ?? ''
+      const fromText = flattenAddresses(message.envelope?.from).map(a => (a.name ?? '') + ' ' + (a.address ?? '')).join(' ')
+      let body = ''
+      if (message.source !== undefined) {
+        const parsed = await parseRawMessage(message.source, 4096)
+        body = parsed.text
+      }
+      if (messageMatchesQuery(subject, fromText, body, query)) {
+        out.push(listedFrom(message, message.size, structureHasAttachment(message.bodyStructure)))
+      }
+    }
+    return out
   }
 
   private async fetchListed(client: ImapFlow, uids: number[]): Promise<ListedMessage[]> {
@@ -330,7 +372,7 @@ export class EmailPool {
     })
   }
 
-  async downloadAttachment(accountName: string | undefined, folder: string, uid: number, index: number): Promise<EmailAttachmentResult> {
+  async downloadAttachment(accountName: string | undefined, folder: string, uid: number, index: number, workspaceHint?: string): Promise<EmailAttachmentResult> {
     const name = this.resolveName(accountName)
     const cfg = this.account(name)
     const folderName = folder || cfg.inboxFolder
@@ -357,7 +399,13 @@ export class EmailPool {
       const dl = await client.download(uid, att.part, { uid: true, maxBytes: this.settings.maxAttachmentBytes })
       const buf = await collectStream(dl.content, this.settings.maxAttachmentBytes)
       const safeName = sanitizeFilename(dl.meta.filename ?? att.filename ?? body.attachments[index].filename)
-      const dir = this.settings.downloadDir
+      // Default the destination to the session workspace so the model can
+      // read the file back; an explicit downloadDir always wins.
+      const dir = this.settings.downloadDirExplicit
+        ? this.settings.downloadDir
+        : (typeof workspaceHint === 'string' && workspaceHint !== ''
+          ? join(workspaceHint, '.dsh-email-downloads')
+          : this.settings.downloadDir)
       await mkdir(dir, { recursive: true })
       const dest = await uniquePath(join(dir, safeName))
       await writeFile(dest, buf)

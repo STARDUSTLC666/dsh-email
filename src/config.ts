@@ -36,8 +36,12 @@ export interface EmailConfig extends AccountConfig {
   accounts?: Record<string, AccountConfig>
   /** Which account tools use when the call omits account. Required with 2+ accounts. */
   defaultAccount?: string
-  /** Directory email_attachment writes into. Default $DSH_HOME/email-downloads. */
+  /** Directory email_attachment writes into. Default: the session workspace's .dsh-email-downloads (falls back to $DSH_HOME/email-downloads). */
   downloadDir?: string
+  /** Client-side body scan when server search finds nothing. Default true. */
+  bodySearchFallback?: boolean
+  /** How many recent messages the body-search fallback parses. Default 30. */
+  bodySearchLimit?: number
   /** Per-attachment and total-attachment byte cap. Default 20 MiB. */
   maxAttachmentBytes?: number
   /** Unused IMAP connections close after this many ms. Default 60000. */
@@ -83,8 +87,12 @@ export interface ResolvedEmailSettings {
   sendApproval: boolean
   maxBodyChars: number
   downloadDir: string
+  /** Whether downloadDir was set explicitly (vs. the default). */
+  downloadDirExplicit: boolean
   maxAttachmentBytes: number
   idleTimeoutMs: number
+  bodySearchFallback: boolean
+  bodySearchLimit: number
 }
 
 export function defaultDownloadDir(): string {
@@ -137,8 +145,11 @@ export function resolveEmailSettings(config: EmailConfig | undefined): ResolvedE
     sendApproval: raw.sendApproval !== false,
     maxBodyChars: clampInt(raw.maxBodyChars, 20000, 1000, 200000),
     downloadDir: raw.downloadDir?.trim() || defaultDownloadDir(),
+    downloadDirExplicit: (raw.downloadDir?.trim() ?? '') !== '',
     maxAttachmentBytes: clampInt(raw.maxAttachmentBytes, DEFAULT_MAX_ATTACHMENT_BYTES, 1024, 512 * 1024 * 1024),
     idleTimeoutMs: clampInt(raw.idleTimeoutMs, DEFAULT_IDLE_TIMEOUT_MS, 5000, 600000),
+    bodySearchFallback: raw.bodySearchFallback !== false,
+    bodySearchLimit: clampInt(raw.bodySearchLimit, 30, 5, 200),
   }
 }
 

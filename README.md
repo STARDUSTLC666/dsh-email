@@ -12,10 +12,10 @@ Email tools for DeepSeek Harness: list, read, search and send mail through stand
 |---|---|
 | `email_list` | 列出文件夹里最新的邮件（未读过滤、分页、只看摘要不带正文） |
 | `email_read` | 按 uid 读取一封邮件的全文（HTML 邮件自动转纯文本，超长截断） |
-| `email_search` | 按关键词搜索发件人/收件人/主题（服务器端 IMAP SEARCH，不搜正文） |
+| `email_search` | 按关键词搜索发件人/收件人/主题（服务器端）；无结果时默认回退到最近 30 封的正文扫描 |
 | `email_send` | 代发邮件（支持带附件）。**默认发信前会弹确认**，显示收件人、主题和附件数，由你批准后才发出 |
 | `email_folders` | 列出邮箱的文件夹（INBOX/已发送/垃圾邮件/自定义…），拿 path 喂给其他工具 |
-| `email_attachment` | 按序号下载邮件附件到本地文件（大小受 maxAttachmentBytes 限制） |
+| `email_attachment` | 按序号下载邮件附件（默认存到会话工作区，模型可直接读取；大小受 maxAttachmentBytes 限制） |
 
 示例对话：
 
@@ -103,9 +103,11 @@ dsh plugin --profile web add dsh-email
 | `maxBodyChars` | `20000` | email_read 正文截断上限（1000–200000） |
 | `accounts` | 无 | 具名账号表；账号级字段覆盖顶层简写 |
 | `defaultAccount` | 单账号时自动 | 工具省略 account 参数时使用的账号（多账号必填） |
-| `downloadDir` | `$DSH_HOME/email-downloads` | email_attachment 的落盘目录 |
+| `downloadDir` | 会话工作区下 .dsh-email-downloads（回退 $DSH_HOME/email-downloads） | email_attachment 的落盘目录；显式设置后固定 |
 | `maxAttachmentBytes` | 20 MiB | 单个附件与附件总大小上限（1024–512 MiB） |
 | `idleTimeoutMs` | `60000` | IMAP 空闲连接回收时间（连接复用，连续操作更快） |
+| `bodySearchFallback` | `true` | 服务器搜索无结果时，回退到客户端扫描最近邮件的正文 |
+| `bodySearchLimit` | `30` | 正文回退扫描的邮件数量（5-200） |
 
 ## 第一步：拿到授权码
 
@@ -129,7 +131,7 @@ dsh plugin --profile web add dsh-email
 - **多账号**：每个账号独立连接池；一个 `tool-email` 行可以配任意多个账号。设置页编辑的是默认账号；`accounts` 映射仍需写 cordis.patch.yml。
 - **附件下载**：email_attachment 按 email_read 的附件列表定位（先按文件名、再按类型+大小匹配到 IMAP 部件，定位失败会报错而不是下载错文件）；内嵌图片暂不支持下载；文件名会被清洗防路径穿越，已有同名文件自动加后缀，大小受 maxAttachmentBytes 限制。
 - **不支持 OAuth2**：强制 OAuth 的企业环境（部分 M365/Google Workspace）暂不可用。
-- 正文搜索不提供：多数服务器（如 QQ）的 IMAP `TEXT`/`HEADER` 搜索要么全量匹配要么不支持，所以只搜主题/发件人/收件人；正文搜索列入后续版本（需客户端下载解析，较慢）。
+- 正文搜索走客户端回退：多数服务器（如 QQ）的 IMAP `TEXT`/`HEADER` 搜索不可靠，所以服务器端只搜主题/发件人/收件人；无结果时回退到最近 `bodySearchLimit` 封的正文扫描（较慢，可关 `bodySearchFallback`）。
 - **密码落盘形式**：设置页保存的授权码以明文写在本机 `settings.yaml`（schema 标记 secret 只是保证它不进日志/导出/诊断，不做磁盘加密）。请勿把 settings.yaml 交给不信任的人。
 - **设置页与插件集变更**：设置页保存后工具**立即生效**（live），无需重启；但升级/增删插件（组合树变化）仍需重启 `dsh web`。
 
@@ -138,7 +140,7 @@ dsh plugin --profile web add dsh-email
 ```sh
 pnpm install
 pnpm run build   # tsc → lib/
-pnpm test        # 构建 + node --test（配置/解析/注册与审批门，38 个用例，无需真实邮箱）
+pnpm test        # 构建 + node --test（配置/解析/注册与审批门，40 个用例，无需真实邮箱）
 ```
 
 ## 协议
