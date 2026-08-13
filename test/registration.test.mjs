@@ -7,6 +7,10 @@ import { apply, validateAttachmentPaths, MailError } from '../lib/index.js'
 
 function fakeCtx(scopeValue = {}) {
   const ctx = {
+    permissionPresets: {
+      current() { return { sandbox: 'workspace-write', approval: 'ask' } },
+    },
+    get(name) { if (name === 'permissionPresets') return this.permissionPresets; return undefined },
     tools: { register(def) { this.defs.push(def) }, defs: [] },
     listeners: [],
     on(event, fn, opts) { this.listeners.push({ event, fn, opts }) },
@@ -153,4 +157,36 @@ test('validateAttachmentPaths stats files and enforces the total cap', async () 
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
+})
+
+test('Full Access (policy never) refuses email_send with an actionable message', async () => {
+  const ctx = fakeCtx()
+  ctx.permissionPresets.current = () => ({ sandbox: 'danger-full-access', approval: 'never' })
+  apply(ctx, QQ)
+  const gate = ctx.listeners.find(l => l.event === 'tools/pre-execute')
+  const decision = await gate.fn(
+    { name: 'email_send', args: { to: 'boss@corp.com', subject: 's' } },
+    async () => 'PASSED-THROUGH',
+  )
+  assert.equal(decision.kind, 'deny')
+  assert.match(decision.reason, /Full Access/)
+  assert.match(decision.reason, /sendApproval/)
+})
+
+test('policy ask keeps the approval ask', async () => {
+  const ctx = fakeCtx()
+  ctx.permissionPresets.current = () => ({ sandbox: 'workspace-write', approval: 'ask' })
+  apply(ctx, QQ)
+  const gate = ctx.listeners.find(l => l.event === 'tools/pre-execute')
+  const decision = await gate.fn({ name: 'email_send', args: { to: 'x@y.z', subject: 's' } }, async () => 'PASSED-THROUGH')
+  assert.equal(decision.kind, 'ask')
+})
+
+test('policy never + sendApproval: false still allows sending', async () => {
+  const ctx = fakeCtx({ sendApproval: false })
+  ctx.permissionPresets.current = () => ({ sandbox: 'danger-full-access', approval: 'never' })
+  apply(ctx, QQ)
+  const gate = ctx.listeners.find(l => l.event === 'tools/pre-execute')
+  const out = await gate.fn({ name: 'email_send', args: { to: 'x@y.z', subject: 's' } }, async () => 'PASSED-THROUGH')
+  assert.equal(out, 'PASSED-THROUGH')
 })

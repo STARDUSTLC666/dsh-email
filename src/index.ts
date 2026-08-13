@@ -192,6 +192,20 @@ function renderAttachment(value: EmailAttachmentResult): TextBlock[] {
   return oneText('账号 ' + value.account + ' 已下载附件 "' + value.filename + '"（' + value.contentType + '，' + value.size + ' 字节）到：\n' + value.path + '\n可用 read 工具读取该文件。')
 }
 
+/**
+ * Best-effort read of the session's effective approval policy. Duck-typed on
+ * the permission-presets seam; any drift or absence yields undefined and the
+ * gate falls back to the plain ask flow.
+ */
+function effectiveApprovalPolicy(ctx: any, exec: any): string | undefined {
+  try {
+    const preset = ctx.get?.('permissionPresets')?.current?.(exec?.agent?.session?.events)
+    return typeof preset?.approval === 'string' ? preset.approval : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function fingerprintSettings(settings: ResolvedEmailSettings): string {
   return JSON.stringify({
     accounts: [...settings.accounts.entries()].map(([name, account]) => [name, account]),
@@ -316,7 +330,7 @@ export function apply(ctx: any, config: Config = {}): void {
 
   ctx.tools.register({
     name: 'email_send',
-    description: 'Send an email from a configured account, optionally with file attachments (absolute paths, or relative to the dsh process cwd). Sending first asks the user for approval (recipient, subject and attachment count are shown) unless sendApproval is disabled; never invent recipients or content without the user\'s instruction.'
+    description: 'Send an email from a configured account, optionally with file attachments (absolute paths, or relative to the dsh process cwd). Sending asks the user for approval (recipient, subject and attachment count are shown) unless sendApproval is disabled; in Full Access mode the approval policy never asks, so the send is refused with an explanation instead. Never invent recipients or content without the user\'s instruction.'
 ,
     parameters: compileParameters({
       to: { type: 'string', required: true, description: 'Recipient(s), comma-separated' },
@@ -404,6 +418,15 @@ export function apply(ctx: any, config: Config = {}): void {
     const args = (exec.args ?? {}) as EmailSendArgs
     const attachCount = Array.isArray(args.attachments) ? args.attachments.length : 0
     const reason = '发送邮件给 ' + args.to + '，主题「' + args.subject + '」' + (attachCount > 0 ? '，附件 ' + attachCount + ' 个' : '')
+    // Full Access (approval policy 'never') rejects asks before any answerer
+    // runs, so surface the actionable explanation instead of a misleading
+    // "the user rejected" failure.
+    if (effectiveApprovalPolicy(ctx, exec) === 'never') {
+      return {
+        kind: 'deny',
+        reason: 'email_send 需要确认，但当前会话处于 Full Access（审批策略 never），不会弹出确认框。两条路：① 把访问模式切回 Read Only 或 Write 再发；② 在设置页关闭「发信前确认」（sendApproval: false），自行承担风险。',
+      }
+    }
     return { kind: 'ask', reason }
   }, { prepend: true })
 }

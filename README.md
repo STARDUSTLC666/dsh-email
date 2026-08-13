@@ -120,7 +120,7 @@ dsh plugin --profile web add dsh-email
 
 - **授权码就是你的邮箱钥匙**。它写在本机（profile 的 `cordis.patch.yml` 或 `settings.yaml`），请勿提交到任何 Git 仓库；更推荐用环境变量 `DSH_EMAIL_PASSWORD`。
 - `email_send` 默认走 DSH 审批通道：每次发信都显示「发送邮件给 xx，主题「xx」」，你批准才发出。没有审批通道的环境（如无 UI 的 headless）会**直接拒绝发信**，这是安全默认。
-- 注意：会话处于 **Full Access（完全访问）** 模式时，harness 会把审批策略置为 never，`email_send` 会被**静默拒绝**（不弹框）。想发信请把访问模式切回 Read Only 或 Write。
+- 会话处于 **Full Access（完全访问）** 模式时，harness 的审批策略是 never（不弹任何确认框）——`email_send` 会**被拦截并给出明确提示**。两条出路：① 把访问模式切回 Read Only / Write；② 关闭 `sendApproval`（设置页勾掉「发信前确认」），即显式声明自行承担风险。
 - 本插件不做任何联网上报，凭证只在内存中用于连接你的邮箱服务器。
 
 ## 已知限制（v0.3）
@@ -138,7 +138,7 @@ dsh plugin --profile web add dsh-email
 ```sh
 pnpm install
 pnpm run build   # tsc → lib/
-pnpm test        # 构建 + node --test（配置/解析/注册与审批门，34 个用例，无需真实邮箱）
+pnpm test        # 构建 + node --test（配置/解析/注册与审批门，37 个用例，无需真实邮箱）
 ```
 
 ## 协议
