@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0A3D62"/>
+      <stop offset="0.55" stop-color="#062A45"/>
+      <stop offset="1" stop-color="#04101F"/>
+    </linearGradient>
+    <linearGradient id="word" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7FD0FF"/>
+      <stop offset="1" stop-color="#3FA9F5"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#0B6C9F" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#0B6C9F" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <circle cx="660" cy="320" r="290" fill="url(#glow)"/>
+
+  <!-- bubbles -->
+  <g fill="#7FD0FF">
+    <circle cx="180" cy="140" r="6" opacity="0.35"/>
+    <circle cx="240" cy="96" r="4" opacity="0.25"/>
+    <circle cx="1080" cy="180" r="7" opacity="0.3"/>
+    <circle cx="1140" cy="120" r="4" opacity="0.2"/>
+    <circle cx="990" cy="90" r="5" opacity="0.25"/>
+    <circle cx="150" cy="470" r="5" opacity="0.22"/>
+    <circle cx="1180" cy="480" r="6" opacity="0.28"/>
+  </g>
+
+  <!-- whale tail -->
+  <g transform="translate(170 215) scale(0.8)">
+    <path d="M -70 40 C -100 -40 -40 -80 0 -46 C 40 -80 100 -40 70 40 C 40 8 -40 8 -70 40 Z"
+          fill="#7FD0FF" opacity="0.92"/>
+    <path d="M 0 -46 C 4 -34 14 -30 20 -38 M 0 -46 C -4 -34 -14 -30 -20 -38"
+          stroke="#04101F" stroke-width="3" fill="none" opacity="0.35"/>
+    <path d="M -24 26 C -12 10 -2 10 0 18 C 2 10 12 10 24 26"
+          stroke="#A8E0FF" stroke-width="4" fill="none" opacity="0.6"/>
+  </g>
+
+  <!-- envelope -->
+  <g transform="translate(320 262)">
+    <rect x="0" y="0" width="210" height="132" rx="14" fill="#EAF6FF"/>
+    <rect x="0" y="0" width="210" height="132" rx="14" fill="none" stroke="#B9DCEE" stroke-width="2"/>
+    <path d="M 6 8 L 105 86 L 204 8" fill="none" stroke="#0B6C9F" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 16 118 C 52 96 92 96 128 118 C 146 96 178 88 196 100" fill="none" stroke="#B9DCEE" stroke-width="2" opacity="0.7"/>
+    <circle cx="105" cy="66" r="22" fill="#0B6C9F"/>
+    <path d="M 96 66 L 102 73 L 116 58" fill="none" stroke="#EAF6FF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- mail streak -->
+  <path d="M 534 400 C 610 396 668 388 726 376" fill="none" stroke="#3FA9F5" stroke-width="4" stroke-dasharray="2 14" stroke-linecap="round" opacity="0.8"/>
+
+  <!-- wordmark -->
+  <text x="640" y="200" font-family="Segoe UI, Arial, sans-serif" font-size="104" font-weight="800" fill="url(#word)" text-anchor="middle" letter-spacing="2">dsh-email</text>
+  <text x="640" y="272" font-family="Segoe UI, Arial, sans-serif" font-size="34" font-weight="600" fill="#EAF6FF" text-anchor="middle" letter-spacing="1">Mail for your DeepSeek Harness agent</text>
+  <text x="640" y="322" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="26" fill="#9FC3DD" text-anchor="middle">查收件箱 · 读邮件 · 搜邮件 · 代发信 · 收发附件</text>
+
+  <!-- badge chips -->
+  <g font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="22" font-weight="600" fill="#062A45">
+    <rect x="342" y="392" width="148" height="46" rx="23" fill="#7FD0FF"/>
+    <text x="416" y="422" text-anchor="middle">6 工具</text>
+    <rect x="514" y="392" width="148" height="46" rx="23" fill="#A8E0FF"/>
+    <text x="588" y="422" text-anchor="middle">8 邮箱预设</text>
+    <rect x="686" y="392" width="148" height="46" rx="23" fill="#C9ECFF"/>
+    <text x="760" y="422" text-anchor="middle">40 测试</text>
+  </g>
+
+  <text x="640" y="576" font-family="Segoe UI, Arial, sans-serif" font-size="20" fill="#6E93AF" text-anchor="middle">dsh-plugin · 纯 Node 全平台 · MIT · 发信默认经用户确认</text>
+</svg>
