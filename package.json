@@ -1,6 +1,6 @@
 {
   "name": "dsh-email",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "IMAP/SMTP email tools for DeepSeek Harness: list, read, search and send mail, with QQ/163/126/Sina/Aliyun/Gmail/Outlook/iCloud presets.",
   "type": "module",
   "main": "lib/index.js",
@@ -50,6 +50,13 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ],
+      "platform": "web"
     }
   },
   "dependencies": {
