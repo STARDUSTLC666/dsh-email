@@ -75,6 +75,14 @@ export class EmailSettingsBackend {
   }
 
   async handle(req: any, res: any) {
+    // Localhost-only: the snapshot carries the stored authorization code. If a
+    // deployment binds the webserver to 0.0.0.0, this route must never leak it
+    // to the LAN.
+    const remote = String(req.socket?.remoteAddress ?? '')
+    if (remote !== '127.0.0.1' && remote !== '::1' && remote !== '::ffff:127.0.0.1') {
+      this.responseJson(res, 403, { ok: false, error: { code: 'forbidden', message: 'dsh-email settings route is localhost-only' } })
+      return
+    }
     if (req.method === 'GET') {
       try {
         this.responseJson(res, 200, { ok: true, value: await this.snapshot() })
