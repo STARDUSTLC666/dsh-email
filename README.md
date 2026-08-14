@@ -1,6 +1,8 @@
 [English](README.en.md)
 
-`# dsh-email
+# dsh-email
+
+> **给 agent 一个邮箱**：八个国内邮箱预设开箱即用，收发/搜索/附件下载全搞定。
 
 ![npm version](https://img.shields.io/npm/v/dsh-email?label=npm&color=blue) ![npm downloads](https://img.shields.io/npm/dm/dsh-email) ![license](https://img.shields.io/npm/l/dsh-email) ![stars](https://img.shields.io/github/stars/STARDUSTLC666/dsh-email?style=social)
 
