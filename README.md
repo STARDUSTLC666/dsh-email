@@ -22,7 +22,7 @@ Email tools for DeepSeek Harness: list, read, search and send mail through stand
 |---|---|
 | `email_list` | 列出文件夹里最新的邮件（未读过滤、分页、只看摘要不带正文） |
 | `email_read` | 按 uid 读取一封邮件的全文（HTML 邮件自动转纯文本，超长截断） |
-| `email_search` | 按关键词搜索发件人/收件人/主题（服务器端）；无结果时默认回退到最近 30 封的正文扫描 |
+| `email_search` | 按关键词搜索主题/发件人/收件人/抄送（服务器端 subject/from/to/cc）；无结果时默认回退到最近 30 封的正文扫描（含 to/cc） |
 | `email_send` | 代发邮件（支持带附件）。**默认发信前会弹确认**，显示收件人、主题和附件数，由你批准后才发出 |
 | `email_folders` | 列出邮箱的文件夹（INBOX/已发送/垃圾邮件/自定义…），拿 path 喂给其他工具 |
 | `email_attachment` | 按序号下载邮件附件（默认存到会话工作区，模型可直接读取；大小受 maxAttachmentBytes 限制） |
@@ -30,6 +30,14 @@ Email tools for DeepSeek Harness: list, read, search and send mail through stand
 示例对话：
 
 > 帮我看下 QQ 邮箱最新的 10 封未读，把要回复的列出来。
+
+### v0.6.2 优化
+
+- 服务器端搜索补齐 `cc`，搜索范围真正覆盖主题 / 发件人 / 收件人 / 抄送。
+- 正文回退扫描的匹配范围也加入 `to` / `cc`；单封邮件解析失败不会中断整批扫描。
+- 邮件列表结果强制按 UID 降序，保证「最新在前」。
+- `email_send` 的附件参数严格校验为路径字符串数组，并做 trim。
+
 
 ## 安装
 
@@ -142,7 +150,7 @@ dsh plugin --profile web add dsh-email
 - **多账号**：每个账号独立连接池；一个 `tool-email` 行可以配任意多个账号。设置页的「多账号（高级，YAML）」文本框可直接编辑映射（可含 defaultAccount 键），覆盖 cordis.patch.yml 的 accounts。
 - **附件下载**：email_attachment 按 email_read 的附件列表定位（先按文件名、再按类型+大小匹配到 IMAP 部件，定位失败会报错而不是下载错文件）；内嵌图片暂不支持下载；文件名会被清洗防路径穿越，已有同名文件自动加后缀，大小受 maxAttachmentBytes 限制。
 - **不支持 OAuth2**：强制 OAuth 的企业环境（部分 M365/Google Workspace）暂不可用。
-- 正文搜索走客户端回退：多数服务器（如 QQ）的 IMAP `TEXT`/`HEADER` 搜索不可靠，所以服务器端只搜主题/发件人/收件人；无结果时回退到最近 `bodySearchLimit` 封的正文扫描（较慢，可关 `bodySearchFallback`）。
+- 正文搜索走客户端回退：多数服务器（如 QQ）的 IMAP `TEXT`/`HEADER` 搜索不可靠，所以服务器端只搜主题/发件人/收件人/抄送（subject/from/to/cc）；无结果时回退到最近 `bodySearchLimit` 封的正文扫描（主题/from/to/cc/body，较慢，可关 `bodySearchFallback`）。
 - **密码落盘形式**：设置页保存的授权码以明文写在本机 `settings.yaml`（schema 标记 secret 只是保证它不进日志/导出/诊断，不做磁盘加密）。请勿把 settings.yaml 交给不信任的人。
 - **设置页与插件集变更**：设置页保存后工具**立即生效**（live），无需重启；但升级/增删插件（组合树变化）仍需重启 `dsh web`。
 
@@ -151,7 +159,7 @@ dsh plugin --profile web add dsh-email
 ```sh
 pnpm install
 pnpm run build   # tsc → lib/
-pnpm test        # 构建 + node --test（配置/解析/注册与审批门，43 个用例，无需真实邮箱）
+pnpm test        # 构建 + node --test（配置/解析/注册与审批门，44 个用例，无需真实邮箱）
 ```
 
 ## 协议

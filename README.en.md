@@ -12,7 +12,7 @@ Pure Node, **cross-platform** (one codebase for Windows / macOS / Linux), no she
 |---|---|
 | `email_list` | List the newest mail in a folder (unread filter, pagination, summaries only, no body) |
 | `email_read` | Read one message's full text by uid (HTML auto-converted to plain text, oversized bodies truncated) |
-| `email_search` | Search sender/recipient/subject by keyword (server-side); with no results, falls back to a body scan of the most recent 30 messages by default |
+| `email_search` | Search subject/sender/recipient/CC by keyword (server-side subject/from/to/cc); with no results, falls back to a body scan of the most recent 30 messages by default (including to/cc) |
 | `email_send` | Send mail on your behalf (attachments supported). **Prompts for confirmation before sending by default**, showing recipients, subject and attachment count; only sends after you approve |
 | `email_folders` | List the mailbox folders (INBOX/Sent/Junk/custom…); feed the `path` to other tools |
 | `email_attachment` | Download an attachment by index (saved to the session workspace by default so the model can read it directly; size capped by `maxAttachmentBytes`) |
@@ -20,6 +20,14 @@ Pure Node, **cross-platform** (one codebase for Windows / macOS / Linux), no she
 Example:
 
 > Check the 10 newest unread messages in my QQ mailbox and list the ones that need a reply.
+
+### v0.6.2 improvements
+
+- Server-side search now covers `cc`, so the search truly spans subject / sender / recipients / CC.
+- The client-side body fallback also matches `to` and `cc`; one malformed message no longer aborts the whole batch scan.
+- Mail lists are sorted by UID descending to guarantee newest-first results.
+- `email_send` validates `attachments` as a string array of file paths and trims each path.
+
 
 ## Installation
 
@@ -111,7 +119,7 @@ Every provider requires an authorization code / app-specific password instead of
 - **Multiple accounts**: each account has its own connection pool; one `tool-email` line can hold any number of accounts. The settings page's "Multiple accounts (advanced, YAML)" textbox can directly edit the map (including a `defaultAccount` key), overriding `accounts` in cordis.patch.yml.
 - **Attachment download**: `email_attachment` locates attachments from `email_read`'s attachment list (matching by filename first, then type+size to the IMAP part; a failed match errors instead of downloading the wrong file); inline images aren't downloadable yet; filenames are sanitized against path traversal, existing names get a suffix, and size is capped by `maxAttachmentBytes`.
 - **No OAuth2**: enterprise environments that force OAuth (some M365/Google Workspace) aren't usable yet.
-- **Body search uses client-side fallback**: most servers (e.g. QQ) have unreliable IMAP `TEXT`/`HEADER` search, so the server side only searches subject/sender/recipient; with no results it falls back to a body scan of the most recent `bodySearchLimit` messages (slower; disable with `bodySearchFallback`).
+- **Body search uses client-side fallback**: most servers (e.g. QQ) have unreliable IMAP `TEXT`/`HEADER` search, so the server side only searches subject/sender/recipient/CC (subject/from/to/cc); with no results it falls back to a body scan of the most recent `bodySearchLimit` messages (subject/from/to/cc/body, slower; disable with `bodySearchFallback`).
 - **Password storage form**: the authorization code saved in the settings page is written in plaintext to the local `settings.yaml` (the schema's secret mark only keeps it out of logs/exports/diagnostics; no disk encryption). Don't hand settings.yaml to untrusted people.
 - **Settings page vs. plugin-set changes**: saving in the settings page takes effect **immediately** (live), no restart needed; but upgrading or adding/removing plugins (composition-tree changes) still requires restarting `dsh web`.
 
@@ -120,7 +128,7 @@ Every provider requires an authorization code / app-specific password instead of
 ```sh
 pnpm install
 pnpm run build   # tsc → lib/
-pnpm test        # 构建 + node --test（配置/解析/注册与审批门，43 个用例，无需真实邮箱）
+pnpm test        # 构建 + node --test（配置/解析/注册与审批门，44 个用例，无需真实邮箱）
 ```
 
 ## License
