@@ -1,5 +1,7 @@
 # dsh-email
 
+[![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
+
 ![dsh-email banner](https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/banner.png)
 
 Email tools for DeepSeek Harness: let the agent **check the inbox, read mail, search mail, send mail on your behalf, and send/receive attachments** through standard IMAP/SMTP — with one-line presets for QQ / 163 / 126 / Sina / Aliyun / Gmail / Outlook / iCloud. Pure plugin implementation, zero core changes, works out of the box.
