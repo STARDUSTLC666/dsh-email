@@ -141,6 +141,14 @@ function oneText(text: string): TextBlock[] {
   return [{ type: 'text', text }]
 }
 
+function normalizeAttachmentPaths(value: unknown): string[] | undefined {
+  if (value === undefined || value === null) return undefined
+  if (!Array.isArray(value) || value.some(path => typeof path !== 'string' || path.trim() === '')) {
+    throw new Error('attachments 必须是文件路径字符串数组（且不能包含空字符串）')
+  }
+  return value.map(path => path.trim())
+}
+
 function describeMessage(message: EmailListResult['messages'][number]): string {
   const from = message.from.map(a => a.name ?? a.address).filter(Boolean).join(', ') || '(未知)'
   const flags = [
@@ -343,7 +351,7 @@ export function apply(ctx: any, config: Config = {}): void {
         args.subject.trim(),
         typeof args.text === 'string' ? args.text : undefined,
         typeof args.cc === 'string' && args.cc.trim() !== '' ? args.cc.trim() : undefined,
-        Array.isArray(args.attachments) ? args.attachments : undefined,
+        normalizeAttachmentPaths(args.attachments),
       )
     },
   })

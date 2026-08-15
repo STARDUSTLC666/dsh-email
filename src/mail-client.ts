@@ -89,6 +89,12 @@ export function messageMatchesQuery(subject: string, fromText: string, body: str
     || body.toLowerCase().includes(q)
 }
 
+function flattenAddressText(value: unknown): string {
+  return flattenAddresses(value)
+    .map(a => (a.name ?? '') + ' ' + (a.address ?? ''))
+    .join(' ')
+}
+
 function toIso(date: Date | null | undefined): string {
   return date instanceof Date ? date.toISOString() : ''
 }
@@ -284,12 +290,13 @@ export class EmailPool {
     const folderName = folder || cfg.inboxFolder
     return this.withImap(name, folderName, async (client) => {
       // No nested OR and no TEXT search: several servers (QQ among them)
-      // silently answer those with empty or match-everything results. Three
-      // independent searches unioned client-side behave well everywhere.
+      // silently answer those with empty or match-everything results.
+      // subject/from/to/cc searches unioned client-side behave well everywhere.
       const found = await Promise.all([
         client.search({ subject: query }, { uid: true }),
         client.search({ from: query }, { uid: true }),
         client.search({ to: query }, { uid: true }),
+          client.search({ cc: query }, { uid: true }),
       ])
       const uids = [...new Set(found.flatMap(result => result === false ? [] : result))].sort((a, b) => a - b)
       uids.reverse()
@@ -319,13 +326,26 @@ export class EmailPool {
     for (const message of [...fetched].reverse()) {
       if (out.length >= limit) break
       const subject = message.envelope?.subject ?? ''
-      const fromText = flattenAddresses(message.envelope?.from).map(a => (a.name ?? '') + ' ' + (a.address ?? '')).join(' ')
+      
+          const recipientSearchText = [message.envelope?.from, message.envelope?.to, message.envelope?.cc]
+          .map(flattenAddressText).join(' ')
+        
+          
+        
+          
       let body = ''
       if (message.source !== undefined) {
-        const parsed = await parseRawMessage(message.source, 4096)
-        body = parsed.text
+        try {
+            const parsed = await parseRawMessage(message.source, 4096)
+              body = parsed.text
+    
+  
+          } catch {
+            // 单封邮件解析失败不应中断整批回退扫描，继续用 subject/from/to/cc 匹配。
+          }
+        
       }
-      if (messageMatchesQuery(subject, fromText, body, query)) {
+      if (messageMatchesQuery(subject, recipientSearchText, body, query)) {
         out.push(listedFrom(message, message.size, structureHasAttachment(message.bodyStructure)))
       }
     }
@@ -339,7 +359,9 @@ export class EmailPool {
       { uid: true, envelope: true, flags: true, size: true, bodyStructure: true },
       { uid: true },
     )
-    return fetched.map(message => listedFrom(message, message.size, structureHasAttachment(message.bodyStructure)))
+    return fetched
+        .map(message => listedFrom(message, message.size, structureHasAttachment(message.bodyStructure)))
+        .sort((a, b) => b.uid - a.uid)
   }
 
   async read(accountName: string | undefined, uid: number, folder: string): Promise<EmailReadResult> {
@@ -439,7 +461,11 @@ export class EmailPool {
 export async function validateAttachmentPaths(paths: string[], maxBytes: number): Promise<Array<{ path: string }>> {
   const out: Array<{ path: string }> = []
   let total = 0
-  for (const path of paths) {
+  for (const rawPath of paths) {
+      if (typeof rawPath !== 'string' || rawPath.trim() === '') {
+        throw new MailError('附件路径无效：' + String(rawPath))
+      }
+      const path = rawPath.trim()
     let info;
     try { info = await stat(path) } catch {
       throw new MailError('附件路径不存在或不可读：' + path)

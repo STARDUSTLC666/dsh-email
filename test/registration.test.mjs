@@ -157,6 +157,10 @@ test('validateAttachmentPaths stats files and enforces the total cap', async () 
       () => validateAttachmentPaths([join(dir, 'missing.txt')], 1000),
       err => err instanceof MailError && /不存在或不可读/.test(err.message),
     )
+      await assert.rejects(
+        () => validateAttachmentPaths([42], 1000),
+        err => err instanceof MailError && /附件路径无效/.test(err.message),
+      )
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
