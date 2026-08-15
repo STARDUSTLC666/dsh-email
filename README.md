@@ -146,15 +146,12 @@ dsh plugin --profile web add dsh-email
 - 会话处于 **Full Access（完全访问）** 模式时，harness 的审批策略是 never（不弹任何确认框）——`email_send` 会**被拦截并给出明确提示**。两条出路：① 把访问模式切回 Read Only / Write；② 关闭 `sendApproval`（设置页勾掉「发信前确认」），即显式声明自行承担风险。
 - 本插件不做任何联网上报，凭证只在内存中用于连接你的邮箱服务器。
 
-## 已知限制（v0.3）
+## 已知限制
 
-- **连接复用**：IMAP 按账号池化（空闲自动回收），SMTP 用 nodemailer 连接池；同一账号的并发调用会排队串行（一个连接一次只服务一个操作，这是有意的）。
-- **多账号**：每个账号独立连接池；一个 `tool-email` 行可以配任意多个账号。设置页的「多账号（高级，YAML）」文本框可直接编辑映射（可含 defaultAccount 键），覆盖 cordis.patch.yml 的 accounts。
-- **附件下载**：email_attachment 按 email_read 的附件列表定位（先按文件名、再按类型+大小匹配到 IMAP 部件，定位失败会报错而不是下载错文件）；内嵌图片暂不支持下载；文件名会被清洗防路径穿越，已有同名文件自动加后缀，大小受 maxAttachmentBytes 限制。
-- **不支持 OAuth2**：强制 OAuth 的企业环境（部分 M365/Google Workspace）暂不可用。
-- 正文搜索走客户端回退：多数服务器（如 QQ）的 IMAP `TEXT`/`HEADER` 搜索不可靠，所以服务器端只搜主题/发件人/收件人/抄送（subject/from/to/cc）；无结果时回退到最近 `bodySearchLimit` 封的正文扫描（主题/from/to/cc/body，较慢，可关 `bodySearchFallback`）。
-- **密码落盘形式**：设置页保存的授权码以明文写在本机 `settings.yaml`（schema 标记 secret 只是保证它不进日志/导出/诊断，不做磁盘加密）。请勿把 settings.yaml 交给不信任的人。
-- **设置页与插件集变更**：设置页保存后工具**立即生效**（live），无需重启；但升级/增删插件（组合树变化）仍需重启 `dsh web`。
+- **不支持 OAuth2**：强制 OAuth 的企业环境（部分 M365 / Google Workspace）暂不可用，只能使用邮箱服务商的应用专用密码 / 授权码。
+- **正文搜索**：服务器端只搜 subject / from / to / cc；多数服务器（如 QQ）的 IMAP `TEXT` / `HEADER` 搜索不可靠，无结果时回退到最近 `bodySearchLimit` 封的正文扫描（较慢，可用 `bodySearchFallback` 关闭）。
+- **附件**：内嵌图片暂不支持单独下载；附件定位失败会直接报错而不是下载错误文件（安全默认）。
+- **密码落盘**：设置页保存的授权码以明文写在本机 `settings.yaml`（secret 标记只保证它不进日志 / 导出 / 诊断，不做磁盘加密）。请勿把 `settings.yaml` 交给不信任的人。
 
 ## 开发
 
