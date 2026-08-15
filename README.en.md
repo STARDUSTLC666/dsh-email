@@ -115,15 +115,12 @@ Every provider requires an authorization code / app-specific password instead of
 - When the session is in **Full Access** mode, the harness approval policy is never (no confirmation dialogs) — `email_send` is **blocked with a clear hint**. Two ways out: ① switch the access mode back to Read Only / Write; ② turn off `sendApproval` (uncheck "Confirm before sending" in the settings page), explicitly declaring you accept the risk.
 - This plugin performs no outbound telemetry; credentials are used in memory only to connect to your mail servers.
 
-## Known limitations (v0.6)
+## Known limitations
 
-- **Connection reuse**: IMAP is pooled per account (idle connections auto-recycled); SMTP uses nodemailer's connection pool. Concurrent calls for the same account queue serially (one connection serves one operation at a time — intentional).
-- **Multiple accounts**: each account has its own connection pool; one `tool-email` line can hold any number of accounts. The settings page's "Multiple accounts (advanced, YAML)" textbox can directly edit the map (including a `defaultAccount` key), overriding `accounts` in cordis.patch.yml.
-- **Attachment download**: `email_attachment` locates attachments from `email_read`'s attachment list (matching by filename first, then type+size to the IMAP part; a failed match errors instead of downloading the wrong file); inline images aren't downloadable yet; filenames are sanitized against path traversal, existing names get a suffix, and size is capped by `maxAttachmentBytes`.
-- **No OAuth2**: enterprise environments that force OAuth (some M365/Google Workspace) aren't usable yet.
-- **Body search uses client-side fallback**: most servers (e.g. QQ) have unreliable IMAP `TEXT`/`HEADER` search, so the server side only searches subject/sender/recipient/CC (subject/from/to/cc); with no results it falls back to a body scan of the most recent `bodySearchLimit` messages (subject/from/to/cc/body, slower; disable with `bodySearchFallback`).
-- **Password storage form**: the authorization code saved in the settings page is written in plaintext to the local `settings.yaml` (the schema's secret mark only keeps it out of logs/exports/diagnostics; no disk encryption). Don't hand settings.yaml to untrusted people.
-- **Settings page vs. plugin-set changes**: saving in the settings page takes effect **immediately** (live), no restart needed; but upgrading or adding/removing plugins (composition-tree changes) still requires restarting `dsh web`.
+- **No OAuth2**: enterprise environments that force OAuth (some M365 / Google Workspace) aren't usable yet; use an app-specific password / authorization code instead.
+- **Body search**: the server side only searches subject / from / to / cc. Most servers (e.g. QQ) have unreliable IMAP `TEXT` / `HEADER` search, so with no results it falls back to a body scan of the most recent `bodySearchLimit` messages (slower; disable with `bodySearchFallback`).
+- **Attachments**: inline images aren't downloadable separately yet; a failed attachment match errors instead of downloading the wrong file (safe default).
+- **Password storage**: the authorization code saved in the settings page is written in plaintext to the local `settings.yaml` (the secret mark only keeps it out of logs / exports / diagnostics; no disk encryption). Don't hand `settings.yaml` to untrusted people.
 
 ## Development
 
