@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "exclude": [],
+  "ignore": [
+    {
+      "ruleId": "SEC-301",
+      "file": "test/**",
+      "reason": "测试夹具中的假密码"
+    }
+  ],
+  "failOn": "high"
+}
