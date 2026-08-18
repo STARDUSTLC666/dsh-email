@@ -47,8 +47,8 @@ export function truncateText(text: string, maxChars: number): { text: string; tr
  */
 export function sanitizeFilename(raw: unknown, fallback = 'attachment.bin'): string {
   let name = String(raw ?? '').replace(/\\/g, '/').split('/').pop() ?? ''
-  name = name.replace(/[\u0000-\u001f\u007f]/g, '').trim()
-  if (name === '' || name === '.' || name === '..') name = fallback
+  name = name.replace(/[\u0000-\u001f\u007f]/g, '').replace(/[<>:"|?*]/g, '_').trim().replace(/[. ]+$/g, '')
+  if (name === '' || name === '.' || name === '..' || /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name)) name = fallback
   if (name.length > 120) {
     const dot = name.lastIndexOf('.')
     const ext = dot > 0 && dot >= name.length - 12 ? name.slice(dot) : ''

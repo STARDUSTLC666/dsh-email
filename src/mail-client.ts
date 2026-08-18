@@ -274,7 +274,7 @@ export class EmailPool {
         scopeCount = uids.length
       } else if (total > 0) {
         const start = Math.max(1, total - (limit + offset) + 1)
-        const fetched = await client.fetchAll(start + ':*', { uid: true }, { uid: true })
+        const fetched = await client.fetchAll(start + ':*', { uid: true })
         uids = fetched.map(message => message.uid)
       }
       uids.reverse()
@@ -320,7 +320,6 @@ export class EmailPool {
     const fetched = await client.fetchAll(
       start + ':*',
       { uid: true, envelope: true, flags: true, size: true, bodyStructure: true, source: true },
-      { uid: true },
     )
     const out: ListedMessage[] = []
     for (const message of [...fetched].reverse()) {
