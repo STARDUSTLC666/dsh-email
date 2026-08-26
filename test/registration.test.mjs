@@ -55,11 +55,11 @@ test('every registered tool parameters value is a compiled JSON Schema (native w
   assert.deepEqual(send.parameters.properties.attachments.items, { type: 'string' })
 })
 
-test('apply registers the six email tools even without config', () => {
+test('apply registers the seven email tools even without config', () => {
   const ctx = fakeCtx()
   apply(ctx, {})
   const names = ctx.tools.defs.map(def => def.name).sort()
-  assert.deepEqual(names, ['email_attachment', 'email_folders', 'email_list', 'email_read', 'email_search', 'email_send'])
+  assert.deepEqual(names, ['email_attachment', 'email_folders', 'email_health', 'email_list', 'email_read', 'email_search', 'email_send'])
 })
 
 test('every tool returns a config hint instead of throwing when unconfigured', async () => {

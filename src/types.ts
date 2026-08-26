@@ -100,6 +100,8 @@ export interface EmailListArgs extends AccountArg {
   limit?: number
   offset?: number
   unreadOnly?: boolean
+  since?: string
+  until?: string
 }
 
 export interface EmailReadArgs extends AccountArg {
@@ -111,6 +113,8 @@ export interface EmailSearchArgs extends AccountArg {
   query: string
   folder?: string
   limit?: number
+  since?: string
+  until?: string
 }
 
 export interface EmailSendArgs extends AccountArg {

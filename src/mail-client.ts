@@ -259,7 +259,7 @@ export class EmailPool {
     return t
   }
 
-  async list(accountName: string | undefined, folder: string, limit: number, offset: number, unreadOnly: boolean): Promise<EmailListResult> {
+  async list(accountName: string | undefined, folder: string, limit: number, offset: number, unreadOnly: boolean, since?: Date, until?: Date): Promise<EmailListResult> {
     const name = this.resolveName(accountName)
     const cfg = this.account(name)
     const folderName = folder || cfg.inboxFolder
@@ -268,8 +268,13 @@ export class EmailPool {
       const total = mailbox === false ? 0 : mailbox.exists
       let scopeCount = total
       let uids: number[] = []
-      if (unreadOnly) {
-        const found = await client.search({ seen: false }, { uid: true })
+      const hasDateFilter = since !== undefined || until !== undefined
+      if (unreadOnly || hasDateFilter) {
+        const query: Record<string, unknown> = {}
+        if (unreadOnly) query.seen = false
+        if (since !== undefined) query.since = since
+        if (until !== undefined) query.before = until
+        const found = await client.search(query, { uid: true })
         uids = found === false ? [] : found
         scopeCount = uids.length
       } else if (total > 0) {
@@ -284,7 +289,7 @@ export class EmailPool {
     })
   }
 
-  async search(accountName: string | undefined, query: string, folder: string, limit: number): Promise<EmailSearchResult> {
+  async search(accountName: string | undefined, query: string, folder: string, limit: number, since?: Date, until?: Date): Promise<EmailSearchResult> {
     const name = this.resolveName(accountName)
     const cfg = this.account(name)
     const folderName = folder || cfg.inboxFolder
@@ -292,11 +297,14 @@ export class EmailPool {
       // No nested OR and no TEXT search: several servers (QQ among them)
       // silently answer those with empty or match-everything results.
       // subject/from/to/cc searches unioned client-side behave well everywhere.
+      const dateRange: Record<string, unknown> = {}
+      if (since !== undefined) dateRange.since = since
+      if (until !== undefined) dateRange.before = until
       const found = await Promise.all([
-        client.search({ subject: query }, { uid: true }),
-        client.search({ from: query }, { uid: true }),
-        client.search({ to: query }, { uid: true }),
-          client.search({ cc: query }, { uid: true }),
+        client.search({ subject: query, ...dateRange }, { uid: true }),
+        client.search({ from: query, ...dateRange }, { uid: true }),
+        client.search({ to: query, ...dateRange }, { uid: true }),
+          client.search({ cc: query, ...dateRange }, { uid: true }),
       ])
       const uids = [...new Set(found.flatMap(result => result === false ? [] : result))].sort((a, b) => a - b)
       uids.reverse()

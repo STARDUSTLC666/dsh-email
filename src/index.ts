@@ -22,6 +22,26 @@ export const inject = ['settings', 'tools']
 export type Config = EmailConfig
 
 const MAX_LIMIT = 100
+
+/**
+ * 解析天级日期参数为 Date。接受 YYYY-MM-DD 或完整 ISO 时间。
+ * endInclusive=true 时返回“该日结束”（次日零点），用于 until 语义（IMAP BEFORE 是不含当天的）。
+ */
+export function parseEmailDay(input: string, label: string, endInclusive = false): Date {
+  const text = input.trim()
+  let date: Date | null = null
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    date = new Date(text + 'T00:00:00Z')
+  } else {
+    const parsed = new Date(text)
+    if (!Number.isNaN(parsed.getTime())) date = parsed
+  }
+  if (date === null || Number.isNaN(date.getTime())) {
+    throw new Error(label + ' 不是有效日期，请给形如 2026-08-01 或 2026-08-01T00:00:00Z 的值')
+  }
+  if (endInclusive) return new Date(date.getTime() + 24 * 3600 * 1000)
+  return date
+}
 const ACCOUNT_HINT = '账号名（配置了 accounts 多个账号时选择），省略时用 defaultAccount。可用账号见 email_folders 的报错或插件 README'
 
 /**
@@ -260,13 +280,15 @@ export function apply(ctx: any, config: Config = {}): void {
 
   ctx.tools.register({
     name: 'email_list',
-    description: 'List recent emails in a mailbox folder (newest first). Returns uid, date, sender, subject and flags without message bodies; use email_read with a uid to fetch the full text.'
+    description: 'List recent emails in a mailbox folder (newest first). Returns uid, date, sender, subject and flags without message bodies; use email_read with a uid to fetch the full text. Optional since/until (dates like 2026-08-01) filter by received date.'
 ,
     parameters: compileParameters({
       folder: { type: 'string', description: 'IMAP folder path (see email_folders); defaults to the account inboxFolder' },
       limit: { type: 'integer', description: 'How many messages to return, 1-100, default 20' },
       offset: { type: 'integer', description: 'Skip this many newest messages first, default 0' },
       unreadOnly: { type: 'boolean', description: 'Only list unread messages, default false' },
+      since: { type: 'string', description: '只列出该日期（含）之后收到的邮件，如 2026-08-01（可选）' },
+      until: { type: 'string', description: '只列出该日期（含）之前收到的邮件，如 2026-08-26（可选）' },
       account: { type: 'string', description: ACCOUNT_HINT },
     }),
     output: {
@@ -277,7 +299,9 @@ export function apply(ctx: any, config: Config = {}): void {
       const args = rawArgs as EmailListArgs
       const limit = clampInt(args.limit, 20, 1, MAX_LIMIT)
       const offset = clampInt(args.offset, 0, 0, 10000)
-      return await getPool().list(args.account, args.folder?.trim() || '', limit, offset, args.unreadOnly === true)
+      const since = args.since?.trim() ? parseEmailDay(args.since, 'since') : undefined
+      const until = args.until?.trim() ? parseEmailDay(args.until, 'until', true) : undefined
+      return await getPool().list(args.account, args.folder?.trim() || '', limit, offset, args.unreadOnly === true, since, until)
     },
   })
 
@@ -311,6 +335,8 @@ export function apply(ctx: any, config: Config = {}): void {
       query: { type: 'string', required: true, description: 'Keyword to search for' },
       folder: { type: 'string', description: 'IMAP folder to search in; defaults to the account inboxFolder' },
       limit: { type: 'integer', description: 'How many matches to return, 1-100, default 10' },
+      since: { type: 'string', description: '只搜索该日期（含）之后的邮件，如 2026-08-01（可选）' },
+      until: { type: 'string', description: '只搜索该日期（含）之前的邮件，如 2026-08-26（可选）' },
       account: { type: 'string', description: ACCOUNT_HINT },
     }),
     output: {
@@ -321,7 +347,9 @@ export function apply(ctx: any, config: Config = {}): void {
       const args = rawArgs as EmailSearchArgs
       if (typeof args.query !== 'string' || args.query.trim() === '') throw new Error('query 不能为空')
       const limit = clampInt(args.limit, 10, 1, MAX_LIMIT)
-      return await getPool().search(args.account, args.query.trim(), args.folder?.trim() || '', limit)
+      const since = args.since?.trim() ? parseEmailDay(args.since, 'since') : undefined
+      const until = args.until?.trim() ? parseEmailDay(args.until, 'until', true) : undefined
+      return await getPool().search(args.account, args.query.trim(), args.folder?.trim() || '', limit, since, until)
     },
   })
 
@@ -371,6 +399,43 @@ export function apply(ctx: any, config: Config = {}): void {
     async execute(rawArgs: unknown) {
       const args = rawArgs as EmailFoldersArgs
       return await getPool().folders(args.account, args.subscribedOnly === true)
+    },
+  })
+
+  ctx.tools.register({
+    name: 'email_health',
+    description: 'Self-check for dsh-email: summarizes configured accounts (provider / IMAP / SMTP hosts) without any network connection and never shows passwords. Run this first when troubleshooting.',
+    parameters: compileParameters({}),
+    output: {
+      schema: { type: 'object', additionalProperties: true },
+      render: (_args: unknown, value: unknown) => {
+        const rec = (value ?? {}) as Record<string, unknown>
+        const rawChecks = Array.isArray(rec.checks) ? rec.checks : []
+        const lines = ['dsh-email 自检' + (rec.ok === true ? '：正常。' : '：发现问题。')]
+        for (const item of rawChecks) {
+          const c = (item ?? {}) as Record<string, unknown>
+          lines.push('- ' + String(c.name) + '：' + (c.ok === true ? '✅ ' + String(c.detail ?? '') : '❌ ' + String(c.detail ?? '')))
+        }
+        return [{ type: 'text', text: lines.join('\n') }]
+      },
+    },
+    async execute() {
+      const accounts = ((config as { accounts?: unknown }).accounts ?? {}) as Record<string, Record<string, unknown>>
+      const names = Object.keys(accounts)
+      const checks: Array<Record<string, unknown>> = []
+      if (names.length === 0) {
+        const topLevelUser = typeof (config as { user?: unknown }).user === 'string' && (config as { user: string }).user.trim() !== ''
+        checks.push({ name: '默认账号', ok: topLevelUser, detail: topLevelUser ? '顶层账号已配置' : '未配置账号：请在 cordis.patch.yml 配置 accounts（或顶层 user/password）' })
+      } else {
+        for (const accountName of names.slice(0, 8)) {
+          const account = accounts[accountName] ?? {}
+          const hasUser = typeof account.user === 'string' && account.user.trim() !== ''
+          const provider = typeof account.provider === 'string' && account.provider !== '' ? account.provider : 'custom'
+          checks.push({ name: '账号 ' + accountName, ok: hasUser, detail: hasUser ? provider + ' / ' + account.user : '未配置 user' })
+        }
+      }
+      const ok = checks.every((c) => c.ok === true)
+      return { ok, plugin: 'dsh-email', accountCount: names.length, checks }
     },
   })
 
