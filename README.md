@@ -41,6 +41,10 @@ Email tools for DeepSeek Harness: list, read, search and send mail through stand
 - `email_send` 的附件参数严格校验为路径字符串数组，并做 trim。
 
 
+## 兼容性
+
+在 `@deepseek-ai/dsh@0.1.1-rc.2` 上验证（2026-08-26）。遵循 cordis 组合包补丁模型（`cordis.patch.yml` + `dsh.bundle.patch`），运行时不 import 任何 `@deepseek-ai/*` 内部模块。
+
 ## 安装
 
 ```sh
@@ -57,6 +61,15 @@ dsh plugin --profile web add dsh-email
 2. **YAML**：按下面的 cordis.patch.yml 模板手写；设置页的「多账号（高级，YAML）」文本框也能填账号映射（覆盖 YAML 里的 accounts）。
 
 设置页保存的值存在 `settings.yaml` 的 `dsh-email` 命名空间里，覆盖 YAML 的默认账号配置；密码字段标记为 secret（不会出现在任何导出/诊断里）。
+
+## 卸载
+
+```bash
+dsh plugin --profile web remove dsh-email
+```
+
+卸载后重启 Web 服务。如需彻底清理，可再手动删除自己 profile `cordis.patch.yml` 中覆盖的插件行。
+
 
 ## 配置
 
@@ -170,4 +183,3 @@ MIT。这是一个社区插件，与 DeepSeek 官方无关；`@deepseek-ai/*` �
 - [dsh-slack](https://github.com/STARDUSTLC666/dsh-slack) — Slack 通知/收件箱
 - [dsh-dingtalk](https://github.com/STARDUSTLC666/dsh-dingtalk) — 钉钉群通知（零依赖）
 - [dsh-email](https://github.com/STARDUSTLC666/dsh-email) — 邮件六件套 + Web 设置页
-

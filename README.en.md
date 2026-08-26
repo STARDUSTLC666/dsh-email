@@ -31,6 +31,10 @@ Example:
 - `email_send` validates `attachments` as a string array of file paths and trims each path.
 
 
+## Compatibility
+
+Verified against `@deepseek-ai/dsh@0.1.1-rc.2` on 2026-08-26. Built for the cordis patch-bundle plugin model (`cordis.patch.yml` + `dsh.bundle.patch`). No runtime imports of `@deepseek-ai/*` internals.
+
 ## Installation
 
 ```sh
@@ -47,6 +51,15 @@ After installing, restart `dsh web`. The plugin ships with an empty config and *
 2. **YAML**: hand-write the cordis.patch.yml template below; the settings page's "Multiple accounts (advanced, YAML)" textbox can also hold the account map (overriding `accounts` in YAML).
 
 Values saved in the settings page live in the `dsh-email` namespace of `settings.yaml` and override the YAML default-account config; password fields are marked secret (they never appear in exports or diagnostics).
+
+## Uninstall
+
+```bash
+dsh plugin --profile web remove dsh-email
+```
+
+Then restart the web service. To clean up fully, also remove the plugin entry from your profile `cordis.patch.yml` if you overrode it.
+
 
 ## Configuration
 
