@@ -1,5 +1,4 @@
 node_modules/
-lib/
 *.tgz
 *.log
 package.json.bak*
