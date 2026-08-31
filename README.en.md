@@ -25,12 +25,11 @@ Example:
 
 > Check the 10 newest unread messages in my QQ mailbox and list the ones that need a reply.
 
-### v0.6.2 improvements
+### Changelog
 
-- Server-side search now covers `cc`, so the search truly spans subject / sender / recipients / CC.
-- The client-side body fallback also matches `to` and `cc`; one malformed message no longer aborts the whole batch scan.
-- Mail lists are sorted by UID descending to guarantee newest-first results.
-- `email_send` validates `attachments` as a string array of file paths and trims each path.
+- **0.8.2**: `since` / `until` parameter descriptions unified to English, consistent with the other parameters, so multilingual agents read them correctly.
+- **0.8.0/0.8.1**: `email_list` / `email_search` gained `since` / `until` date-range filters; new `email_health` self-check (account/connection/config in one call); adapted to harness 0.1.2 (removed the deleted client-injection declaration).
+- **0.6.2**: server-side search covers `cc` (subject / sender / recipients / CC); the body fallback scan also matches `to` / `cc` and one malformed message no longer aborts the batch; lists are UID-descending (newest first); `email_send` strictly validates attachment paths.
 
 
 ## Compatibility
