@@ -55,11 +55,11 @@ test('every registered tool parameters value is a compiled JSON Schema (native w
   assert.deepEqual(send.parameters.properties.attachments.items, { type: 'string' })
 })
 
-test('apply registers the seven email tools even without config', () => {
+test('apply registers the eight email tools even without config', () => {
   const ctx = fakeCtx()
   apply(ctx, {})
   const names = ctx.tools.defs.map(def => def.name).sort()
-  assert.deepEqual(names, ['email_attachment', 'email_folders', 'email_health', 'email_list', 'email_read', 'email_search', 'email_send'])
+  assert.deepEqual(names, ['email_attachment', 'email_folders', 'email_health', 'email_list', 'email_read', 'email_search', 'email_send', 'email_watch'])
 })
 
 test('every tool returns a config hint instead of throwing when unconfigured', async () => {
@@ -69,6 +69,8 @@ test('every tool returns a config hint instead of throwing when unconfigured', a
   await assert.rejects(() => list.execute({}), /dsh-email 未配置/)
   const folders = ctx.tools.defs.find(def => def.name === 'email_folders')
   await assert.rejects(() => folders.execute({}), /dsh-email 未配置/)
+  const watch = ctx.tools.defs.find(def => def.name === 'email_watch')
+  await assert.rejects(() => watch.execute({}), /dsh-email 未配置/)
 })
 
 test('execute validates args without touching the network', async () => {

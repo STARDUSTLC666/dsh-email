@@ -119,3 +119,19 @@ export interface EmailAttachmentArgs extends AccountArg {
     index?: number;
     folder?: string;
 }
+export interface EmailWatchArgs extends AccountArg {
+    folder?: string;
+    /** Max number of new messages to return per call, default 20. */
+    limit?: number;
+}
+export interface EmailWatchResult {
+    account: string;
+    folder: string;
+    /** True on the first call for this account+folder: it sets the baseline. */
+    firstRun: boolean;
+    /** Unread messages never reported before (empty on firstRun). */
+    newCount: number;
+    messages: ListedMessage[];
+    /** Total unread in the folder right now. */
+    totalUnread: number;
+}

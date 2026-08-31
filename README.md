@@ -28,6 +28,13 @@ Email tools for DeepSeek Harness: list, read, search and send mail through stand
 | `email_send` | 代发邮件（支持带附件）。**默认发信前会弹确认**，显示收件人、主题和附件数，由你批准后才发出 |
 | `email_folders` | 列出邮箱的文件夹（INBOX/已发送/垃圾邮件/自定义…），拿 path 喂给其他工具 |
 | `email_attachment` | 按序号下载邮件附件（默认存到会话工作区，模型可直接读取；大小受 maxAttachmentBytes 限制） |
+| `email_watch` | 增量检查新邮件：首次调用建立基线，之后每次只报告比上次多出来的未读邮件，适合定时任务做新邮件提醒 |
+
+### 新邮件提醒（Web 端）
+
+配置好账号后，主界面右下角会出现「鲸鱼娘递信」小弹窗：每 30 秒检查一次新邮件，有新邮件时弹出卡片（发件人 + 主题），12 秒自动消失。弹窗与 `email_watch` 工具共用同一套游标逻辑但各自独立计数，互不抢占。
+
+弹窗形象优先使用本地安装的 [dsh-deep-whale](https://github.com/Small-tailqwq/dsh-deep-whale) 鲸鱼娘皮肤素材（**不打包分发**，运行时从你自己的安装目录读取）：该素材为一创 [上善](https://www.pixiv.net/users/62155430) 鲸鱼娘形象的衍生创作（二创 Small-tailqwq），以 CC BY-NC-SA 4.0（署名-非商业性使用-相同方式共享）发布，弹窗内附完整署名链。未安装皮肤时使用内置回退图。
 
 示例对话：
 
@@ -35,6 +42,7 @@ Email tools for DeepSeek Harness: list, read, search and send mail through stand
 
 ### 版本记录
 
+- **0.9.0**：新增 `email_watch` 增量新邮件检查工具（游标式，适合定时提醒）；Web 端新增「鲸鱼娘递信」新邮件弹窗（本地皮肤素材运行时读取 + 内置回退图）。
 - **0.8.2**：`since` / `until` 参数描述与其余参数统一为英文，方便多语言 agent 理解。
 - **0.8.0/0.8.1**：`email_list` / `email_search` 新增 `since` / `until` 日期范围过滤；新增 `email_health` 自检（账号/连接/配置一键体检）；适配 harness 0.1.2（清理已删除的客户端注入声明）。
 - **0.6.2**：服务器端搜索补齐 `cc`，搜索范围真正覆盖主题 / 发件人 / 收件人 / 抄送；正文回退扫描也匹配 `to` / `cc`，单封解析失败不中断整批；列表强制 UID 降序「最新在前」；`email_send` 附件参数严格校验。
@@ -181,4 +189,4 @@ MIT。这是一个社区插件，与 DeepSeek 官方无关；`@deepseek-ai/*` �
 
 - [dsh-slack](https://github.com/STARDUSTLC666/dsh-slack) — Slack 通知/收件箱
 - [dsh-dingtalk](https://github.com/STARDUSTLC666/dsh-dingtalk) — 钉钉群通知（零依赖）
-- [dsh-email](https://github.com/STARDUSTLC666/dsh-email) — 邮件六件套 + Web 设置页
+- [dsh-email](https://github.com/STARDUSTLC666/dsh-email) — 邮件八件套 + Web 设置页 + 新邮件弹窗

@@ -20,6 +20,13 @@ Pure Node, **cross-platform** (one codebase for Windows / macOS / Linux), no she
 | `email_send` | Send mail on your behalf (attachments supported). **Prompts for confirmation before sending by default**, showing recipients, subject and attachment count; only sends after you approve |
 | `email_folders` | List the mailbox folders (INBOX/Sent/Junk/custom…); feed the `path` to other tools |
 | `email_attachment` | Download an attachment by index (saved to the session workspace by default so the model can read it directly; size capped by `maxAttachmentBytes`) |
+| `email_watch` | Incremental new-mail check: the first call seeds a baseline, every later call reports only unread mail newer than the last check — ideal for scheduled new-mail notifications |
+
+### New-mail notifications (web UI)
+
+Once an account is configured, a "whale-girl courier" popup lives in the bottom-right corner of the main UI: it checks for new mail every 30 seconds and shows a card (sender + subject) when something arrives, auto-dismissing after 12 seconds. The popup shares the cursor logic with `email_watch` but keeps its own counter, so they never consume each other's mail.
+
+The popup artwork prefers the locally installed [dsh-deep-whale](https://github.com/Small-tailqwq/dsh-deep-whale) whale-girl skin assets (**never bundled** — read at runtime from your own installation): the artwork is a derivative of the original whale-girl character by [上善](https://www.pixiv.net/users/62155430) (skin by Small-tailqwq), published under CC BY-NC-SA 4.0 (Attribution-NonCommercial-ShareAlike); the popup shows the full attribution chain. A built-in fallback image is used when no skin is installed.
 
 Example:
 
@@ -27,6 +34,7 @@ Example:
 
 ### Changelog
 
+- **0.9.0**: new `email_watch` incremental new-mail tool (cursor-based, ideal for scheduled notifications); new "whale-girl courier" new-mail popup in the web UI (local skin artwork read at runtime + built-in fallback).
 - **0.8.2**: `since` / `until` parameter descriptions unified to English, consistent with the other parameters, so multilingual agents read them correctly.
 - **0.8.0/0.8.1**: `email_list` / `email_search` gained `since` / `until` date-range filters; new `email_health` self-check (account/connection/config in one call); adapted to harness 0.1.2 (removed the deleted client-injection declaration).
 - **0.6.2**: server-side search covers `cc` (subject / sender / recipients / CC); the body fallback scan also matches `to` / `cc` and one malformed message no longer aborts the batch; lists are UID-descending (newest first); `email_send` strictly validates attachment paths.
