@@ -1,6 +1,6 @@
 {
   "name": "dsh-email",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "IMAP/SMTP email tools for DeepSeek Harness: list, read, search and send mail, with QQ/163/126/Sina/Aliyun/Gmail/Outlook/iCloud presets.",
   "type": "module",
   "main": "lib/index.js",
@@ -52,7 +52,6 @@
     },
     "client": {
       "inject": [
-        "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-ui-settings"
       ],
       "platform": "web"
