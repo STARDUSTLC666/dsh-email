@@ -19,6 +19,9 @@ const SKIN_PACKAGES = [
 
 const WHALE_CREDIT = '鲸鱼娘：一创 上善（pixiv 62155430）· 二创 Small-tailqwq / dsh-deep-whale · CC BY-NC-SA 4.0（非商业）'
 
+/** Credit shown with the bundled fallback artwork (community fan character). */
+const FALLBACK_CREDIT = '鲸鱼娘：社区同人形象，版权归原作者，仅供个人非商业使用；如有异议请提 Issue 移除'
+
 interface WhaleAsset {
   file: string
   contentType: string
@@ -49,10 +52,12 @@ function contentTypeOf(file: string): string {
 }
 
 /**
- * Locate the whale-girl artwork at runtime. It is never bundled: the skin art
- * is CC BY-NC-SA 4.0, so dsh-email only serves it from the user's own
- * installed dsh-deep-whale skin package (with the attribution chain shown in
- * the widget); otherwise the bundled MIT fallback is served.
+ * Locate the whale-girl artwork at runtime. Skin art is never bundled: it is
+ * CC BY-NC-SA 4.0, so dsh-email only serves it from the user's own installed
+ * dsh-deep-whale skin package (with the attribution chain shown in the
+ * widget). Without the skin, a bundled community whale-girl artwork is
+ * served with its own credit line (copyright stays with the original author;
+ * personal non-commercial use, removed on request via issue).
  */
 function findWhaleAsset(): WhaleAsset | null {
   if (whaleCache !== undefined) return whaleCache
@@ -72,7 +77,7 @@ function findWhaleAsset(): WhaleAsset | null {
   }
   const fallback = join(packageDir, 'assets', 'whale-fallback.png')
   if (existsSync(fallback)) {
-    whaleCache = { file: fallback, contentType: 'image/png', skin: false, credit: '' }
+    whaleCache = { file: fallback, contentType: 'image/png', skin: false, credit: FALLBACK_CREDIT }
     return whaleCache
   }
   return whaleCache
