@@ -10,6 +10,8 @@ import type {
   EmailAttachmentResult,
   EmailFoldersResult,
   EmailListResult,
+  EmailMarkAction,
+  EmailMarkResult,
   EmailReadResult,
   EmailSearchResult,
   EmailSendResult,
@@ -115,6 +117,8 @@ function listedFrom(envelope: any, size: number | undefined, hasAttachments: boo
 interface ImapEntry {
   client: ImapFlow
   selected: string | null
+  /** Access mode the selected mailbox was opened with. */
+  selectedReadOnly: boolean
   lastUsed: number
   inUse: number
 }
@@ -151,10 +155,10 @@ export class EmailPool {
     return next
   }
 
-  async withImap<T>(accountName: string | undefined, folder: string | null, run: (client: ImapFlow) => Promise<T>): Promise<T> {
+  async withImap<T>(accountName: string | undefined, folder: string | null, run: (client: ImapFlow) => Promise<T>, readOnly = true): Promise<T> {
     const name = this.resolveName(accountName)
     const cfg = this.account(name)
-    return this.enqueue(name, () => this.imapRun(name, cfg, folder, run))
+    return this.enqueue(name, () => this.imapRun(name, cfg, folder, readOnly, run))
   }
 
   private createImap(cfg: ResolvedEmailConfig): ImapFlow {
@@ -183,21 +187,24 @@ export class EmailPool {
     return client
   }
 
-  private async imapRun<T>(name: string, cfg: ResolvedEmailConfig, folder: string | null, run: (client: ImapFlow) => Promise<T>): Promise<T> {
+  private async imapRun<T>(name: string, cfg: ResolvedEmailConfig, folder: string | null, readOnly: boolean, run: (client: ImapFlow) => Promise<T>): Promise<T> {
     let entry = this.imaps.get(name)
     try {
       if (entry === undefined || !entry.client.usable) {
         if (entry !== undefined) await this.evictImap(name)
         const client = this.createImap(cfg)
         await client.connect()
-        entry = { client, selected: null, lastUsed: Date.now(), inUse: 0 }
+        entry = { client, selected: null, selectedReadOnly: true, lastUsed: Date.now(), inUse: 0 }
         this.imaps.set(name, entry)
       }
       entry.lastUsed = Date.now()
       entry.inUse += 1
-      if (folder !== null && entry.selected !== folder) {
-        await entry.client.mailboxOpen(folder, { readOnly: true })
+      // Reopen when the folder changes or when the caller needs a different
+      // access mode (email_mark writes flags / moves messages).
+      if (folder !== null && (entry.selected !== folder || entry.selectedReadOnly !== readOnly)) {
+        await entry.client.mailboxOpen(folder, { readOnly })
         entry.selected = folder
+        entry.selectedReadOnly = readOnly
       }
       const result = await run(entry.client)
       entry.lastUsed = Date.now()
@@ -396,6 +403,48 @@ export class EmailPool {
       const body = await parseRawMessage(message.source, this.settings.maxBodyChars)
       return { account: name, uid, folder: folderName, ...body }
     })
+  }
+
+  async mark(accountName: string | undefined, folder: string, uid: number, action: EmailMarkAction, toFolder?: string): Promise<EmailMarkResult> {
+    const name = this.resolveName(accountName)
+    const cfg = this.account(name)
+    const folderName = folder || cfg.inboxFolder
+    return this.withImap(name, folderName, async (client) => {
+      const before = await client.fetchOne(uid, { uid: true, flags: true }, { uid: true })
+      if (before === false) {
+        throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folderName + '"；可用 email_list 重新获取 uid）')
+      }
+      let seen = before.flags?.has('\\Seen') === true
+      let flagged = before.flags?.has('\\Flagged') === true
+      if (action === 'read' && !seen) {
+        await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true })
+        seen = true
+      } else if (action === 'unread' && seen) {
+        await client.messageFlagsRemove(uid, ['\\Seen'], { uid: true })
+        seen = false
+      } else if (action === 'star' && !flagged) {
+        await client.messageFlagsAdd(uid, ['\\Flagged'], { uid: true })
+        flagged = true
+      } else if (action === 'unstar' && flagged) {
+        await client.messageFlagsRemove(uid, ['\\Flagged'], { uid: true })
+        flagged = false
+      } else if (action === 'move') {
+        const target = (toFolder ?? '').trim()
+        if (target === '') throw new MailError('move 操作需要 toFolder 参数（用 email_folders 查看可用文件夹）')
+        if (target === folderName) throw new MailError('邮件已在文件夹 "' + folderName + '" 中，无需移动')
+        const folders = await client.list()
+        if (!folders.some(row => row.path === target)) {
+          throw new MailError('找不到目标文件夹 "' + target + '"，可用：' + folders.map(row => row.path).join('、'))
+        }
+        const moved = await client.messageMove(uid, target, { uid: true })
+        if (moved === false) throw new MailError('移动 uid=' + uid + ' 到 "' + target + '" 失败（服务器拒绝了 MOVE/COPY）')
+        const result: EmailMarkResult = { account: name, uid, folder: folderName, action, seen, flagged, movedTo: target }
+        const destUid = (moved as { destinationUid?: unknown })?.destinationUid
+        if (typeof destUid === 'number') result.movedUid = destUid
+        return result
+      }
+      return { account: name, uid, folder: folderName, action, seen, flagged }
+    }, false)
   }
 
   async folders(accountName: string | undefined, subscribedOnly: boolean): Promise<EmailFoldersResult> {

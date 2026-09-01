@@ -55,11 +55,11 @@ test('every registered tool parameters value is a compiled JSON Schema (native w
   assert.deepEqual(send.parameters.properties.attachments.items, { type: 'string' })
 })
 
-test('apply registers the eight email tools even without config', () => {
+test('apply registers the nine email tools even without config', () => {
   const ctx = fakeCtx()
   apply(ctx, {})
   const names = ctx.tools.defs.map(def => def.name).sort()
-  assert.deepEqual(names, ['email_attachment', 'email_folders', 'email_health', 'email_list', 'email_read', 'email_search', 'email_send', 'email_watch'])
+  assert.deepEqual(names, ['email_attachment', 'email_folders', 'email_health', 'email_list', 'email_mark', 'email_read', 'email_search', 'email_send', 'email_watch'])
 })
 
 test('every tool returns a config hint instead of throwing when unconfigured', async () => {
@@ -71,6 +71,8 @@ test('every tool returns a config hint instead of throwing when unconfigured', a
   await assert.rejects(() => folders.execute({}), /dsh-email 未配置/)
   const watch = ctx.tools.defs.find(def => def.name === 'email_watch')
   await assert.rejects(() => watch.execute({}), /dsh-email 未配置/)
+  const mark = ctx.tools.defs.find(def => def.name === 'email_mark')
+  await assert.rejects(() => mark.execute({ uid: 1, action: 'read' }), /dsh-email 未配置/)
 })
 
 test('execute validates args without touching the network', async () => {
@@ -82,6 +84,11 @@ test('execute validates args without touching the network', async () => {
   await assert.rejects(() => search.execute({ query: '  ' }), /query 不能为空/)
   const attach = ctx.tools.defs.find(def => def.name === 'email_attachment')
   await assert.rejects(() => attach.execute({ uid: 0 }), /uid 必须是正整数/)
+  const mark = ctx.tools.defs.find(def => def.name === 'email_mark')
+  await assert.rejects(() => mark.execute({ uid: 0, action: 'read' }), /uid 必须是正整数/)
+  await assert.rejects(() => mark.execute({ uid: 3, action: 'burn' }), /action 必须是/)
+  await assert.rejects(() => mark.execute({ uid: 3, action: 'move' }), /toFolder/)
+  await assert.rejects(() => mark.execute({ uid: 3, action: 'move', toFolder: '  ' }), /toFolder/)
 })
 
 test('email_send runs the approval round-trip with recipient, subject and attachment count', async () => {

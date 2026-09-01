@@ -9,6 +9,9 @@ import type {
   EmailFoldersResult,
   EmailListArgs,
   EmailListResult,
+  EmailMarkAction,
+  EmailMarkArgs,
+  EmailMarkResult,
   EmailReadArgs,
   EmailReadResult,
   EmailSearchArgs,
@@ -158,6 +161,23 @@ const attachmentSchema = {
   additionalProperties: true,
 }
 
+const markSchema = {
+  type: 'object',
+  properties: {
+    account: { type: 'string' },
+    uid: { type: 'integer' },
+    folder: { type: 'string' },
+    action: { type: 'string' },
+    seen: { type: 'boolean' },
+    flagged: { type: 'boolean' },
+    movedTo: { type: 'string' },
+    movedUid: { type: 'integer' },
+  },
+  additionalProperties: true,
+}
+
+const MARK_ACTIONS: EmailMarkAction[] = ['read', 'unread', 'star', 'unstar', 'move']
+
 type TextBlock = { type: 'text'; text: string }
 function oneText(text: string): TextBlock[] {
   return [{ type: 'text', text }]
@@ -220,6 +240,24 @@ function renderFolders(value: EmailFoldersResult): TextBlock[] {
 
 function renderAttachment(value: EmailAttachmentResult): TextBlock[] {
   return oneText('账号 ' + value.account + ' 已下载附件 "' + value.filename + '"（' + value.contentType + '，' + value.size + ' 字节）到：\n' + value.path + '\n可用 read 工具读取该文件。')
+}
+
+const MARK_LABELS: Record<EmailMarkAction, string> = {
+  read: '标记为已读',
+  unread: '标记为未读',
+  star: '加星标',
+  unstar: '取消星标',
+  move: '移动',
+}
+
+function renderMark(value: EmailMarkResult): TextBlock[] {
+  let text = '账号 ' + value.account + '：文件夹 "' + value.folder + '" 中 uid=' + value.uid + ' 已' + (MARK_LABELS[value.action] ?? value.action)
+  if (value.action === 'move') {
+    text += '到 "' + (value.movedTo ?? '') + '"' + (typeof value.movedUid === 'number' ? '（新 uid=' + value.movedUid + '）' : '')
+  } else {
+    text += '（当前：' + (value.seen ? '已读' : '未读') + (value.flagged ? '、已标星' : '') + '）'
+  }
+  return oneText(text)
 }
 
 function fingerprintSettings(settings: ResolvedEmailSettings): string {
@@ -327,6 +365,36 @@ export function apply(ctx: any, config: Config = {}): void {
         throw new Error('uid 必须是正整数（用 email_list 获取）')
       }
       return await getPool().read(args.account, args.uid, args.folder?.trim() || '')
+    },
+  })
+
+  ctx.tools.register({
+    name: 'email_mark',
+    description: 'Change an existing message: mark it read/unread, star/unstar it, or move it to another folder. Use after email_list/email_search when the user wants to tidy the mailbox (archive, clear unread, flag important mail). Moving uses the server MOVE/COPY so the uid changes; the new uid is reported when the server provides it.',
+    parameters: compileParameters({
+      uid: { type: 'integer', required: true, description: 'Message uid from email_list or email_search' },
+      action: { type: 'string', required: true, description: 'What to do: read, unread, star, unstar, or move' },
+      toFolder: { type: 'string', description: 'Destination folder path for action=move (see email_folders for valid paths)' },
+      folder: { type: 'string', description: 'IMAP folder the uid belongs to; defaults to the account inboxFolder' },
+      account: { type: 'string', description: ACCOUNT_HINT },
+    }),
+    output: {
+      schema: markSchema,
+      render: (_args: unknown, value: unknown) => renderMark(value as EmailMarkResult),
+    },
+    async execute(rawArgs: unknown) {
+      const args = rawArgs as EmailMarkArgs
+      if (typeof args.uid !== 'number' || !Number.isInteger(args.uid) || args.uid <= 0) {
+        throw new Error('uid 必须是正整数（用 email_list 获取）')
+      }
+      const action = (typeof args.action === 'string' ? args.action.trim().toLowerCase() : '') as EmailMarkAction
+      if (!MARK_ACTIONS.includes(action)) {
+        throw new Error('action 必须是 ' + MARK_ACTIONS.join('、') + ' 之一')
+      }
+      if (action === 'move' && (typeof args.toFolder !== 'string' || args.toFolder.trim() === '')) {
+        throw new Error('action=move 时需要 toFolder 参数（用 email_folders 查看可用文件夹）')
+      }
+      return await getPool().mark(args.account, args.folder?.trim() || '', args.uid, action, args.toFolder)
     },
   })
 

@@ -124,6 +124,26 @@ export interface EmailWatchArgs extends AccountArg {
     /** Max number of new messages to return per call, default 20. */
     limit?: number;
 }
+export type EmailMarkAction = 'read' | 'unread' | 'star' | 'unstar' | 'move';
+export interface EmailMarkArgs extends AccountArg {
+    uid: number;
+    action: EmailMarkAction;
+    /** Target folder path; only used (and required) when action is 'move'. */
+    toFolder?: string;
+    folder?: string;
+}
+export interface EmailMarkResult {
+    account: string;
+    uid: number;
+    folder: string;
+    action: EmailMarkAction;
+    seen: boolean;
+    flagged: boolean;
+    /** Set after a successful move: the destination folder path. */
+    movedTo?: string;
+    /** Set after a successful move: uid in the destination when the server reports it. */
+    movedUid?: number;
+}
 export interface EmailWatchResult {
     account: string;
     folder: string;

@@ -1,6 +1,6 @@
 import { ImapFlow } from 'imapflow';
 import type { ResolvedEmailConfig, ResolvedEmailSettings } from './config.js';
-import type { EmailAttachmentMeta, EmailAttachmentResult, EmailFoldersResult, EmailListResult, EmailReadResult, EmailSearchResult, EmailSendResult } from './types.js';
+import type { EmailAttachmentMeta, EmailAttachmentResult, EmailFoldersResult, EmailListResult, EmailMarkAction, EmailMarkResult, EmailReadResult, EmailSearchResult, EmailSendResult } from './types.js';
 export declare class MailError extends Error {
     constructor(message: string);
 }
@@ -35,7 +35,7 @@ export declare class EmailPool {
     resolveName(name?: string): string;
     /** Serialize operations per account: one IMAP connection serves one op at a time. */
     private enqueue;
-    withImap<T>(accountName: string | undefined, folder: string | null, run: (client: ImapFlow) => Promise<T>): Promise<T>;
+    withImap<T>(accountName: string | undefined, folder: string | null, run: (client: ImapFlow) => Promise<T>, readOnly?: boolean): Promise<T>;
     private createImap;
     private imapRun;
     private normalizeImapError;
@@ -50,6 +50,7 @@ export declare class EmailPool {
     private searchBodies;
     private fetchListed;
     read(accountName: string | undefined, uid: number, folder: string): Promise<EmailReadResult>;
+    mark(accountName: string | undefined, folder: string, uid: number, action: EmailMarkAction, toFolder?: string): Promise<EmailMarkResult>;
     folders(accountName: string | undefined, subscribedOnly: boolean): Promise<EmailFoldersResult>;
     downloadAttachment(accountName: string | undefined, folder: string, uid: number, index: number, workspaceHint?: string): Promise<EmailAttachmentResult>;
     send(accountName: string | undefined, to: string, subject: string, text: string | undefined, cc: string | undefined, attachmentPaths: string[] | undefined): Promise<EmailSendResult>;
