@@ -166,6 +166,32 @@ export interface EmailMarkResult {
   movedUid?: number
 }
 
+export type EmailReplyMode = 'reply' | 'reply-all' | 'forward'
+
+export interface EmailReplyArgs extends AccountArg {
+  uid: number
+  /** The new text to write; the original is quoted below it automatically. */
+  text: string
+  mode?: EmailReplyMode
+  /** Recipient(s) for mode=forward, comma-separated. */
+  to?: string
+  cc?: string
+  folder?: string
+}
+
+export interface EmailReplyResult {
+  account: string
+  mode: EmailReplyMode
+  /** uid of the original message that was answered/forwarded. */
+  originalUid: number
+  messageId: string
+  accepted: string[]
+  rejected: string[]
+  response: string
+  to: string[]
+  subject: string
+}
+
 export interface EmailWatchResult {
   account: string
   folder: string

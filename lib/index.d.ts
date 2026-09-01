@@ -11,6 +11,6 @@ export declare function apply(ctx: any, config?: Config): void;
 export { PROVIDER_NAMES, EMAIL_PASSWORD_ENV } from './config.js';
 export { resolveEmailConfig, resolveEmailSettings, parseAccountsYaml, clampInt, defaultDownloadDir } from './config.js';
 export { stripHtml, truncateText, flattenAddresses, sanitizeFilename, parseRawMessage } from './parse.js';
-export { EmailPool, MailError, messageOf, validateAttachmentPaths, selectAttachmentPart, messageMatchesQuery } from './mail-client.js';
+export { EmailPool, MailError, messageOf, validateAttachmentPaths, selectAttachmentPart, messageMatchesQuery, buildReplyMessage, extractMessageIds } from './mail-client.js';
 export { SETTINGS_NAMESPACE, EmailSettingsSchema, toSettingsBase, toEmailConfig, validateSettingsValue } from './settings.js';
 export { SETTINGS_ROUTE, EmailSettingsBackend, installEmailSettingsWeb } from './web.js';

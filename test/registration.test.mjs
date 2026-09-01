@@ -55,11 +55,11 @@ test('every registered tool parameters value is a compiled JSON Schema (native w
   assert.deepEqual(send.parameters.properties.attachments.items, { type: 'string' })
 })
 
-test('apply registers the nine email tools even without config', () => {
+test('apply registers the ten email tools even without config', () => {
   const ctx = fakeCtx()
   apply(ctx, {})
   const names = ctx.tools.defs.map(def => def.name).sort()
-  assert.deepEqual(names, ['email_attachment', 'email_folders', 'email_health', 'email_list', 'email_mark', 'email_read', 'email_search', 'email_send', 'email_watch'])
+  assert.deepEqual(names, ['email_attachment', 'email_folders', 'email_health', 'email_list', 'email_mark', 'email_read', 'email_reply', 'email_search', 'email_send', 'email_watch'])
 })
 
 test('every tool returns a config hint instead of throwing when unconfigured', async () => {
@@ -89,6 +89,11 @@ test('execute validates args without touching the network', async () => {
   await assert.rejects(() => mark.execute({ uid: 3, action: 'burn' }), /action 必须是/)
   await assert.rejects(() => mark.execute({ uid: 3, action: 'move' }), /toFolder/)
   await assert.rejects(() => mark.execute({ uid: 3, action: 'move', toFolder: '  ' }), /toFolder/)
+  const reply = ctx.tools.defs.find(def => def.name === 'email_reply')
+  await assert.rejects(() => reply.execute({ uid: 0, text: 'hi' }), /uid 必须是正整数/)
+  await assert.rejects(() => reply.execute({ uid: 3, text: '   ' }), /text 不能为空/)
+  await assert.rejects(() => reply.execute({ uid: 3, text: 'hi', mode: 'broadcast' }), /mode 必须是/)
+  await assert.rejects(() => reply.execute({ uid: 3, text: 'hi', mode: 'forward' }), /to 参数/)
 })
 
 test('email_send runs the approval round-trip with recipient, subject and attachment count', async () => {
@@ -113,10 +118,30 @@ test('other tools pass through the gate untouched', async () => {
   const ctx = fakeCtx()
   apply(ctx, QQ)
   const gate = ctx.listeners.find(l => l.event === 'tools/pre-execute')
-  for (const tool of ['email_list', 'email_attachment', 'email_folders']) {
+  for (const tool of ['email_list', 'email_attachment', 'email_folders', 'email_mark']) {
     const out = await gate.fn({ name: tool, args: {} }, async () => 'PASSED-THROUGH')
     assert.equal(out, 'PASSED-THROUGH')
   }
+})
+
+test('email_reply goes through the same approval gate with a mode-aware reason', async () => {
+  const ctx = fakeCtx()
+  const seen = []
+  ctx.approval.request = async (req) => { seen.push(req); return 'allowed-once' }
+  apply(ctx, QQ)
+  const gate = ctx.listeners.find(l => l.event === 'tools/pre-execute')
+  const out = await gate.fn(
+    { name: 'email_reply', args: { uid: 42, text: '收到', mode: 'forward', to: 'boss@corp.com' } },
+    async () => 'PASSED-THROUGH',
+  )
+  assert.equal(out, 'PASSED-THROUGH')
+  assert.equal(seen.length, 1)
+  assert.equal(seen[0].reason, '转发邮件（原邮件 uid=42），收件人 boss@corp.com')
+  const denied = await gate.fn(
+    { name: 'email_reply', args: { uid: 7, text: 'x' } },
+    async () => 'PASSED-THROUGH',
+  )
+  assert.equal(denied, 'PASSED-THROUGH') // default mode reply; second approval round-trip allowed it
 })
 
 test('sendApproval: false in the live settings skips the ask', async () => {

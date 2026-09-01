@@ -6,6 +6,7 @@ import type { Readable } from 'node:stream'
 import type { ResolvedEmailConfig, ResolvedEmailSettings } from './config.js'
 import { flattenAddresses, parseRawMessage, sanitizeFilename } from './parse.js'
 import type {
+  AddressEntry,
   EmailAttachmentMeta,
   EmailAttachmentResult,
   EmailFoldersResult,
@@ -13,6 +14,8 @@ import type {
   EmailMarkAction,
   EmailMarkResult,
   EmailReadResult,
+  EmailReplyMode,
+  EmailReplyResult,
   EmailSearchResult,
   EmailSendResult,
   ListedMessage,
@@ -89,6 +92,115 @@ export function messageMatchesQuery(subject: string, fromText: string, body: str
   return subject.toLowerCase().includes(q)
     || fromText.toLowerCase().includes(q)
     || body.toLowerCase().includes(q)
+}
+
+export interface OriginalDigest {
+  from: AddressEntry[]
+  to: AddressEntry[]
+  cc: AddressEntry[]
+  subject: string
+  date: string
+  text: string
+  /** Bare id without angle brackets, '' when absent. */
+  messageId: string
+  /** Space-joined bare ids from the References header, '' when absent. */
+  references: string
+}
+
+export interface BuiltReply {
+  to: string
+  cc?: string
+  subject: string
+  text: string
+  inReplyTo?: string
+  references?: string
+}
+
+/** Pull Message-ID / References out of a raw RFC822 source (header section only). */
+export function extractMessageIds(source: Buffer): { messageId: string; references: string } {
+  const headerEnd = source.indexOf('\r\n\r\n')
+  const head = source.slice(0, headerEnd === -1 ? Math.min(source.length, 32768) : headerEnd).toString('latin1')
+  const idMatch = head.match(/^message-id:\s*<([^>]+)>/im)
+  // References can fold across continuation lines; collect every <id> token up to the next header.
+  const refBlock = head.match(/^references:((?:[^\r\n]|\r?\n[ \t])*)/im)
+  const refs = refBlock === null ? [] : [...refBlock[1].matchAll(/<([^>]+)>/g)].map(m => m[1])
+  return { messageId: idMatch === null ? '' : idMatch[1], references: refs.join(' ') }
+}
+
+function formatAddress(entry: AddressEntry): string {
+  if (entry.address === undefined) return entry.name ?? ''
+  return entry.name !== undefined && entry.name !== '' ? entry.name + ' <' + entry.address + '>' : entry.address
+}
+
+function dedupeAddresses(entries: AddressEntry[], exclude: string): AddressEntry[] {
+  const seen = new Set<string>()
+  const out: AddressEntry[] = []
+  for (const entry of entries) {
+    const addr = (entry.address ?? '').toLowerCase()
+    if (addr === '' || addr === exclude || seen.has(addr)) continue
+    seen.add(addr)
+    out.push(entry)
+  }
+  return out
+}
+
+function stripReplyPrefix(subject: string, prefix: RegExp): string {
+  return subject.replace(new RegExp('^(?:' + prefix.source + '\\s*)+', 'i'), '').trim()
+}
+
+const QUOTE_MAX_CHARS = 2000
+const FORWARD_MAX_CHARS = 4000
+
+/**
+ * Compose the outgoing message for a reply/reply-all/forward. Pure so it can
+ * be tested without a connection: recipients exclude the sending account,
+ * subject prefixes never stack, the original text is quoted underneath.
+ */
+export function buildReplyMessage(original: OriginalDigest, mode: EmailReplyMode, selfAddress: string, text: string, forwardTo = ''): BuiltReply {
+  const fromText = original.from.map(a => a.name ?? a.address).filter(Boolean).join(', ') || '(未知发件人)'
+  const self = selfAddress.toLowerCase()
+  if (mode === 'forward') {
+    const to = forwardTo.trim()
+    if (to === '') throw new MailError('forward 模式需要 to 参数指定转发收件人')
+    const fwdBody = original.text.length > FORWARD_MAX_CHARS
+      ? original.text.slice(0, FORWARD_MAX_CHARS) + '\n…[原文过长，已截断]'
+      : original.text
+    const header = '---------- 转发的邮件 ----------\n发件人: ' + fromText
+      + (original.date !== '' ? '\n时间: ' + original.date : '')
+      + '\n主题: ' + (original.subject || '(无主题)')
+      + (original.to.length > 0 ? '\n收件人: ' + original.to.map(a => a.address).filter(Boolean).join(', ') : '')
+    return {
+      to,
+      subject: 'Fwd: ' + stripReplyPrefix(original.subject, /fwd:|fw:|re:/),
+      text: text + '\n\n' + header + '\n\n' + fwdBody,
+      ...(original.messageId !== '' ? { references: (original.references !== '' ? original.references + ' ' : '') + original.messageId } : {}),
+    }
+  }
+  let recipients: AddressEntry[]
+  if (mode === 'reply-all') {
+    recipients = dedupeAddresses([...original.from, ...original.to, ...original.cc], self)
+    if (recipients.length === 0) recipients = dedupeAddresses(original.from, '')
+  } else {
+    recipients = dedupeAddresses(original.from, '')
+  }
+  if (recipients.length === 0) {
+    throw new MailError('原邮件没有可用的发件人地址，无法回复；可用 email_send 手动发送')
+  }
+  const quoteText = original.text.length > QUOTE_MAX_CHARS
+    ? original.text.slice(0, QUOTE_MAX_CHARS) + '\n…[原文过长，已截断]'
+    : original.text
+  const quote = '在 ' + (original.date || '未知时间') + '，' + fromText + ' 写道：\n'
+    + quoteText.split('\n').map(line => '> ' + line).join('\n')
+  const built: BuiltReply = {
+    to: recipients.map(formatAddress).join(', '),
+    subject: 'Re: ' + stripReplyPrefix(original.subject, /re:/),
+    text: text + '\n\n' + quote,
+  }
+  if (original.messageId !== '') {
+    built.inReplyTo = original.messageId
+    built.references = (original.references !== '' ? original.references + ' ' : '') + original.messageId
+  }
+  return built
 }
 
 function flattenAddressText(value: unknown): string {
@@ -522,6 +634,49 @@ export class EmailPool {
       accepted: info.accepted.map(String),
       rejected: info.rejected.map(String),
       response: info.response,
+    }
+  }
+
+  async reply(accountName: string | undefined, folder: string, uid: number, mode: EmailReplyMode, text: string, forwardTo: string, cc: string | undefined): Promise<EmailReplyResult> {
+    const name = this.resolveName(accountName)
+    const cfg = this.account(name)
+    const folderName = folder || cfg.inboxFolder
+    // Read the original first (read-only), send second: a failed compose never
+    // leaves a half-written mailbox state behind.
+    const built = await this.withImap(name, folderName, async (client) => {
+      const message = await client.fetchOne(uid, { uid: true, source: true }, { uid: true })
+      if (message === false || message.source === undefined) {
+        throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folderName + '"；可用 email_list 重新获取 uid）')
+      }
+      const ids = extractMessageIds(message.source)
+      const body = await parseRawMessage(message.source, this.settings.maxBodyChars)
+      return buildReplyMessage(
+        { from: body.from, to: body.to, cc: body.cc, subject: body.subject, date: body.date, text: body.text, messageId: ids.messageId, references: ids.references },
+        mode,
+        cfg.user,
+        text,
+        forwardTo,
+      )
+    })
+    const info = await this.transporter(name, cfg).sendMail({
+      from: cfg.user,
+      to: built.to,
+      cc,
+      subject: built.subject,
+      text: built.text,
+      ...(built.inReplyTo !== undefined ? { inReplyTo: '<' + built.inReplyTo + '>' } : {}),
+      ...(built.references !== undefined ? { references: built.references.split(' ').map(id => '<' + id + '>') } : {}),
+    })
+    return {
+      account: name,
+      mode,
+      originalUid: uid,
+      messageId: info.messageId,
+      accepted: info.accepted.map(String),
+      rejected: info.rejected.map(String),
+      response: info.response,
+      to: built.to.split(',').map(part => part.trim()).filter(part => part !== ''),
+      subject: built.subject,
     }
   }
 }

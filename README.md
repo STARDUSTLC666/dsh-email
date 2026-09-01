@@ -30,6 +30,7 @@ Email tools for DeepSeek Harness: list, read, search and send mail through stand
 | `email_attachment` | 按序号下载邮件附件（默认存到会话工作区，模型可直接读取；大小受 maxAttachmentBytes 限制） |
 | `email_watch` | 增量检查新邮件：首次调用建立基线，之后每次只报告比上次多出来的未读邮件，适合定时任务做新邮件提醒 |
 | `email_mark` | 修改邮件状态：标记已读/未读、加/取消星标，或移动到别的文件夹（归档、丢回收站），收发闭环的「收完之后」那一半 |
+| `email_reply` | 回复/回复全部/转发已有邮件：自动带上 In-Reply-To/References 线程头与原文引文，收件人自动排除自己，主题不重复叠 Re:/Fwd:；同样走发信审批门 |
 
 ### 新邮件提醒（Web 端）
 
@@ -43,7 +44,7 @@ Email tools for DeepSeek Harness: list, read, search and send mail through stand
 
 ### 版本记录
 
-- **0.10.0**：新增 `email_mark` 工具——标记已读/未读、加/取消星标、移动文件夹（归档/整理），补齐收发闭环；连接池按读/写模式分别管理邮箱打开状态。
+- **0.10.0**：新增 `email_mark`（已读/未读/星标/移动文件夹，补齐收发闭环的整理侧）与 `email_reply`（回复/回复全部/转发，自动线程头+引文，走发信审批门）；连接池按读/写模式分别管理邮箱打开状态。
 - **0.9.1**：修复设置页空主机遮蔽 provider 预设（#3/#6）；IMAP 连接超时不再杀死整个 DSH 进程（#4）；暗色模式输入控件可见（#2）；密码栏提示环境变量 `DSH_EMAIL_PASSWORD` 免明文方案（#5）。
 - **0.9.0**：新增 `email_watch` 增量新邮件检查工具（游标式，适合定时提醒）；Web 端新增「鲸鱼娘递信」新邮件弹窗（本地皮肤素材运行时读取 + 内置回退图）。
 - **0.8.2**：`since` / `until` 参数描述与其余参数统一为英文，方便多语言 agent 理解。
