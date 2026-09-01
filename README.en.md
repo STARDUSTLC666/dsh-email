@@ -42,7 +42,7 @@ Example:
 
 ## Compatibility
 
-Verified against `@deepseek-ai/dsh@0.1.2-alpha.2` on 2026-08-31. Built for the cordis patch-bundle plugin model (`cordis.patch.yml` + `dsh.bundle.patch`). No runtime imports of `@deepseek-ai/*` internals.
+Verified against `@deepseek-ai/dsh@0.1.2-alpha.3` on 2026-09-01 (settings page / asset route / email_watch fully regression-tested). Built for the cordis patch-bundle plugin model (`cordis.patch.yml` + `dsh.bundle.patch`). No runtime imports of `@deepseek-ai/*` internals.
 
 ## Installation
 
