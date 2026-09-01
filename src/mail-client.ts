@@ -158,7 +158,7 @@ export class EmailPool {
   }
 
   private createImap(cfg: ResolvedEmailConfig): ImapFlow {
-    return new ImapFlow({
+    const client = new ImapFlow({
       host: cfg.imap.host,
       port: cfg.imap.port,
       secure: cfg.imap.secure,
@@ -168,6 +168,19 @@ export class EmailPool {
       greetingTimeout: 30000,
       socketTimeout: cfg.imap.socketTimeoutMs ?? 60000,
     })
+    // ImapFlow emits 'error' on socket timeouts/drops; without a listener Node
+    // escalates it to an uncaught exception and kills the whole DSH process
+    // (issue #4). Swallow it here and reap the dead connection when idle —
+    // in-flight calls fail through their own promise paths instead.
+    client.on('error', () => {
+      for (const [name, entry] of this.imaps) {
+        if (entry.client === client && entry.inUse === 0) {
+          void this.evictImap(name)
+          return
+        }
+      }
+    })
+    return client
   }
 
   private async imapRun<T>(name: string, cfg: ResolvedEmailConfig, folder: string | null, run: (client: ImapFlow) => Promise<T>): Promise<T> {

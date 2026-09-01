@@ -2,6 +2,23 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { resolveEmailSettings, resolveEmailConfig, PROVIDER_NAMES, EMAIL_PASSWORD_ENV, clampInt, defaultDownloadDir } from '../lib/index.js'
+import { toEmailConfig } from '../lib/settings.js'
+
+test('empty imap/smtp host in the settings page never shadows the provider preset (issues #3/#6)', () => {
+  const value = {
+    provider: 'qq', user: 'me@qq.com', password: 'p', inboxFolder: 'INBOX',
+    sendApproval: true, maxBodyChars: 20000, downloadDir: '', accountsYaml: '',
+    imap: { host: '', port: 993, secure: true },
+    smtp: { host: '', port: 465, secure: true },
+  }
+  const cfg = toEmailConfig(value, { imap: value.imap, smtp: value.smtp })
+  assert.equal(cfg.imap.host, undefined, 'empty host must not be projected')
+  assert.equal(cfg.smtp.host, undefined, 'empty host must not be projected')
+  assert.equal(cfg.imap.port, 993)
+  const merged = resolveEmailSettings({ provider: 'qq', user: 'me@qq.com', password: 'p', ...cfg })
+  assert.equal(merged.accounts.get('default').imap.host, 'imap.qq.com')
+  assert.equal(merged.accounts.get('default').smtp.host, 'smtp.qq.com')
+})
 
 test('single-account shorthand resolves as account "default"', () => {
   const s = resolveEmailSettings({ provider: 'qq', user: 'me@qq.com', password: 'secret' })

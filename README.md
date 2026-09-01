@@ -42,6 +42,7 @@ Email tools for DeepSeek Harness: list, read, search and send mail through stand
 
 ### 版本记录
 
+- **0.9.1**：修复设置页空主机遮蔽 provider 预设（#3/#6）；IMAP 连接超时不再杀死整个 DSH 进程（#4）；暗色模式输入控件可见（#2）；密码栏提示环境变量 `DSH_EMAIL_PASSWORD` 免明文方案（#5）。
 - **0.9.0**：新增 `email_watch` 增量新邮件检查工具（游标式，适合定时提醒）；Web 端新增「鲸鱼娘递信」新邮件弹窗（本地皮肤素材运行时读取 + 内置回退图）。
 - **0.8.2**：`since` / `until` 参数描述与其余参数统一为英文，方便多语言 agent 理解。
 - **0.8.0/0.8.1**：`email_list` / `email_search` 新增 `since` / `until` 日期范围过滤；新增 `email_health` 自检（账号/连接/配置一键体检）；适配 harness 0.1.2（清理已删除的客户端注入声明）。
@@ -50,7 +51,7 @@ Email tools for DeepSeek Harness: list, read, search and send mail through stand
 
 ## 兼容性
 
-在 `@deepseek-ai/dsh@0.1.2-alpha.2` 上验证（2026-08-31）。遵循 cordis 组合包补丁模型（`cordis.patch.yml` + `dsh.bundle.patch`），运行时不 import 任何 `@deepseek-ai/*` 内部模块。
+在 `@deepseek-ai/dsh@0.1.2-alpha.2` 上验证（2026-08-31）。0.1.2-alpha.3 仅体验优化与问题修复、无插件 API 变更，兼容。遵循 cordis 组合包补丁模型（`cordis.patch.yml` + `dsh.bundle.patch`），运行时不 import 任何 `@deepseek-ai/*` 内部模块。
 
 ## 安装
 

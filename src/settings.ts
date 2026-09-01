@@ -92,7 +92,9 @@ export function toEmailConfig(value: EmailSettingsValue, user?: Partial<EmailSet
   if (user === null || user?.imap !== undefined) {
     const fields: Partial<EmailSettingsValue['imap']> = user === null ? value.imap : (user.imap ?? {})
     const imap: EmailConfig['imap'] = {}
-    if (fields.host !== undefined) imap.host = value.imap.host
+    // Empty host means "use the provider preset" — never project it, or the
+    // preset gets shadowed by '' (issues #3 / #6).
+    if (fields.host !== undefined && value.imap.host !== '') imap.host = value.imap.host
     if (fields.port !== undefined) imap.port = value.imap.port
     if (fields.secure !== undefined) imap.secure = value.imap.secure
     out.imap = imap
@@ -100,7 +102,7 @@ export function toEmailConfig(value: EmailSettingsValue, user?: Partial<EmailSet
   if (user === null || user?.smtp !== undefined) {
     const fields: Partial<EmailSettingsValue['smtp']> = user === null ? value.smtp : (user.smtp ?? {})
     const smtp: EmailConfig['smtp'] = {}
-    if (fields.host !== undefined) smtp.host = value.smtp.host
+    if (fields.host !== undefined && value.smtp.host !== '') smtp.host = value.smtp.host
     if (fields.port !== undefined) smtp.port = value.smtp.port
     if (fields.secure !== undefined) smtp.secure = value.smtp.secure
     out.smtp = smtp
