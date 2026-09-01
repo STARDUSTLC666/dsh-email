@@ -145,6 +145,15 @@ export class EmailSettingsBackend {
       const started = Date.now()
       await pool.withImap(settings.defaultAccount, null, async () => 'connected')
       return { ok: true, ms: Date.now() - started }
+    } catch (error) {
+      // imapflow reports failed LOGIN as a bare "Command failed"; surface an
+      // actionable hint instead of the opaque message.
+      const raw = messageOf(error, 'unknown error')
+      const lower = raw.toLowerCase()
+      if (lower.includes('command failed') || lower.includes('authentication') || lower.includes('login')) {
+        throw new Error('邮箱登录失败：请检查邮箱地址与授权码（' + raw + '）')
+      }
+      throw error
     } finally {
       pool.dispose()
     }
