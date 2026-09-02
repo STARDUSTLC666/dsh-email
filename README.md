@@ -55,7 +55,7 @@ Email tools for DeepSeek Harness: list, read, search and send mail through stand
 
 ## 兼容性
 
-在 `@deepseek-ai/dsh@0.1.2-alpha.3` 上实测通过（2026-09-01，设置页/素材路由/email_watch 全回归）。遵循 cordis 组合包补丁模型（`cordis.patch.yml` + `dsh.bundle.patch`），运行时不 import 任何 `@deepseek-ai/*` 内部模块。
+在 `@deepseek-ai/dsh@0.1.2-alpha.4` 源码模式下实测通过（2026-09-02，69 项测试及 Web profile 启动冒烟）。遵循 cordis 组合包补丁模型（`cordis.patch.yml` + `dsh.bundle.patch`），运行时不 import 任何 `@deepseek-ai/*` 内部模块。
 
 ## 安装
 
