@@ -686,11 +686,11 @@ export function apply(ctx: any, config: Config = {}): void {
     }
     let reason: string
     if (exec.name === 'email_send') {
-      const args = (exec.args ?? {}) as EmailSendArgs
+      const args = (exec.arguments ?? {}) as EmailSendArgs
       const attachCount = Array.isArray(args.attachments) ? args.attachments.length : 0
       reason = '发送邮件给 ' + args.to + '，主题「' + args.subject + '」' + (attachCount > 0 ? '，附件 ' + attachCount + ' 个' : '')
     } else {
-      const args = (exec.args ?? {}) as EmailReplyArgs
+      const args = (exec.arguments ?? {}) as EmailReplyArgs
       const mode = typeof args.mode === 'string' && args.mode.trim() !== '' ? args.mode.trim().toLowerCase() : 'reply'
       const modeLabel = mode === 'forward' ? '转发' : mode === 'reply-all' ? '回复全部' : '回复'
       reason = modeLabel + '邮件（原邮件 uid=' + args.uid + '）' + (mode === 'forward' && typeof args.to === 'string' && args.to.trim() !== '' ? '，收件人 ' + args.to : '')
