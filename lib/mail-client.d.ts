@@ -66,7 +66,7 @@ export declare class EmailPool {
     resolveName(name?: string): string;
     /** Serialize operations per account: one IMAP connection serves one op at a time. */
     private enqueue;
-    withImap<T>(accountName: string | undefined, folder: string | null, run: (client: ImapFlow) => Promise<T>, readOnly?: boolean): Promise<T>;
+    withImap<T>(accountName: string | undefined, folder: string | null, run: (client: ImapFlow) => Promise<T>, readOnly?: boolean, signal?: AbortSignal): Promise<T>;
     private createImap;
     private imapRun;
     private normalizeImapError;
@@ -75,20 +75,22 @@ export declare class EmailPool {
     startIdleSweep(): void;
     dispose(): void;
     private transporter;
-    list(accountName: string | undefined, folder: string, limit: number, offset: number, unreadOnly: boolean, since?: Date, until?: Date): Promise<EmailListResult>;
-    search(accountName: string | undefined, query: string, folder: string, limit: number, since?: Date, until?: Date): Promise<EmailSearchResult>;
+    /** Send through the pooled transporter while making cancellation close it. */
+    private sendMail;
+    list(accountName: string | undefined, folder: string, limit: number, offset: number, unreadOnly: boolean, since?: Date, until?: Date, signal?: AbortSignal): Promise<EmailListResult>;
+    search(accountName: string | undefined, query: string, folder: string, limit: number, since?: Date, until?: Date, signal?: AbortSignal): Promise<EmailSearchResult>;
     /** Client-side scan of the tail of the mailbox, newest first. */
     private searchBodies;
     private fetchListed;
-    read(accountName: string | undefined, uid: number, folder: string): Promise<EmailReadResult>;
-    mark(accountName: string | undefined, folder: string, uid: number, action: EmailMarkAction, toFolder?: string): Promise<EmailMarkResult>;
-    folders(accountName: string | undefined, subscribedOnly: boolean): Promise<EmailFoldersResult>;
-    downloadAttachment(accountName: string | undefined, folder: string, uid: number, index: number, workspaceHint?: string): Promise<EmailAttachmentResult>;
-    send(accountName: string | undefined, to: string, subject: string, text: string | undefined, cc: string | undefined, attachmentPaths: string[] | undefined): Promise<EmailSendResult>;
-    reply(accountName: string | undefined, folder: string, uid: number, mode: EmailReplyMode, text: string, forwardTo: string, cc: string | undefined): Promise<EmailReplyResult>;
+    read(accountName: string | undefined, uid: number, folder: string, signal?: AbortSignal): Promise<EmailReadResult>;
+    mark(accountName: string | undefined, folder: string, uid: number, action: EmailMarkAction, toFolder?: string, signal?: AbortSignal): Promise<EmailMarkResult>;
+    folders(accountName: string | undefined, subscribedOnly: boolean, signal?: AbortSignal): Promise<EmailFoldersResult>;
+    downloadAttachment(accountName: string | undefined, folder: string, uid: number, index: number, workspaceHint?: string, signal?: AbortSignal): Promise<EmailAttachmentResult>;
+    send(accountName: string | undefined, to: string, subject: string, text: string | undefined, cc: string | undefined, attachmentPaths: string[] | undefined, signal?: AbortSignal): Promise<EmailSendResult>;
+    reply(accountName: string | undefined, folder: string, uid: number, mode: EmailReplyMode, text: string, forwardTo: string, cc: string | undefined, signal?: AbortSignal): Promise<EmailReplyResult>;
 }
 /** Stat every attachment path up front; total size must stay under the cap. */
-export declare function validateAttachmentPaths(paths: string[], maxBytes: number): Promise<Array<{
+export declare function validateAttachmentPaths(paths: string[], maxBytes: number, signal?: AbortSignal): Promise<Array<{
     path: string;
 }>>;
 export {};

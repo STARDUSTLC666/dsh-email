@@ -149,8 +149,12 @@ Every provider requires an authorization code / app-specific password instead of
 ```sh
 pnpm install
 pnpm run build   # tsc → lib/
-pnpm test        # 构建 + node --test（配置/解析/注册与审批门，44 个用例，无需真实邮箱）
+pnpm test        # build + offline tests; no real mailbox required
 ```
+
+`src/index.ts` composes the plugin. `runtime.ts` owns live settings, account pools, and separate tool/web watch cursors. `tools.ts` wires the ten tool implementations. `tool-contract.ts` defines parameters, output schemas, and text rendering. `approval.ts` owns the outgoing-mail gate. IMAP/SMTP transport remains in `mail-client.ts`, and browser routes remain in `web.ts`.
+
+Tests cover pool replacement after live settings changes, unload cleanup, cancellation and workspace propagation, independent tool/web cursors, and rejected approval preventing send execution. In-memory clients replace mailbox connections.
 
 ## License
 

@@ -260,17 +260,27 @@ export class EmailPool {
   }
 
   /** Serialize operations per account: one IMAP connection serves one op at a time. */
-  private enqueue<T>(name: string, task: () => Promise<T>): Promise<T> {
+  private enqueue<T>(name: string, task: () => Promise<T>, signal?: AbortSignal): Promise<T> {
     const prev = this.queues.get(name) ?? Promise.resolve()
-    const next = prev.then(task, task)
+    const run = async (): Promise<T> => {
+      signal?.throwIfAborted()
+      return task()
+    }
+    const next = prev.then(run, run)
     this.queues.set(name, next.then(() => undefined, () => undefined))
     return next
   }
 
-  async withImap<T>(accountName: string | undefined, folder: string | null, run: (client: ImapFlow) => Promise<T>, readOnly = true): Promise<T> {
+  async withImap<T>(
+    accountName: string | undefined,
+    folder: string | null,
+    run: (client: ImapFlow) => Promise<T>,
+    readOnly = true,
+    signal?: AbortSignal,
+  ): Promise<T> {
     const name = this.resolveName(accountName)
     const cfg = this.account(name)
-    return this.enqueue(name, () => this.imapRun(name, cfg, folder, readOnly, run))
+    return this.enqueue(name, () => this.imapRun(name, cfg, folder, readOnly, run, signal), signal)
   }
 
   private createImap(cfg: ResolvedEmailConfig): ImapFlow {
@@ -299,32 +309,56 @@ export class EmailPool {
     return client
   }
 
-  private async imapRun<T>(name: string, cfg: ResolvedEmailConfig, folder: string | null, readOnly: boolean, run: (client: ImapFlow) => Promise<T>): Promise<T> {
+  private async imapRun<T>(
+    name: string,
+    cfg: ResolvedEmailConfig,
+    folder: string | null,
+    readOnly: boolean,
+    run: (client: ImapFlow) => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
     let entry = this.imaps.get(name)
+    let activeClient = entry?.client
+    const onAbort = (): void => {
+      // ImapFlow has no per-command AbortSignal option. Closing the owned
+      // connection is its cooperative cancellation mechanism and makes the
+      // in-flight command settle before this method returns.
+      try { activeClient?.close() } catch { /* already closed */ }
+    }
+    signal?.throwIfAborted()
+    signal?.addEventListener('abort', onAbort, { once: true })
     try {
       if (entry === undefined || !entry.client.usable) {
         if (entry !== undefined) await this.evictImap(name)
         const client = this.createImap(cfg)
+        activeClient = client
+        signal?.throwIfAborted()
         await client.connect()
+        signal?.throwIfAborted()
         entry = { client, selected: null, selectedReadOnly: true, lastUsed: Date.now(), inUse: 0 }
         this.imaps.set(name, entry)
       }
+      activeClient = entry.client
       entry.lastUsed = Date.now()
       entry.inUse += 1
       // Reopen when the folder changes or when the caller needs a different
       // access mode (email_mark writes flags / moves messages).
       if (folder !== null && (entry.selected !== folder || entry.selectedReadOnly !== readOnly)) {
         await entry.client.mailboxOpen(folder, { readOnly })
+        signal?.throwIfAborted()
         entry.selected = folder
         entry.selectedReadOnly = readOnly
       }
       const result = await run(entry.client)
+      signal?.throwIfAborted()
       entry.lastUsed = Date.now()
       return result
     } catch (error) {
       await this.evictImap(name)
-      throw this.normalizeImapError(error, folder);
+      signal?.throwIfAborted()
+      throw this.normalizeImapError(error, folder)
     } finally {
+      signal?.removeEventListener('abort', onAbort)
       if (entry !== undefined) entry.inUse = Math.max(0, entry.inUse - 1)
     }
   }
@@ -391,7 +425,28 @@ export class EmailPool {
     return t
   }
 
-  async list(accountName: string | undefined, folder: string, limit: number, offset: number, unreadOnly: boolean, since?: Date, until?: Date): Promise<EmailListResult> {
+  /** Send through the pooled transporter while making cancellation close it. */
+  private async sendMail(name: string, cfg: ResolvedEmailConfig, message: any, signal?: AbortSignal): Promise<any> {
+    signal?.throwIfAborted()
+    const transporter = this.transporter(name, cfg)
+    const onAbort = (): void => {
+      if (this.smtps.get(name) === transporter) this.smtps.delete(name)
+      transporter.close()
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+    try {
+      const info = await transporter.sendMail(message)
+      signal?.throwIfAborted()
+      return info
+    } catch (error) {
+      signal?.throwIfAborted()
+      throw error
+    } finally {
+      signal?.removeEventListener('abort', onAbort)
+    }
+  }
+
+  async list(accountName: string | undefined, folder: string, limit: number, offset: number, unreadOnly: boolean, since?: Date, until?: Date, signal?: AbortSignal): Promise<EmailListResult> {
     const name = this.resolveName(accountName)
     const cfg = this.account(name)
     const folderName = folder || cfg.inboxFolder
@@ -407,21 +462,23 @@ export class EmailPool {
         if (since !== undefined) query.since = since
         if (until !== undefined) query.before = until
         const found = await client.search(query, { uid: true })
+        signal?.throwIfAborted()
         uids = found === false ? [] : found
         scopeCount = uids.length
       } else if (total > 0) {
         const start = Math.max(1, total - (limit + offset) + 1)
         const fetched = await client.fetchAll(start + ':*', { uid: true })
+        signal?.throwIfAborted()
         uids = fetched.map(message => message.uid)
       }
       uids.reverse()
       const window = uids.slice(offset, offset + limit)
-      const messages = await this.fetchListed(client, window)
+      const messages = await this.fetchListed(client, window, signal)
       return { account: name, count: scopeCount, folder: folderName, messages }
-    })
+    }, true, signal)
   }
 
-  async search(accountName: string | undefined, query: string, folder: string, limit: number, since?: Date, until?: Date): Promise<EmailSearchResult> {
+  async search(accountName: string | undefined, query: string, folder: string, limit: number, since?: Date, until?: Date, signal?: AbortSignal): Promise<EmailSearchResult> {
     const name = this.resolveName(accountName)
     const cfg = this.account(name)
     const folderName = folder || cfg.inboxFolder
@@ -436,53 +493,53 @@ export class EmailPool {
         client.search({ subject: query, ...dateRange }, { uid: true }),
         client.search({ from: query, ...dateRange }, { uid: true }),
         client.search({ to: query, ...dateRange }, { uid: true }),
-          client.search({ cc: query, ...dateRange }, { uid: true }),
+        client.search({ cc: query, ...dateRange }, { uid: true }),
       ])
+      signal?.throwIfAborted()
       const uids = [...new Set(found.flatMap(result => result === false ? [] : result))].sort((a, b) => a - b)
       uids.reverse()
       if (uids.length === 0 && this.settings.bodySearchFallback) {
         // Server-side search found nothing: fall back to a client-side scan of
         // the most recent messages (subject/from/body), capped for time.
-        const messages = await this.searchBodies(client, query, folderName, limit)
+        const messages = await this.searchBodies(client, query, folderName, limit, since, until, signal)
         return { account: name, query, count: messages.length, folder: folderName, messages }
       }
-      const messages = await this.fetchListed(client, uids.slice(0, limit))
+      const messages = await this.fetchListed(client, uids.slice(0, limit), signal)
       return { account: name, query, count: uids.length, folder: folderName, messages }
-    })
+    }, true, signal)
   }
 
   /** Client-side scan of the tail of the mailbox, newest first. */
-  private async searchBodies(client: ImapFlow, query: string, folder: string, limit: number): Promise<ListedMessage[]> {
+  private async searchBodies(client: ImapFlow, query: string, folder: string, limit: number, since?: Date, until?: Date, signal?: AbortSignal): Promise<ListedMessage[]> {
+    signal?.throwIfAborted()
     const mailbox = client.mailbox
     const total = mailbox === false ? 0 : mailbox.exists
     if (total === 0) return []
     const start = Math.max(1, total - this.settings.bodySearchLimit + 1)
     const fetched = await client.fetchAll(
       start + ':*',
-      { uid: true, envelope: true, flags: true, size: true, bodyStructure: true, source: true },
+      { uid: true, envelope: true, flags: true, size: true, bodyStructure: true, source: true, internalDate: true },
     )
     const out: ListedMessage[] = []
     for (const message of [...fetched].reverse()) {
+      signal?.throwIfAborted()
       if (out.length >= limit) break
+      const receivedAt = message.internalDate ?? message.envelope?.date
+      if (since !== undefined && (receivedAt === undefined || receivedAt < since)) continue
+      if (until !== undefined && (receivedAt === undefined || receivedAt >= until)) continue
       const subject = message.envelope?.subject ?? ''
-      
-          const recipientSearchText = [message.envelope?.from, message.envelope?.to, message.envelope?.cc]
-          .map(flattenAddressText).join(' ')
-        
-          
-        
-          
+      const recipientSearchText = [message.envelope?.from, message.envelope?.to, message.envelope?.cc]
+        .map(flattenAddressText).join(' ')
       let body = ''
       if (message.source !== undefined) {
         try {
-            const parsed = await parseRawMessage(message.source, 4096)
-              body = parsed.text
-    
-  
-          } catch {
-            // 单封邮件解析失败不应中断整批回退扫描，继续用 subject/from/to/cc 匹配。
-          }
-        
+          const parsed = await parseRawMessage(message.source, 4096)
+          signal?.throwIfAborted()
+          body = parsed.text
+        } catch (error) {
+          signal?.throwIfAborted()
+          // 单封邮件解析失败不应中断整批回退扫描，继续用 subject/from/to/cc 匹配。
+        }
       }
       if (messageMatchesQuery(subject, recipientSearchText, body, query)) {
         out.push(listedFrom(message, message.size, structureHasAttachment(message.bodyStructure)))
@@ -491,19 +548,21 @@ export class EmailPool {
     return out
   }
 
-  private async fetchListed(client: ImapFlow, uids: number[]): Promise<ListedMessage[]> {
+  private async fetchListed(client: ImapFlow, uids: number[], signal?: AbortSignal): Promise<ListedMessage[]> {
+    signal?.throwIfAborted()
     if (uids.length === 0) return []
     const fetched = await client.fetchAll(
       uids,
       { uid: true, envelope: true, flags: true, size: true, bodyStructure: true },
       { uid: true },
     )
+    signal?.throwIfAborted()
     return fetched
         .map(message => listedFrom(message, message.size, structureHasAttachment(message.bodyStructure)))
         .sort((a, b) => b.uid - a.uid)
   }
 
-  async read(accountName: string | undefined, uid: number, folder: string): Promise<EmailReadResult> {
+  async read(accountName: string | undefined, uid: number, folder: string, signal?: AbortSignal): Promise<EmailReadResult> {
     const name = this.resolveName(accountName)
     const cfg = this.account(name)
     const folderName = folder || cfg.inboxFolder
@@ -513,16 +572,18 @@ export class EmailPool {
         throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folderName + '"；可用 email_list 重新获取 uid）')
       }
       const body = await parseRawMessage(message.source, this.settings.maxBodyChars)
+      signal?.throwIfAborted()
       return { account: name, uid, folder: folderName, ...body }
-    })
+    }, true, signal)
   }
 
-  async mark(accountName: string | undefined, folder: string, uid: number, action: EmailMarkAction, toFolder?: string): Promise<EmailMarkResult> {
+  async mark(accountName: string | undefined, folder: string, uid: number, action: EmailMarkAction, toFolder?: string, signal?: AbortSignal): Promise<EmailMarkResult> {
     const name = this.resolveName(accountName)
     const cfg = this.account(name)
     const folderName = folder || cfg.inboxFolder
     return this.withImap(name, folderName, async (client) => {
       const before = await client.fetchOne(uid, { uid: true, flags: true }, { uid: true })
+      signal?.throwIfAborted()
       if (before === false) {
         throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folderName + '"；可用 email_list 重新获取 uid）')
       }
@@ -530,25 +591,31 @@ export class EmailPool {
       let flagged = before.flags?.has('\\Flagged') === true
       if (action === 'read' && !seen) {
         await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true })
+        signal?.throwIfAborted()
         seen = true
       } else if (action === 'unread' && seen) {
         await client.messageFlagsRemove(uid, ['\\Seen'], { uid: true })
+        signal?.throwIfAborted()
         seen = false
       } else if (action === 'star' && !flagged) {
         await client.messageFlagsAdd(uid, ['\\Flagged'], { uid: true })
+        signal?.throwIfAborted()
         flagged = true
       } else if (action === 'unstar' && flagged) {
         await client.messageFlagsRemove(uid, ['\\Flagged'], { uid: true })
+        signal?.throwIfAborted()
         flagged = false
       } else if (action === 'move') {
         const target = (toFolder ?? '').trim()
         if (target === '') throw new MailError('move 操作需要 toFolder 参数（用 email_folders 查看可用文件夹）')
         if (target === folderName) throw new MailError('邮件已在文件夹 "' + folderName + '" 中，无需移动')
         const folders = await client.list()
+        signal?.throwIfAborted()
         if (!folders.some(row => row.path === target)) {
           throw new MailError('找不到目标文件夹 "' + target + '"，可用：' + folders.map(row => row.path).join('、'))
         }
         const moved = await client.messageMove(uid, target, { uid: true })
+        signal?.throwIfAborted()
         if (moved === false) throw new MailError('移动 uid=' + uid + ' 到 "' + target + '" 失败（服务器拒绝了 MOVE/COPY）')
         const result: EmailMarkResult = { account: name, uid, folder: folderName, action, seen, flagged, movedTo: target }
         const destUid = (moved as { destinationUid?: unknown })?.destinationUid
@@ -556,13 +623,14 @@ export class EmailPool {
         return result
       }
       return { account: name, uid, folder: folderName, action, seen, flagged }
-    }, false)
+    }, false, signal)
   }
 
-  async folders(accountName: string | undefined, subscribedOnly: boolean): Promise<EmailFoldersResult> {
+  async folders(accountName: string | undefined, subscribedOnly: boolean, signal?: AbortSignal): Promise<EmailFoldersResult> {
     const name = this.resolveName(accountName)
     return this.withImap(name, null, async (client) => {
       const list = await client.list()
+      signal?.throwIfAborted()
       const folders = list
         .filter(row => !subscribedOnly || row.subscribed !== false)
         .map(row => ({
@@ -572,10 +640,10 @@ export class EmailPool {
           subscribed: row.subscribed !== false,
         }))
       return { account: name, folders }
-    })
+    }, true, signal)
   }
 
-  async downloadAttachment(accountName: string | undefined, folder: string, uid: number, index: number, workspaceHint?: string): Promise<EmailAttachmentResult> {
+  async downloadAttachment(accountName: string | undefined, folder: string, uid: number, index: number, workspaceHint?: string, signal?: AbortSignal): Promise<EmailAttachmentResult> {
     const name = this.resolveName(accountName)
     const cfg = this.account(name)
     const folderName = folder || cfg.inboxFolder
@@ -587,6 +655,7 @@ export class EmailPool {
       // The mailparser list is authoritative for the index email_read showed;
       // the bodyStructure walk supplies the IMAP part to download.
       const body = await parseRawMessage(message.source, this.settings.maxBodyChars)
+      signal?.throwIfAborted()
       const parts = collectAttachmentParts(message.bodyStructure)
       if (body.attachments.length === 0) throw new MailError('该邮件没有附件')
       if (body.attachments[index] === undefined) {
@@ -600,7 +669,8 @@ export class EmailPool {
         throw new MailError('附件 "' + att.filename + '" 大小 ' + att.size + ' 字节，超过上限 maxAttachmentBytes=' + this.settings.maxAttachmentBytes)
       }
       const dl = await client.download(uid, att.part, { uid: true, maxBytes: this.settings.maxAttachmentBytes })
-      const buf = await collectStream(dl.content, this.settings.maxAttachmentBytes)
+      signal?.throwIfAborted()
+      const buf = await collectStream(dl.content, this.settings.maxAttachmentBytes, signal)
       const safeName = sanitizeFilename(dl.meta.filename ?? att.filename ?? body.attachments[index].filename)
       // Default the destination to the session workspace so the model can
       // read the file back; an explicit downloadDir always wins.
@@ -610,34 +680,36 @@ export class EmailPool {
           ? join(workspaceHint, '.dsh-email-downloads')
           : this.settings.downloadDir)
       await mkdir(dir, { recursive: true })
+      signal?.throwIfAborted()
       const dest = await uniquePath(join(dir, safeName))
-      await writeFile(dest, buf)
+      signal?.throwIfAborted()
+      await writeFile(dest, buf, signal === undefined ? undefined : { signal })
       return { account: name, uid, filename: safeName, contentType: att.contentType, size: buf.length, path: dest }
-    })
+    }, true, signal)
   }
 
-  async send(accountName: string | undefined, to: string, subject: string, text: string | undefined, cc: string | undefined, attachmentPaths: string[] | undefined): Promise<EmailSendResult> {
+  async send(accountName: string | undefined, to: string, subject: string, text: string | undefined, cc: string | undefined, attachmentPaths: string[] | undefined, signal?: AbortSignal): Promise<EmailSendResult> {
     const name = this.resolveName(accountName)
     const cfg = this.account(name)
-    const attachments = await validateAttachmentPaths(attachmentPaths ?? [], this.settings.maxAttachmentBytes)
-    const info = await this.transporter(name, cfg).sendMail({
+    const attachments = await validateAttachmentPaths(attachmentPaths ?? [], this.settings.maxAttachmentBytes, signal)
+    const info = await this.sendMail(name, cfg, {
       from: cfg.user,
       to,
       cc,
       subject,
       text: text ?? '',
       attachments,
-    })
+    }, signal)
     return {
       account: name,
-      messageId: info.messageId,
-      accepted: info.accepted.map(String),
-      rejected: info.rejected.map(String),
-      response: info.response,
+      messageId: typeof info.messageId === 'string' ? info.messageId : String(info.messageId ?? ''),
+      accepted: Array.isArray(info.accepted) ? info.accepted.map(String) : [],
+      rejected: Array.isArray(info.rejected) ? info.rejected.map(String) : [],
+      response: typeof info.response === 'string' ? info.response : String(info.response ?? ''),
     }
   }
 
-  async reply(accountName: string | undefined, folder: string, uid: number, mode: EmailReplyMode, text: string, forwardTo: string, cc: string | undefined): Promise<EmailReplyResult> {
+  async reply(accountName: string | undefined, folder: string, uid: number, mode: EmailReplyMode, text: string, forwardTo: string, cc: string | undefined, signal?: AbortSignal): Promise<EmailReplyResult> {
     const name = this.resolveName(accountName)
     const cfg = this.account(name)
     const folderName = folder || cfg.inboxFolder
@@ -650,6 +722,7 @@ export class EmailPool {
       }
       const ids = extractMessageIds(message.source)
       const body = await parseRawMessage(message.source, this.settings.maxBodyChars)
+      signal?.throwIfAborted()
       return buildReplyMessage(
         { from: body.from, to: body.to, cc: body.cc, subject: body.subject, date: body.date, text: body.text, messageId: ids.messageId, references: ids.references },
         mode,
@@ -657,8 +730,8 @@ export class EmailPool {
         text,
         forwardTo,
       )
-    })
-    const info = await this.transporter(name, cfg).sendMail({
+    }, true, signal)
+    const info = await this.sendMail(name, cfg, {
       from: cfg.user,
       to: built.to,
       cc,
@@ -666,15 +739,15 @@ export class EmailPool {
       text: built.text,
       ...(built.inReplyTo !== undefined ? { inReplyTo: '<' + built.inReplyTo + '>' } : {}),
       ...(built.references !== undefined ? { references: built.references.split(' ').map(id => '<' + id + '>') } : {}),
-    })
+    }, signal)
     return {
       account: name,
       mode,
       originalUid: uid,
-      messageId: info.messageId,
-      accepted: info.accepted.map(String),
-      rejected: info.rejected.map(String),
-      response: info.response,
+      messageId: typeof info.messageId === 'string' ? info.messageId : String(info.messageId ?? ''),
+      accepted: Array.isArray(info.accepted) ? info.accepted.map(String) : [],
+      rejected: Array.isArray(info.rejected) ? info.rejected.map(String) : [],
+      response: typeof info.response === 'string' ? info.response : String(info.response ?? ''),
       to: built.to.split(',').map(part => part.trim()).filter(part => part !== ''),
       subject: built.subject,
     }
@@ -682,20 +755,22 @@ export class EmailPool {
 }
 
 /** Stat every attachment path up front; total size must stay under the cap. */
-export async function validateAttachmentPaths(paths: string[], maxBytes: number): Promise<Array<{ path: string }>> {
+export async function validateAttachmentPaths(paths: string[], maxBytes: number, signal?: AbortSignal): Promise<Array<{ path: string }>> {
   const out: Array<{ path: string }> = []
   let total = 0
   for (const rawPath of paths) {
-      if (typeof rawPath !== 'string' || rawPath.trim() === '') {
-        throw new MailError('附件路径无效：' + String(rawPath))
-      }
-      const path = rawPath.trim()
-    let info;
+    signal?.throwIfAborted()
+    if (typeof rawPath !== 'string' || rawPath.trim() === '') {
+      throw new MailError('附件路径无效：' + String(rawPath))
+    }
+    const path = rawPath.trim()
+    let info
     try { info = await stat(path) } catch {
       throw new MailError('附件路径不存在或不可读：' + path)
     }
+    signal?.throwIfAborted()
     if (!info.isFile()) throw new MailError('附件路径不是文件：' + path)
-    total += info.size;
+    total += info.size
     if (total > maxBytes) {
       throw new MailError('附件总大小超过上限 maxAttachmentBytes=' + maxBytes + ' 字节')
     }
@@ -705,16 +780,27 @@ export async function validateAttachmentPaths(paths: string[], maxBytes: number)
 }
 
 /** Drain a download stream into a Buffer with a hard byte cap. */
-async function collectStream(stream: Readable, maxBytes: number): Promise<Buffer> {
+async function collectStream(stream: Readable, maxBytes: number, signal?: AbortSignal): Promise<Buffer> {
   const chunks: Buffer[] = []
   let total = 0
-  for await (const chunk of stream) {
-    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-    total += buf.length
-    if (total > maxBytes) throw new MailError('附件超过上限 maxAttachmentBytes=' + maxBytes + ' 字节，下载中止')
-    chunks.push(buf)
+  const onAbort = (): void => {
+    stream.destroy(signal?.reason instanceof Error ? signal.reason : new Error('邮件附件下载已取消'))
   }
-  return Buffer.concat(chunks)
+  signal?.throwIfAborted()
+  signal?.addEventListener('abort', onAbort, { once: true })
+  try {
+    for await (const chunk of stream) {
+      signal?.throwIfAborted()
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+      total += buf.length
+      if (total > maxBytes) throw new MailError('附件超过上限 maxAttachmentBytes=' + maxBytes + ' 字节，下载中止')
+      chunks.push(buf)
+    }
+    signal?.throwIfAborted()
+    return Buffer.concat(chunks)
+  } finally {
+    signal?.removeEventListener('abort', onAbort)
+  }
 }
 
 /** Avoid overwriting: append -1, -2, ... before the extension. */

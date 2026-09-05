@@ -183,8 +183,12 @@ dsh plugin --profile web remove dsh-email
 ```sh
 pnpm install
 pnpm run build   # tsc → lib/
-pnpm test        # 构建 + node --test（配置/解析/注册与审批门，44 个用例，无需真实邮箱）
+pnpm test        # 构建 + 离线测试，无需真实邮箱
 ```
+
+`src/index.ts` 只负责组合插件。`runtime.ts` 管理动态设置、账号连接池和网页/工具各自的监视游标；`tools.ts` 接线十个工具的执行逻辑；`tool-contract.ts` 集中维护参数、输出 schema 和中文渲染；`approval.ts` 管理发信审批。IMAP/SMTP 传输仍由 `mail-client.ts` 负责，网页路由由 `web.ts` 负责。
+
+测试覆盖动态配置换池、卸载释放、取消信号与工作区透传、工具/网页游标隔离，以及审批拒绝时不会进入发送执行。测试用内存客户端替代邮箱连接。
 
 ## 协议
 

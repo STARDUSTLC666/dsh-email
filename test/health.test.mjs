@@ -36,5 +36,6 @@ test('email_health 无账号时 ok=false 且有配置指引', async () => {
   const health = ctx.tools.defs.find((d) => d.name === 'email_health')
   const value = await health.execute({})
   assert.equal(value.ok, false)
-  assert.match(String(value.checks[0].detail), /未配置账号/)
+  assert.match(String(value.checks[0].detail), /未配置/)
+  assert.match(String(value.checks[0].detail), /user.*password.*cordis\.patch\.yml/)
 })
