@@ -69,5 +69,10 @@
     "@types/node": "^26.2.0",
     "@types/nodemailer": "^8.0.1",
     "typescript": "^5.7.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "deepmerge-ts": "8.0.0"
+    }
   }
 }
