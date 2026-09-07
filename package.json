@@ -1,7 +1,7 @@
 {
   "name": "dsh-email",
-  "version": "0.10.3",
-  "description": "IMAP/SMTP email tools for DeepSeek Harness: list, read, search and send mail, with QQ/163/126/Sina/Aliyun/Gmail/Outlook/iCloud presets.",
+  "version": "0.10.4",
+  "description": "DeepSeek Harness 邮件插件：IMAP/SMTP 收发、搜索、回复转发、邮件整理与增量收件，支持多邮箱预设、发信审批及 Web 设置与新邮件通知。",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -18,7 +18,8 @@
     "lib",
     "assets/whale-fallback.png",
     "cordis.patch.yml",
-    "README.md"
+    "README.md",
+    "README.en.md"
   ],
   "scripts": {
     "build": "tsc",
@@ -60,7 +61,7 @@
   },
   "dependencies": {
     "imapflow": "^1.7.0",
-    "mailparser": "^3.9.15",
+    "mailparser": "^3.9.22",
     "nodemailer": "^9.0.5",
     "schemastery": "^3.18.0",
     "yaml": "^2.9.0"

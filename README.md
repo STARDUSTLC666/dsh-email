@@ -2,7 +2,7 @@
 
 # dsh-email
 
-> **给 agent 一个邮箱**：八个国内邮箱预设开箱即用，收发/搜索/附件下载全搞定。
+> **让 agent 协助处理邮件**：收发、搜索、回复转发、附件、邮件整理与新邮件提醒，支持八种常见邮箱服务预设。
 
 ![npm version](https://img.shields.io/npm/v/dsh-email?label=npm&color=blue) ![npm downloads](https://img.shields.io/npm/dm/dsh-email) ![license](https://img.shields.io/npm/l/dsh-email) ![stars](https://img.shields.io/github/stars/STARDUSTLC666/dsh-email?style=social)
 
@@ -12,9 +12,9 @@
 ![dsh-email banner](https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/banner.png)
 
 
-DeepSeek Harness 邮件工具插件：让 agent 能**查收件箱、读邮件、搜邮件、代发邮件、收发附件**。纯插件实现，零核心改动，安装即可用。
+DeepSeek Harness 邮件插件：通过标准 IMAP/SMTP 提供 **10 个工具**，覆盖邮件查收与搜索、发送与回复转发、附件处理、标记与移动、增量收件和健康检查。支持多个账号、发信审批、Web 设置页与新邮件弹窗；配置邮箱账号后即可使用。
 
-Email tools for DeepSeek Harness: list, read, search and send mail through standard IMAP/SMTP — with one-line presets for QQ / 163 / 126 / Sina / Aliyun / Gmail / Outlook / iCloud.
+IMAP/SMTP email tools for DeepSeek Harness, with replies, forwarding, mailbox organization and new-mail notifications. Presets: QQ / 163 / 126 / Sina / Aliyun / Gmail / Outlook / iCloud.
 
 纯 Node 实现，**全平台通用**（Windows / macOS / Linux 同一份代码），不依赖 shell、无原生二进制。
 
@@ -28,6 +28,7 @@ Email tools for DeepSeek Harness: list, read, search and send mail through stand
 | `email_send` | 代发邮件（支持带附件）。**默认发信前会弹确认**，显示收件人、主题和附件数，由你批准后才发出 |
 | `email_folders` | 列出邮箱的文件夹（INBOX/已发送/垃圾邮件/自定义…），拿 path 喂给其他工具 |
 | `email_attachment` | 按序号下载邮件附件（默认存到会话工作区，模型可直接读取；大小受 maxAttachmentBytes 限制） |
+| `email_health` | 检查账号配置及 IMAP/SMTP 连接，定位邮箱连接问题 |
 | `email_watch` | 增量检查新邮件：首次调用建立基线，之后每次只报告比上次多出来的未读邮件，适合定时任务做新邮件提醒 |
 | `email_mark` | 修改邮件状态：标记已读/未读、加/取消星标，或移动到别的文件夹（归档、丢回收站），收发闭环的「收完之后」那一半 |
 | `email_reply` | 回复/回复全部/转发已有邮件：自动带上 In-Reply-To/References 线程头与原文引文，收件人自动排除自己，主题不重复叠 Re:/Fwd:；同样走发信审批门 |
@@ -44,6 +45,7 @@ Email tools for DeepSeek Harness: list, read, search and send mail through stand
 
 ### 版本记录
 
+- **0.10.4（2026-09-07）**：将 `mailparser` 最低版本提升到 `3.9.22` 并更新锁文件，使用 `html-to-text 10.0.1 → deepmerge-ts 8.0.2` 的修复链处理 [CVE-2026-40345](https://github.com/RebeccaStevens/deepmerge-ts/security/advisories/GHSA-ggr8-5vv4-36mx)。不依赖插件作为下游依赖安装时不生效的根级 `pnpm.overrides`；新增真实依赖链与 HTML 邮件解析回归测试。依赖告警不等于已证实邮件输入可触发该漏洞。
 - **0.10.1**：补发制品——已发布的 0.10.0 打包时只含 `email_mark`，本版同时包含 `email_mark` 与 `email_reply`，代码与 0.10.0 的 main 一致。
 - **0.10.0**：新增 `email_mark`（已读/未读/星标/移动文件夹，补齐收发闭环的整理侧）与 `email_reply`（回复/回复全部/转发，自动线程头+引文，走发信审批门）；连接池按读/写模式分别管理邮箱打开状态。
 - **0.9.1**：修复设置页空主机遮蔽 provider 预设（#3/#6）；IMAP 连接超时不再杀死整个 DSH 进程（#4）；暗色模式输入控件可见（#2）；密码栏提示环境变量 `DSH_EMAIL_PASSWORD` 免明文方案（#5）。
@@ -55,7 +57,7 @@ Email tools for DeepSeek Harness: list, read, search and send mail through stand
 
 ## 兼容性
 
-在 `@deepseek-ai/dsh@0.1.2-alpha.4` 源码模式下实测通过（2026-09-02，69 项测试及 Web profile 启动冒烟）。遵循 cordis 组合包补丁模型（`cordis.patch.yml` + `dsh.bundle.patch`），运行时不 import 任何 `@deepseek-ai/*` 内部模块。
+已在 `@deepseek-ai/dsh@0.1.3-alpha.1` 官方源码基线上验证插件接口与 Web profile 同载（2026-09-07；不代表已实测真实邮箱收发）。遵循 cordis 组合包补丁模型（`cordis.patch.yml` + `dsh.bundle.patch`），运行时不 import 任何 `@deepseek-ai/*` 内部模块。
 
 ## 安装
 

@@ -1,0 +1,3 @@
+# Narrow exception for the reviewed security update; not a blanket age-policy bypass.
+minimumReleaseAgeExclude:
+  - mailparser@3.9.22

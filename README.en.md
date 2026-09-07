@@ -6,7 +6,7 @@
 
 ![dsh-email banner](https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/banner.png)
 
-Email tools for DeepSeek Harness: let the agent **check the inbox, read mail, search mail, send mail on your behalf, and send/receive attachments** through standard IMAP/SMTP — with one-line presets for QQ / 163 / 126 / Sina / Aliyun / Gmail / Outlook / iCloud. Pure plugin implementation, zero core changes, works out of the box.
+Email plugin for DeepSeek Harness: **10 IMAP/SMTP tools** cover reading and searching mail, sending, replies and forwarding, attachments, message flags and moves, incremental new-mail checks, and connection health. Supports multiple accounts, send approval, Web settings and new-mail popups. Configure an account with presets for QQ / 163 / 126 / Sina / Aliyun / Gmail / Outlook / iCloud to get started.
 
 Pure Node, **cross-platform** (one codebase for Windows / macOS / Linux), no shell, no native binaries.
 
@@ -20,7 +20,10 @@ Pure Node, **cross-platform** (one codebase for Windows / macOS / Linux), no she
 | `email_send` | Send mail on your behalf (attachments supported). **Prompts for confirmation before sending by default**, showing recipients, subject and attachment count; only sends after you approve |
 | `email_folders` | List the mailbox folders (INBOX/Sent/Junk/custom…); feed the `path` to other tools |
 | `email_attachment` | Download an attachment by index (saved to the session workspace by default so the model can read it directly; size capped by `maxAttachmentBytes`) |
+| `email_health` | Check account configuration and IMAP/SMTP connectivity to diagnose connection problems |
 | `email_watch` | Incremental new-mail check: the first call seeds a baseline, every later call reports only unread mail newer than the last check — ideal for scheduled new-mail notifications |
+| `email_mark` | Mark messages as read/unread, add/remove stars, or move messages to another folder |
+| `email_reply` | Reply, reply-all or forward with thread headers and quoted content; uses the same send-approval gate |
 
 ### New-mail notifications (web UI)
 
@@ -34,6 +37,7 @@ Example:
 
 ### Changelog
 
+- **0.10.4 (2026-09-07)**: raise the minimum `mailparser` version to `3.9.22` and update the lockfile to use the patched `html-to-text 10.0.1 → deepmerge-ts 8.0.2` dependency chain for [CVE-2026-40345](https://github.com/RebeccaStevens/deepmerge-ts/security/advisories/GHSA-ggr8-5vv4-36mx). This does not rely on root-only `pnpm.overrides`, which cannot fix consumers installing this plugin as a dependency. Add runtime dependency-chain and HTML-message parsing regression tests. An affected dependency is not proof that mail input can trigger this vulnerability.
 - **0.9.0**: new `email_watch` incremental new-mail tool (cursor-based, ideal for scheduled notifications); new "whale-girl courier" new-mail popup in the web UI (local skin artwork read at runtime + built-in fallback).
 - **0.8.2**: `since` / `until` parameter descriptions unified to English, consistent with the other parameters, so multilingual agents read them correctly.
 - **0.8.0/0.8.1**: `email_list` / `email_search` gained `since` / `until` date-range filters; new `email_health` self-check (account/connection/config in one call); adapted to harness 0.1.2 (removed the deleted client-injection declaration).
@@ -42,7 +46,7 @@ Example:
 
 ## Compatibility
 
-Verified against source-run `@deepseek-ai/dsh@0.1.2-alpha.4` on 2026-09-02 (69 tests plus a Web-profile startup smoke test). Built for the cordis patch-bundle plugin model (`cordis.patch.yml` + `dsh.bundle.patch`). No runtime imports of `@deepseek-ai/*` internals.
+Plugin contracts and Web-profile co-loading verified against the official source-run `@deepseek-ai/dsh@0.1.3-alpha.1` baseline on 2026-09-07; this does not claim real-mailbox send/receive verification. Built for the cordis patch-bundle plugin model (`cordis.patch.yml` + `dsh.bundle.patch`). No runtime imports of `@deepseek-ai/*` internals.
 
 ## Installation
 
