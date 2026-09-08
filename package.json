@@ -1,6 +1,6 @@
 {
   "name": "dsh-email",
-  "version": "0.10.4",
+  "version": "0.10.5",
   "description": "DeepSeek Harness 邮件插件：IMAP/SMTP 收发、搜索、回复转发、邮件整理与增量收件，支持多邮箱预设、发信审批及 Web 设置与新邮件通知。",
   "type": "module",
   "main": "lib/index.js",
@@ -46,7 +46,7 @@
   "license": "MIT",
   "packageManager": "pnpm@11.7.0",
   "engines": {
-    "node": ">=22"
+    "node": "^22.19.0 || >=24.0.0"
   },
   "dsh": {
     "bundle": {
