@@ -4,8 +4,8 @@ import { type EmailConfig } from './config.js';
 export declare const SETTINGS_NAMESPACE = "dsh-email";
 /**
  * The settings-page shape: the single default account plus shared policy.
- * Multi-account (`accounts` map) stays YAML-only; the page edits the
- * default/shorthand account.
+ * The form edits the default/shorthand account; its advanced YAML area
+ * edits named accounts through accountsYaml.
  */
 export declare const EmailSettingsSchema: z<Schemastery.ObjectS<{
     provider: z<string, string>;

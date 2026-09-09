@@ -45,6 +45,7 @@ IMAP/SMTP email tools for DeepSeek Harness, with replies, forwarding, mailbox or
 
 ### 版本记录
 
+- **0.10.6（2026-09-10）**：修复单账号设置页授权码留空时，空字符串遮蔽 `DSH_EMAIL_PASSWORD`，导致“测试连接”和保存后工具调用报未配置的问题；显式密码仍优先，多账号不会借用该环境变量。更新设置页工具数量、多账号说明，并补充真实 QQ 邮箱验证结果。
 - **0.10.5（2026-09-08）**：补充官方 Harness 0.1.3-alpha.2 的安装、工具注册及 Web 设置接口验证，更新 Node 版本要求，明确 `email_health` 只检查配置；运行时代码与 0.10.4 相同。
 - **0.10.4（2026-09-07）**：将 `mailparser` 最低版本提升到 `3.9.22` 并更新锁文件，使用 `html-to-text 10.0.1 → deepmerge-ts 8.0.2` 的修复链处理 [CVE-2026-40345](https://github.com/RebeccaStevens/deepmerge-ts/security/advisories/GHSA-ggr8-5vv4-36mx)。不依赖插件作为下游依赖安装时不生效的根级 `pnpm.overrides`；新增真实依赖链与 HTML 邮件解析回归测试。依赖告警不等于已证实邮件输入可触发该漏洞。
 - **0.10.1**：补发制品——已发布的 0.10.0 打包时只含 `email_mark`，本版同时包含 `email_mark` 与 `email_reply`，代码与 0.10.0 的 main 一致。
@@ -58,7 +59,7 @@ IMAP/SMTP email tools for DeepSeek Harness, with replies, forwarding, mailbox or
 
 ## 兼容性
 
-2026-09-08 已在本机安装的官方 `@deepseek-ai/dsh@0.1.3-alpha.2`、Node `24.16.0` 中，通过 `dsh plugin --profile web add` 安装 npm 发布包，验证组合配置、10 个工具注册、配置自检、设置服务注册与 Web 设置接口（200）。本次没有配置真实邮箱，不代表已验证实际收发。
+已在本机安装的官方 `@deepseek-ai/dsh@0.1.3-alpha.2`、Node `24.16.0` 中，通过 `dsh plugin --profile web add` 验证组合配置、10 个工具注册、配置自检、设置服务注册与 Web 设置接口。2026-09-09 使用 npm `0.10.5` 包完成真实 QQ 邮箱实测：Harness 内目录、列表、读取和搜索调用通过，读取未改变邮件标记；独立 SMTP 登录认证通过。测试未发送、修改或删除邮件，因此不代表实际投递、回复和写入操作已验证。
 
 遵循官方[插件打包与安装要求](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.md)：ESM 入口、预构建 `lib/`、`dsh.bundle.patch` 和 `cordis.patch.yml` 配置层；显式注入所需服务，提供 JSON Schema 参数、规范化输出和渲染函数，运行时不 import `@deepseek-ai/*` 内部模块。使用 Node 22.19 及以上的 22.x 或 Node 24 及以上版本；Harness 仍在快速迭代，上述版本是实测基线。
 
@@ -77,7 +78,7 @@ dsh plugin --profile web add dsh-email
 1. **网页设置（推荐）**：重启后打开 **设置 → 邮件 (dsh-email)**，表单里填邮箱地址和授权码，点「保存并应用」，还带「测试连接」按钮。零 YAML、零重启。
 2. **YAML**：按下面的 cordis.patch.yml 模板手写；设置页的「多账号（高级，YAML）」文本框也能填账号映射（覆盖 YAML 里的 accounts）。
 
-设置页保存的值存在 `settings.yaml` 的 `dsh-email` 命名空间里，覆盖 YAML 的默认账号配置；密码字段标记为 secret（不会出现在任何导出/诊断里）。
+设置页保存的值存在 `settings.yaml` 的 `dsh-email` 命名空间里，覆盖 YAML 的默认账号配置。授权码字段标记为 secret，但填写后保存仍会写入本机配置文件。单账号如需避免保存授权码，可设置 `DSH_EMAIL_PASSWORD` 并将授权码栏留空；环境变量不会被复制进设置文件。
 
 ## 卸载
 

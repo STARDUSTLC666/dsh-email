@@ -66,6 +66,30 @@ test('password falls back to the environment variable (single account only)', ()
   }
 })
 
+test('blank settings passwords use the environment in both draft tests and saved settings', () => {
+  const old = process.env[EMAIL_PASSWORD_ENV]
+  process.env[EMAIL_PASSWORD_ENV] = 'env-secret'
+  const draft = {
+    provider: 'qq', user: 'me@qq.com', password: '', inboxFolder: 'INBOX',
+    sendApproval: true, maxBodyChars: 20000, downloadDir: '', accountsYaml: '',
+    imap: { host: '', port: 993, secure: true },
+    smtp: { host: '', port: 465, secure: true },
+  }
+  try {
+    for (const userSection of [null, draft]) {
+      const config = { provider: 'qq', user: 'me@qq.com', password: 'old-row-secret', ...toEmailConfig(draft, userSection) }
+      assert.equal(resolveEmailSettings(config).accounts.get('default').password, 'env-secret')
+      assert.equal(config.password, '', 'the environment secret must not be copied into settings')
+    }
+    assert.equal(resolveEmailSettings({ provider: 'qq', user: 'me@qq.com', password: 'explicit-secret' }).accounts.get('default').password, 'explicit-secret')
+    delete process.env[EMAIL_PASSWORD_ENV]
+    assert.throws(() => resolveEmailSettings(toEmailConfig(draft, null)), /password 未填写/)
+  } finally {
+    if (old === undefined) delete process.env[EMAIL_PASSWORD_ENV]
+    else process.env[EMAIL_PASSWORD_ENV] = old
+  }
+})
+
 test('explicit host overrides beat the preset', () => {
   const s = resolveEmailSettings({
     provider: 'qq',
@@ -119,6 +143,10 @@ test('multi-account ignores the password env fallback', () => {
   try {
     assert.throws(
       () => resolveEmailSettings({ provider: 'qq', accounts: { a: { user: 'a@x.y' } } }),
+      /password 未填写/,
+    )
+    assert.throws(
+      () => resolveEmailSettings({ provider: 'qq', password: 'shared-secret', accounts: { a: { user: 'a@x.y', password: '' } } }),
       /password 未填写/,
     )
   } finally {

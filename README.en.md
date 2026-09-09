@@ -37,6 +37,7 @@ Example:
 
 ### Changelog
 
+- **0.10.6 (2026-09-10)**: fix an empty authorization-code field shadowing `DSH_EMAIL_PASSWORD` in single-account connection tests and saved settings. Explicit passwords still take precedence; named accounts cannot borrow this environment variable. Refresh the settings tool count, multi-account guidance and real QQ mailbox validation notes.
 - **0.10.5 (2026-09-08)**: document installation, tool registration and the Web settings endpoint in official Harness 0.1.3-alpha.2; update Node requirements and clarify that `email_health` checks configuration only. Runtime code is unchanged from 0.10.4.
 - **0.10.4 (2026-09-07)**: raise the minimum `mailparser` version to `3.9.22` and update the lockfile to use the patched `html-to-text 10.0.1 → deepmerge-ts 8.0.2` dependency chain for [CVE-2026-40345](https://github.com/RebeccaStevens/deepmerge-ts/security/advisories/GHSA-ggr8-5vv4-36mx). This does not rely on root-only `pnpm.overrides`, which cannot fix consumers installing this plugin as a dependency. Add runtime dependency-chain and HTML-message parsing regression tests. An affected dependency is not proof that mail input can trigger this vulnerability.
 - **0.9.0**: new `email_watch` incremental new-mail tool (cursor-based, ideal for scheduled notifications); new "whale-girl courier" new-mail popup in the web UI (local skin artwork read at runtime + built-in fallback).
@@ -47,7 +48,7 @@ Example:
 
 ## Compatibility
 
-On 2026-09-08, the npm release was installed with `dsh plugin --profile web add` into the locally installed official `@deepseek-ai/dsh@0.1.3-alpha.2`, running Node `24.16.0`. Validation covered profile composition, all 10 tool registrations, configuration health, settings-service registration and the Web settings endpoint (200). No real mailbox was configured; this does not claim actual send/receive verification.
+Validated with `dsh plugin --profile web add` in the locally installed official `@deepseek-ai/dsh@0.1.3-alpha.2`, running Node `24.16.0`: profile composition, all 10 tool registrations, configuration health, settings-service registration and the Web settings endpoint. On 2026-09-09, the npm `0.10.5` package passed real QQ mailbox folder, list, read and search calls inside Harness. Reading preserved message flags, and a separate SMTP authentication check passed. No mail was sent, modified or deleted; delivery, replies and mailbox writes have not been verified live.
 
 Follows the official [plugin packaging and installation requirements](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.md): an ESM entry point, prebuilt `lib/`, `dsh.bundle.patch` and a `cordis.patch.yml` layer. The plugin explicitly injects its required services and supplies JSON Schema parameters, canonical output and rendering, with no runtime imports of `@deepseek-ai/*` internals. Use Node 22.19 or later within 22.x, or Node 24 or later. Harness is evolving rapidly; the version above is the tested baseline.
 
@@ -66,7 +67,7 @@ After installing, restart `dsh web`. The plugin ships with an empty config and *
 1. **Web settings (recommended)**: after restart, open **Settings → Mail (dsh-email)**, fill in the email address and authorization code, and click "Save & Apply"; a "Test connection" button is also provided. Zero YAML, zero restart.
 2. **YAML**: hand-write the cordis.patch.yml template below; the settings page's "Multiple accounts (advanced, YAML)" textbox can also hold the account map (overriding `accounts` in YAML).
 
-Values saved in the settings page live in the `dsh-email` namespace of `settings.yaml` and override the YAML default-account config; password fields are marked secret (they never appear in exports or diagnostics).
+Values saved in the settings page live in the `dsh-email` namespace of `settings.yaml` and override the YAML default-account config. Authorization-code fields are marked secret, but saving a filled field still writes its value to the local settings file. For a single account, set `DSH_EMAIL_PASSWORD` and leave the authorization-code field empty to avoid saving it; the environment value is not copied into settings.
 
 ## Uninstall
 
