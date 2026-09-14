@@ -119,6 +119,28 @@ Multiple accounts: one `tool-email` line can hold several mailboxes; select one 
 
 Top-level `provider`/`user`/`password`/`imap`/`smtp`/`inboxFolder` remain available as shared defaults for all accounts (the v0.1 single-account style stays fully compatible).
 
+### Send-as alias
+
+A Gmail / Google Workspace alias can only appear in the From header; logging in requires the account that owns the alias, so the sender identity and the login identity are configured separately:
+
+```yaml
+- id: tool-email
+  config:
+    accounts:
+      alias:
+        provider: gmail
+        user: support@your-domain.com       # From header address
+        senderName: Support Team            # optional display name
+        authUser: owner@your-domain.com     # login account that owns the alias
+        authPassword: app-specific-password # login secret; falls back to password
+        inboxFolder: INBOX
+    defaultAccount: alias
+```
+
+- An alias cannot log in on its own; logging in with it returns `535 Username and Password not accepted`.
+- `authUser`/`authPassword` without `password` is a valid configuration.
+- The same fields cover SMTP relay setups where the login account and the From address follow different rules.
+
 ## Presets
 
 | provider | IMAP | SMTP |

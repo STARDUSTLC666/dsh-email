@@ -130,6 +130,28 @@ dsh plugin --profile web remove dsh-email
 
 顶层的 `provider`/`user`/`password`/`imap`/`smtp`/`inboxFolder` 仍然可用，作为各账号的共享默认值（v0.1 单账号写法完全兼容）。
 
+### 发送别名（send-as alias）
+
+Gmail / Google Workspace 的别名地址只能出现在 From 头里，登录必须用拥有该别名的账号，所以发信身份与登录身份分开填：
+
+```yaml
+- id: tool-email
+  config:
+    accounts:
+      alias:
+        provider: gmail
+        user: support@your-domain.com      # From 头里的发信地址
+        senderName: 客服小张               # 可选，From 头的显示名
+        authUser: owner@your-domain.com   # 登录用账号（拥有上面那个别名）
+        authPassword: 应用专用密码         # 登录口令；缺省时回落到 password
+        inboxFolder: INBOX
+    defaultAccount: alias
+```
+
+- 别名不能直接当登录账号，用别名登录会得到 `535 Username and Password not accepted`。
+- 只填 `authUser`/`authPassword`、不填 `password` 也是合法配置。
+- `authUser`/`authPassword` 同样适用于 SMTP 中继场景：登录账号与 From 地址由不同规则决定时，分开填即可。
+
 ### 常用邮箱预设
 
 | provider | IMAP | SMTP |
@@ -150,6 +172,9 @@ dsh plugin --profile web remove dsh-email
 | `provider` | 无 | 预设名，自动填 imap/smtp 地址；显式写的 host/port/secure 优先 |
 | `user` | 必填 | 登录邮箱地址 |
 | `password` | 必填* | 授权码/应用专用密码；*也可用环境变量 `DSH_EMAIL_PASSWORD` |
+| `senderName` | 无 | From 头的显示名；留空时只发裸地址 |
+| `authUser` | 同 `user` | 登录账号；发信地址与登录账号不同时填（发送别名、SMTP 中继） |
+| `authPassword` | 同 `password` | `authUser` 的口令 |
 | `imap.host/port/secure` | 按预设 | 收信服务器（另有 connectionTimeoutMs/socketTimeoutMs 可调超时） |
 | `smtp.host/port/secure` | 按预设 | 发信服务器 |
 | `inboxFolder` | `INBOX` | 收发工具默认使用的文件夹 |

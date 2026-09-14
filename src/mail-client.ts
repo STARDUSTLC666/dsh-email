@@ -288,7 +288,7 @@ export class EmailPool {
       host: cfg.imap.host,
       port: cfg.imap.port,
       secure: cfg.imap.secure,
-      auth: { user: cfg.user, pass: cfg.password },
+      auth: { user: cfg.authUser, pass: cfg.authPassword },
       logger: false,
       connectionTimeout: cfg.imap.connectionTimeoutMs ?? 30000,
       greetingTimeout: 30000,
@@ -413,7 +413,7 @@ export class EmailPool {
         host: cfg.smtp.host,
         port: cfg.smtp.port,
         secure: cfg.smtp.secure,
-        auth: { user: cfg.user, pass: cfg.password },
+        auth: { user: cfg.authUser, pass: cfg.authPassword },
         connectionTimeout: 30000,
         greetingTimeout: 10000,
         socketTimeout: 60000,
@@ -693,7 +693,7 @@ export class EmailPool {
     const cfg = this.account(name)
     const attachments = await validateAttachmentPaths(attachmentPaths ?? [], this.settings.maxAttachmentBytes, signal)
     const info = await this.sendMail(name, cfg, {
-      from: cfg.user,
+      from: cfg.sender,
       to,
       cc,
       subject,
@@ -732,7 +732,7 @@ export class EmailPool {
       )
     }, true, signal)
     const info = await this.sendMail(name, cfg, {
-      from: cfg.user,
+      from: cfg.sender,
       to: built.to,
       cc,
       subject: built.subject,

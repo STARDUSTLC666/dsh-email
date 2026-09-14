@@ -14,8 +14,15 @@ export interface SmtpConfig {
 /** One mailbox account. Top-level shorthand fields act as shared defaults. */
 export interface AccountConfig {
     provider?: ProviderName;
+    /** Sender address: the From header, and the default login. */
     user?: string;
     password?: string;
+    /** Display name for the From header. Omitted, the header carries the bare address. */
+    senderName?: string;
+    /** Login identity when it differs from the sender address (send-as alias, SMTP relay). Defaults to user. */
+    authUser?: string;
+    /** Password for authUser. Defaults to password. */
+    authPassword?: string;
     imap?: ImapConfig;
     smtp?: SmtpConfig;
     inboxFolder?: string;
@@ -61,6 +68,12 @@ export declare const EMAIL_PASSWORD_ENV = "DSH_EMAIL_PASSWORD";
 export interface ResolvedEmailConfig {
     user: string;
     password: string;
+    /** From header value: `Name <user>` when senderName is set, otherwise the bare address. */
+    sender: string;
+    /** IMAP/SMTP login identity; equals user unless authUser overrides it. */
+    authUser: string;
+    /** Password for authUser; equals password unless authPassword overrides it. */
+    authPassword: string;
     imap: ImapConfig & {
         host: string;
         port: number;
@@ -102,6 +115,12 @@ export declare function parseAccountsYaml(text: string): {
  * account is not fully specified.
  */
 export declare function resolveEmailSettings(config: EmailConfig | undefined): ResolvedEmailSettings;
+/**
+ * Build the From header value. A display name is quoted per RFC 5322 when it
+ * contains characters that would otherwise terminate the phrase; a name that
+ * already carries its own quotes or angle brackets is passed through unchanged.
+ */
+export declare function formatSender(senderName: string, address: string): string;
 /** v0.1-compatible wrapper: resolve the single (or default) account. */
 export declare function resolveEmailConfig(config: EmailConfig | undefined): ResolvedEmailConfig;
 export declare function clampInt(value: unknown, fallback: number, min: number, max: number): number;

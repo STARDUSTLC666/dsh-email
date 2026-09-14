@@ -21,8 +21,15 @@ export interface SmtpConfig {
 /** One mailbox account. Top-level shorthand fields act as shared defaults. */
 export interface AccountConfig {
   provider?: ProviderName
+  /** Sender address: the From header, and the default login. */
   user?: string
   password?: string
+  /** Display name for the From header. Omitted, the header carries the bare address. */
+  senderName?: string
+  /** Login identity when it differs from the sender address (send-as alias, SMTP relay). Defaults to user. */
+  authUser?: string
+  /** Password for authUser. Defaults to password. */
+  authPassword?: string
   imap?: ImapConfig
   smtp?: SmtpConfig
   inboxFolder?: string
@@ -78,6 +85,12 @@ const DEFAULT_IDLE_TIMEOUT_MS = 60000
 export interface ResolvedEmailConfig {
   user: string
   password: string
+  /** From header value: `Name <user>` when senderName is set, otherwise the bare address. */
+  sender: string
+  /** IMAP/SMTP login identity; equals user unless authUser overrides it. */
+  authUser: string
+  /** Password for authUser; equals password unless authPassword overrides it. */
+  authPassword: string
   imap: ImapConfig & { host: string; port: number; secure: boolean }
   smtp: SmtpConfig & { host: string; port: number; secure: boolean }
   inboxFolder: string
@@ -140,6 +153,9 @@ export function resolveEmailSettings(config: EmailConfig | undefined): ResolvedE
     provider: raw.provider,
     user: raw.user,
     password: raw.password,
+    senderName: raw.senderName,
+    authUser: raw.authUser,
+    authPassword: raw.authPassword,
     imap: raw.imap,
     smtp: raw.smtp,
     inboxFolder: raw.inboxFolder,
@@ -194,7 +210,16 @@ function resolveAccount(name: string, common: AccountConfig, acc: AccountConfig,
   const user = (acc.user ?? common.user ?? '').trim()
   // The settings form uses '' for an empty password. In single-account mode
   // that explicitly selects the environment fallback; named accounts stay isolated.
-  const password = (acc.password ?? common.password) || (allowEnvPassword ? process.env[EMAIL_PASSWORD_ENV] ?? '' : '')
+  const rawPassword = acc.password ?? common.password
+  const rawAuthPassword = acc.authPassword ?? common.authPassword
+  // A send-as alias authenticates as the mailbox owner while the From header
+  // carries the alias, so login and sender identity resolve separately. With no
+  // separate password the login password doubles as the sender password, and a
+  // configuration that carries only authPassword stays valid.
+  const password = rawPassword || rawAuthPassword || (allowEnvPassword ? process.env[EMAIL_PASSWORD_ENV] ?? '' : '')
+  const authUser = (acc.authUser ?? common.authUser ?? '').trim() || user
+  const authPassword = rawAuthPassword || password
+  const senderName = (acc.senderName ?? common.senderName ?? '').trim()
   const imap = {
     host: acc.imap?.host ?? common.imap?.host ?? preset?.imap.host,
     port: acc.imap?.port ?? common.imap?.port ?? preset?.imap.port,
@@ -218,10 +243,29 @@ function resolveAccount(name: string, common: AccountConfig, acc: AccountConfig,
   return {
     user,
     password,
+    sender: formatSender(senderName, user),
+    authUser,
+    authPassword,
     imap: { ...imap, host: imap.host!, port: imap.port!, secure: imap.secure! },
     smtp: { ...smtp, host: smtp.host!, port: smtp.port!, secure: smtp.secure! },
     inboxFolder: (acc.inboxFolder ?? common.inboxFolder ?? '').trim() || 'INBOX',
   }
+}
+
+/**
+ * Build the From header value. A display name is quoted per RFC 5322 when it
+ * contains characters that would otherwise terminate the phrase; a name that
+ * already carries its own quotes or angle brackets is passed through unchanged.
+ */
+export function formatSender(senderName: string, address: string): string {
+  const name = senderName.trim()
+  if (name === '') return address
+  // A name the operator already quoted is passed through; otherwise quote it
+  // only when it holds characters that would end the RFC 5322 phrase.
+  const quoted = name.startsWith('"') || !/[<>@,;:\\"]/.test(name)
+    ? name
+    : '"' + name.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"'
+  return quoted + ' <' + address + '>'
 }
 
 /** v0.1-compatible wrapper: resolve the single (or default) account. */
