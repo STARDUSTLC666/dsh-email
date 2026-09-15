@@ -262,7 +262,7 @@ export function formatSender(senderName: string, address: string): string {
   if (name === '') return address
   // A name the operator already quoted is passed through; otherwise quote it
   // only when it holds characters that would end the RFC 5322 phrase.
-  const quoted = name.startsWith('"') || !/[<>@,;:\\"]/.test(name)
+  const quoted = name.startsWith('"') || !/[()\[\]<>@,;:\\"]/.test(name)
     ? name
     : '"' + name.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"'
   return quoted + ' <' + address + '>'
