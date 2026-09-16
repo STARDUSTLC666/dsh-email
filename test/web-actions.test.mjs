@@ -710,6 +710,124 @@ test('test action: the reply shape carries account/imapHost/imapPort even on fai
   assert.match(direct, /邮箱登录失败/)
 })
 
+// --- test action: a partial value is a draft, not a validation failure ------
+//
+// The per-card 「测试连接」 button posts the card editor's own control bundle
+// ({ accountsYaml, onChangeAccountsYaml }); JSON.stringify drops the function, so
+// the body arrives as { accountsYaml } — no provider key at all, and none of the
+// other form fields either. 「Missing」 has to mean 「未设置」: it is not an unknown
+// provider, and an undefined must never be projected over the row config (an own
+// key holding undefined still wins in `{ ...rowConfig, ...toEmailConfig(...) }`).
+
+const NO_PROVIDER_VALUE = 'work: { provider: qq, user: w@qq.com, password: pw }\n'
+
+test('test action: a value with no provider key is unset, not an unknown provider', async t => {
+  // Stub the dial: the bug is a validation failure, which happens before the pool.
+  t.mock.method(EmailPool.prototype, 'withImap', async function (name) { return name })
+  const { post } = mount(t)
+  // Exactly what client.js sends for one card's 「测试连接」: provider absent.
+  const { status, body } = await post({ action: 'test', account: 'work', value: { accountsYaml: NO_PROVIDER_VALUE } })
+  assert.equal(status, 200, JSON.stringify(body))
+  assert.equal(body.value.ok, true)
+  assert.equal(body.value.account, 'work')
+  assert.equal(body.value.imapHost, 'imap.qq.com')
+  assert.equal(body.value.imapPort, 993)
+})
+
+test('test action: undefined fields never shadow the row config', async t => {
+  t.mock.method(EmailPool.prototype, 'withImap', async function (name) { return name })
+  const { post } = mount(t)
+  // This account carries no provider and no endpoints of its own, so only the row
+  // config (provider qq + user + password) can resolve it. A projection carrying
+  // `provider: undefined` would clobber the row provider and the account would
+  // come back 「imap.host 未填写」 instead of dialling the qq preset.
+  const { status, body } = await post({
+    action: 'test',
+    account: 'custom',
+    value: { accountsYaml: 'custom: { user: c@qq.com, password: cp }\n' },
+  })
+  assert.equal(status, 200, JSON.stringify(body))
+  assert.equal(body.value.imapHost, 'imap.qq.com', 'the row provider preset still expands')
+  assert.equal(body.value.imapPort, 993)
+})
+
+test('test action: undefined scalars and nested objects are all treated as unset', async t => {
+  t.mock.method(EmailPool.prototype, 'withImap', async function (name) { return name })
+  const { post } = mount(t)
+  const partials = [
+    { provider: undefined, user: undefined, password: undefined, inboxFolder: undefined, sendApproval: undefined, maxBodyChars: undefined, downloadDir: undefined, serverPresets: undefined },
+    { provider: null, imap: null, smtp: null },
+    { imap: undefined, smtp: undefined },
+  ]
+  for (const partial of partials) {
+    const value = { accountsYaml: NO_PROVIDER_VALUE, ...partial }
+    const { status, body } = await post({ action: 'test', account: 'work', value })
+    assert.equal(status, 200, `${Object.keys(partial).join(',')} -> ${JSON.stringify(body)}`)
+    assert.equal(body.value.imapHost, 'imap.qq.com', `unset keys must not disturb resolution: ${Object.keys(partial).join(',')}`)
+  }
+  // An unset accountsYaml is not an error either: it just means "no YAML draft",
+  // so the row config's own account is what gets tested.
+  const noYaml = await post({ action: 'test', value: { accountsYaml: undefined } })
+  assert.equal(noYaml.status, 200, JSON.stringify(noYaml.body))
+  assert.equal(noYaml.body.value.account, 'default')
+  assert.equal(noYaml.body.value.imapHost, 'imap.qq.com', 'the row provider preset still expands')
+})
+
+test('a genuinely unknown provider still fails loud, with the value JSON-quoted', async t => {
+  t.mock.method(EmailPool.prototype, 'withImap', async function (name) { return name })
+  const { post } = mount(t)
+  const value = account => ({ ...BASE, provider: account, accountsYaml: NO_PROVIDER_VALUE })
+
+  const word = await post({ action: 'test', account: 'work', value: value('hotdog') })
+  assert.equal(word.status, 400)
+  assert.match(word.body.error.message, /未知的邮箱服务商 "hotdog"/, 'a string is still quoted')
+
+  // A non-string is reported as its JSON form, never concatenated into the sentence.
+  const numbered = await post({ action: 'test', account: 'work', value: value(123) })
+  assert.equal(numbered.status, 400)
+  assert.match(numbered.body.error.message, /未知的邮箱服务商 123/)
+  assert.equal(/服务商"?undefined/.test(numbered.body.error.message), false)
+
+  const empty = await post({ action: 'test', account: 'work', value: value('') })
+  assert.equal(empty.status, 200, 'provider "" is 「自定义服务器」, not an unknown provider')
+})
+
+test('save action: a value without provider saves as 「未设置」 instead of erroring', async t => {
+  const mounted = mount(t, { revision: 7 })
+  const value = { ...BASE }
+  delete value.provider
+  const { status, body } = await mounted.post({ action: 'save', expectedRevision: 7, value })
+  assert.equal(status, 200, JSON.stringify(body))
+  assert.equal(body.value.settings.revision, 8)
+})
+
+test('unset is unset: validateSettingsValue tolerates it and toEmailConfig omits it', async t => {
+  const { validateSettingsValue, toEmailConfig } = await import('../lib/settings.js')
+  for (const provider of [undefined, null, '']) {
+    assert.doesNotThrow(
+      () => validateSettingsValue({ ...BASE, provider }),
+      `provider ${String(provider)} must count as 「未设置」`,
+    )
+  }
+  assert.doesNotThrow(() => validateSettingsValue({ ...BASE, imap: null }), 'a missing endpoint is not a port violation')
+  assert.doesNotThrow(() => validateSettingsValue({ accountsYaml: NO_PROVIDER_VALUE }), 'a partial draft is a legal draft')
+  assert.throws(() => validateSettingsValue({ ...BASE, provider: 'hotdog' }), /未知的邮箱服务商 "hotdog"/)
+  assert.throws(() => validateSettingsValue({ ...BASE, provider: 123 }), /未知的邮箱服务商 123/)
+  assert.throws(() => validateSettingsValue({ ...BASE, imap: { ...BASE.imap, port: 0 } }), /IMAP 端口必须在 1-65535 之间/)
+
+  // The projection is what actually spreads over the row config, so an absent
+  // field must not appear as a key at all — `{...row, ...{provider: undefined}}`
+  // keeps undefined and loses the row's provider.
+  const projected = toEmailConfig({ accountsYaml: NO_PROVIDER_VALUE }, null)
+  assert.deepEqual(Object.keys(projected), ['accountsYaml'], 'absent fields are not projected')
+  assert.equal('provider' in projected, false)
+  // '' is the explicit 「自定义服务器」: clearing the row provider is still the point.
+  const cleared = toEmailConfig({ ...BASE, provider: '' }, null)
+  assert.equal('provider' in cleared, true)
+  assert.equal(cleared.provider, undefined)
+  assert.equal(toEmailConfig({ ...BASE, provider: 'qq' }, null).provider, 'qq')
+})
+
 // --- housekeeping -----------------------------------------------------------
 
 test('existing actions still behave (save conflict, watch, unsupported action)', async t => {
