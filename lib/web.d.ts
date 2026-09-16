@@ -14,6 +14,8 @@ export interface AccountCardData {
     name: string;
     /** undefined = 自定义服务器（无 provider 预设） */
     provider?: string;
+    /** 预设自带的显示名；没有 label 时省略，前端回退显示 provider 名 */
+    providerLabel?: string;
     user: string;
     hasPassword: boolean;
     imap: {
@@ -82,13 +84,9 @@ export declare class EmailSettingsBackend {
             raw: Record<string, unknown>;
         };
         presets: {
-            builtin: Record<string, ProviderPreset>;
             custom: Record<string, ServerPreset>;
-            error?: undefined;
-        } | {
+            error?: string;
             builtin: Record<string, ProviderPreset>;
-            custom: Record<string, ServerPreset>;
-            error: string;
         };
         whale: {
             url: string;
@@ -112,13 +110,9 @@ export declare class EmailSettingsBackend {
             raw: Record<string, unknown>;
         };
         presets: {
-            builtin: Record<string, ProviderPreset>;
             custom: Record<string, ServerPreset>;
-            error?: undefined;
-        } | {
+            error?: string;
             builtin: Record<string, ProviderPreset>;
-            custom: Record<string, ServerPreset>;
-            error: string;
         };
         whale: {
             url: string;

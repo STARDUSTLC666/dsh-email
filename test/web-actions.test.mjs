@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { apply, EmailPool, SETTINGS_ROUTE } from '../lib/index.js'
-import { parseAccountsYaml, parseServerPresets, PROVIDER_PRESETS, resolveEmailSettings, serializeAccountsYaml } from '../lib/config.js'
+import { parseAccountsYaml, parseServerPresets, PROVIDER_NAMES, PROVIDER_PRESETS, resolveEmailSettings, serializeAccountsYaml } from '../lib/config.js'
 
 const BASE = {
   provider: 'qq',
@@ -214,7 +214,7 @@ test('snapshot: an unknown provider degrades one card, never the list', async t 
   assert.equal(home.hasPassword, false)
 })
 
-test('snapshot: explicit account endpoints beat the preset, unknown keys stay in raw', async t => {
+test('snapshot: the card endpoints come from the preset, never from the account raw', async t => {
   const yaml = [
     'work:',
     '  provider: qq',
@@ -228,11 +228,15 @@ test('snapshot: explicit account endpoints beat the preset, unknown keys stay in
   const { get } = mount(t, { value: { accountsYaml: yaml } })
   const detail = (await get()).body.value.accountsDetail
   const work = detail.list[0]
-  assert.equal(work.imap.host, 'imap.corp.example', 'the account wins over the preset')
-  assert.equal(work.smtp.host, 'smtp.corp.example')
-  assert.equal(work.imap.port, 993, 'unset port still inherits the preset')
+  // An account stores a provider id: a stale hand-written endpoint must not
+  // show up in the editor as if it still drove the connection.
+  assert.equal(work.imap.host, 'imap.qq.com', 'the preset decides, not the stored copy')
+  assert.equal(work.smtp.host, 'smtp.qq.com')
+  assert.equal(work.imap.port, 993)
+  assert.equal(work.smtp.port, 465)
   // raw is the untouched mapping: the advanced key survives verbatim.
   assert.equal(detail.raw.work.imap.socketTimeoutMs, 9000)
+  assert.equal(detail.raw.work.imap.host, 'imap.corp.example', 'raw is what the advanced editor edits')
 })
 
 // --- parseAccounts ----------------------------------------------------------
@@ -366,13 +370,13 @@ test('serializeAccounts: a custom account writes no provider key; unknown keys s
   const out = body.value.accountsYaml
   assert.equal(/provider/.test(out), false, 'provider "" would resolve as 「provider "" 未知」')
   assert.match(out, /socketTimeoutMs: 9000/, 'an advanced key must survive in place')
-  assert.match(out, /host: imap\.new/)
-  assert.equal(/host: imap\.old/.test(out), false)
+  assert.equal(/host: imap\.new|host: imap\.old/.test(out), false, 'endpoints are never stored on an account')
   const parsed = parseAccountsYaml(out)
   assert.equal('provider' in parsed.map.work, false)
   assert.equal(parsed.map.work.imap.socketTimeoutMs, 9000)
-  assert.equal(parsed.map.work.imap.port, 143)
-  assert.equal(parsed.map.work.imap.secure, false)
+  assert.equal('host' in parsed.map.work.imap, false)
+  assert.equal('port' in parsed.map.work.imap, false)
+  assert.equal('secure' in parsed.map.work.imap, false)
 })
 
 test('serializeAccounts: no accounts serializes to "" (never "{}")', async t => {
@@ -586,19 +590,20 @@ test('serializeAccounts: output round-trips back through parseAccounts', async t
   const { post } = mount(t)
   const cards = [
     { name: 'work', provider: 'outlook', user: 'w@outlook.com', password: 'pw', inboxFolder: 'Archive' },
-    { name: 'custom', user: 'c@corp.example', imap: { host: 'imap.corp', port: 143, secure: false }, smtp: { host: 'smtp.corp', port: 25, secure: false } },
+    { name: 'corp', provider: 'corp', user: 'c@corp.example', password: 'pw' },
   ]
-  const written = await post({ action: 'serializeAccounts', accountsYaml: '', defaultAccount: 'custom', accounts: cards })
-  const reread = await post({ action: 'parseAccounts', value: { accountsYaml: written.body.value.accountsYaml } })
+  const written = await post({ action: 'serializeAccounts', serverPresets: CORP_PRESETS, accountsYaml: '', defaultAccount: 'corp', accounts: cards })
+  const reread = await post({ action: 'parseAccounts', serverPresets: CORP_PRESETS, value: { accountsYaml: written.body.value.accountsYaml } })
   assert.equal(reread.body.value.ok, true)
   assert.equal(reread.body.value.error, undefined)
-  assert.deepEqual(reread.body.value.list.map(card => card.name).sort(), ['custom', 'work'])
-  assert.equal(reread.body.value.defaultAccount, 'custom')
-  const custom = reread.body.value.list.find(card => card.name === 'custom')
-  assert.equal(custom.imap.host, 'imap.corp')
-  assert.equal(custom.imap.port, 143)
-  assert.equal(custom.imap.secure, false)
-  assert.equal(custom.smtp.port, 25)
+  assert.deepEqual(reread.body.value.list.map(card => card.name).sort(), ['corp', 'work'])
+  assert.equal(reread.body.value.defaultAccount, 'corp')
+  const corp = reread.body.value.list.find(card => card.name === 'corp')
+  assert.equal(corp.provider, 'corp', 'the custom preset name round-trips as the provider id')
+  assert.equal(corp.imap.host, 'imap.corp', 'and the endpoints come back from the preset table')
+  assert.equal(corp.imap.port, 143)
+  assert.equal(corp.imap.secure, false)
+  assert.equal(corp.smtp.port, 587)
   const work = reread.body.value.list.find(card => card.name === 'work')
   assert.equal(work.provider, 'outlook')
   assert.equal(work.smtp.port, 587, 'the outlook preset still expands')
@@ -954,42 +959,12 @@ test('presets from serverPresets never reach the pool fingerprint', async t => {
   assert.deepEqual(parseServerPresets(presets).corp.imap, { host: 'imap.corp' })
 })
 
-// --- serializeAccounts: a custom preset is an endpoint expansion, never a
-// --- provider reference ----------------------------------------------------
+// --- serializeAccounts: a provider name is a reference, not an expansion -----
 //
-// resolveAccount() only ever consults PROVIDER_PRESETS, so writing a custom
-// serverPresets name into the draft produced a document that saves fine and then
-// throws 「账号 "work" 的 provider "corp" 未知」 on the very next connection test —
-// and a hand-written `provider: corp` blew up the same way. The canonical form
-// for a custom preset is 「no provider key + the expanded endpoints」.
-
-test('serializeAccounts: a custom preset writes no provider key, the endpoints carry the account', async t => {
-  const { post } = mount(t)
-  const { status, body } = await post({
-    action: 'serializeAccounts',
-    accountsYaml: '',
-    defaultAccount: 'work',
-    accounts: [{
-      name: 'work',
-      provider: 'corp',
-      user: 'w@corp.example',
-      password: 'pw',
-      imap: { host: 'imap.corp', port: 143, secure: false },
-      smtp: { host: 'smtp.corp', port: 587, secure: false },
-    }],
-  })
-  assert.equal(status, 200)
-  const out = body.value.accountsYaml
-  assert.equal(/provider/.test(out), false, 'provider "corp" would resolve as 「provider "corp" 未知」')
-  const parsed = parseAccountsYaml(out)
-  assert.equal('provider' in parsed.map.work, false)
-  assert.deepEqual(parsed.map.work.imap, { host: 'imap.corp', port: 143, secure: false })
-  assert.deepEqual(parsed.map.work.smtp, { host: 'smtp.corp', port: 587, secure: false })
-  // The bug's real shape: the save succeeded and the *next* resolve threw.
-  const resolved = resolveEmailSettings({ accountsYaml: out })
-  assert.equal(resolved.accounts.get('work').imap.host, 'imap.corp')
-  assert.equal(resolved.accounts.get('work').smtp.host, 'smtp.corp')
-})
+// An account stores a provider id; resolveAccount() consults the built-in
+// presets and then the custom serverPresets, so a name the table defines is
+// what belongs in the document. The tests for that contract live above, next to
+// the CORP_PRESETS fixture.
 
 test('serializeAccounts: a built-in provider keeps its shorthand', async t => {
   const { post } = mount(t)
@@ -1008,10 +983,10 @@ test('serializeAccounts: a built-in provider keeps its shorthand', async t => {
   assert.equal(resolved.accounts.get('work').smtp.host, 'smtp.qq.com')
 })
 
-test('serializeAccounts: only an own key of PROVIDER_PRESETS is ever persisted', async t => {
+test('serializeAccounts: only an own key of the provider table is ever persisted', async t => {
   const { post } = mount(t)
-  // A plain PROVIDER_PRESETS[value] lookup would accept inherited names like
-  // "constructor" and hand a function to the YAML writer.
+  // A plain table lookup would accept inherited names like "constructor" and
+  // hand a function to the YAML writer (or blow up on its .imap.host).
   const { body } = await post({
     action: 'serializeAccounts',
     accountsYaml: '',
@@ -1021,20 +996,22 @@ test('serializeAccounts: only an own key of PROVIDER_PRESETS is ever persisted',
   const out = body.value.accountsYaml
   assert.equal(/provider/.test(out), false, 'an inherited Object member is not a preset name')
   assert.equal('provider' in parseAccountsYaml(out).map.weird, false)
-  assert.equal(resolveEmailSettings({ accountsYaml: out }).accounts.get('weird').imap.host, 'imap.x')
+  // With no provider and no stored endpoint there is nothing left to resolve —
+  // and that is the honest outcome: the card named no provider the table knows.
+  assert.throws(() => resolveEmailSettings({ accountsYaml: out }), /imap\.host 未填写/)
 })
 
-test('serializeAccounts heals a hand-written custom provider into explicit endpoints', async t => {
+test('serializeAccounts keeps a hand-written custom provider as the provider id', async t => {
   const presets = 'corp:\n  imap: { host: imap.corp, port: 143, secure: false }\n  smtp: { host: smtp.corp, port: 587, secure: false }\n'
   const source = 'work: { provider: corp, user: w@corp.example, password: pw }\n'
   const mounted = mount(t, { value: { accountsYaml: source, serverPresets: presets } })
-  // 1) The backend expands the custom preset into the card's endpoints — the
-  //    raw provider name still comes back for the dropdown's selected state.
+  // 1) The custom preset expands into the card — the provider name is the id.
   const card = (await mounted.get()).body.value.accountsDetail.list.find(entry => entry.name === 'work')
   assert.equal(card.provider, 'corp')
   assert.equal(card.imap.host, 'imap.corp', 'the custom preset is what fills the card')
   assert.equal(card.smtp.host, 'smtp.corp')
-  // 2) The editor sends that card straight back on an unrelated edit.
+  // 2) The editor sends that card straight back on an unrelated edit. The body
+  //    carries no serverPresets, so the stored table is what the route consults.
   const { status, body } = await mounted.post({
     action: 'serializeAccounts',
     accountsYaml: source,
@@ -1050,24 +1027,25 @@ test('serializeAccounts heals a hand-written custom provider into explicit endpo
   })
   assert.equal(status, 200)
   const out = body.value.accountsYaml
-  assert.equal(/provider/.test(out), false, 'the un-resolvable reference must not survive the save')
-  // 3) The healed draft resolves, and it resolves to the custom preset's values.
-  const resolved = resolveEmailSettings({ accountsYaml: out })
+  assert.match(out, /provider: corp/, 'the reference resolves, so it is what gets stored')
+  // 3) The saved draft resolves through the preset table, secret intact.
+  const resolved = resolveEmailSettings({ accountsYaml: out, serverPresets: presets })
   const work = resolved.accounts.get('work')
   assert.equal(work.imap.host, 'imap.corp')
   assert.equal(work.imap.port, 143)
   assert.equal(work.imap.secure, false)
   assert.equal(work.smtp.host, 'smtp.corp')
   assert.equal(work.smtp.port, 587)
-  assert.equal(work.password, 'pw', 'healing the provider must not cost the stored secret')
+  assert.equal(work.password, 'pw', 'keeping the provider must not cost the stored secret')
 })
 
-test('serializeAccounts: the degraded writer drops a custom provider too', async t => {
+test('serializeAccounts: the degraded writer keeps a resolvable custom provider and drops endpoints', async t => {
   const { post } = mount(t)
   // Broken source YAML: serializeAccountsDraft hands over to fallbackSerialize,
   // which builds its account maps from scratch (normalizeCardForYaml).
   const { status, body } = await post({
     action: 'serializeAccounts',
+    serverPresets: CORP_PRESETS,
     accountsYaml: 'work: [unclosed\n',
     defaultAccount: 'work',
     accounts: [{
@@ -1082,10 +1060,272 @@ test('serializeAccounts: the degraded writer drops a custom provider too', async
   assert.equal(status, 200)
   assert.equal(body.value.commentsDropped, true, 'this is the stringify path')
   const out = body.value.accountsYaml
-  assert.equal(/provider/.test(out), false)
+  assert.match(out, /provider: corp/)
   const parsed = parseAccountsYaml(out)
-  assert.equal('provider' in parsed.map.work, false)
-  assert.deepEqual(parsed.map.work.imap, { host: 'imap.corp', port: 143, secure: false })
-  const resolved = resolveEmailSettings({ accountsYaml: out })
+  assert.equal(parsed.map.work.provider, 'corp')
+  assert.equal('imap' in parsed.map.work, false, 'the degraded writer drops endpoints too')
+  assert.equal('smtp' in parsed.map.work, false)
+  const resolved = resolveEmailSettings({ accountsYaml: out, serverPresets: CORP_PRESETS })
   assert.equal(resolved.accounts.get('work').smtp.host, 'smtp.corp')
+})
+
+// --- accounts store a provider id; the endpoints come from the preset table --
+//
+// A preset name is now a *provider reference*, so it must survive the round trip
+// as a one-word shorthand. Endpoints never belong in the account document: they
+// are derived from the preset at resolution time, and a hand-written endpoint on
+// an existing YAML is washed out on the next save.
+
+const CORP_PRESETS = [
+  'corp:',
+  '  label: 公司邮箱',
+  '  imap: { host: imap.corp, port: 143, secure: false }',
+  '  smtp: { host: smtp.corp, port: 587, secure: false }',
+  '',
+].join('\n')
+
+test('serializeAccounts: a custom preset name is persisted as the provider, with no endpoint keys', async t => {
+  const { post } = mount(t)
+  const { status, body } = await post({
+    action: 'serializeAccounts',
+    serverPresets: CORP_PRESETS,
+    accountsYaml: '',
+    defaultAccount: 'work',
+    accounts: [{
+      name: 'work',
+      provider: 'corp',
+      user: 'w@corp.example',
+      password: 'pw',
+      imap: { host: 'imap.corp', port: 143, secure: false },
+      smtp: { host: 'smtp.corp', port: 587, secure: false },
+    }],
+  })
+  assert.equal(status, 200)
+  const out = body.value.accountsYaml
+  assert.match(out, /provider: corp/, 'the preset name is the account is the provider id')
+  const parsed = parseAccountsYaml(out)
+  assert.equal(parsed.map.work.provider, 'corp')
+  assert.equal('imap' in parsed.map.work, false, 'endpoints never belong in the account document')
+  assert.equal('smtp' in parsed.map.work, false)
+  assert.equal(/imap\.corp|smtp\.corp/.test(out), false, 'the expanded endpoints are not written either')
+  // The saved document resolves entirely through the preset table.
+  const resolved = resolveEmailSettings({ accountsYaml: out, serverPresets: CORP_PRESETS })
+  const work = resolved.accounts.get('work')
+  assert.equal(work.imap.host, 'imap.corp')
+  assert.equal(work.imap.port, 143)
+  assert.equal(work.smtp.host, 'smtp.corp')
+  assert.equal(work.password, 'pw')
+})
+
+test('serializeAccounts: without serverPresets in the body an unknown preset name is still dropped', async t => {
+  const { post } = mount(t)
+  // Backward compatibility: a front end that has not been updated yet sends no
+  // serverPresets, so the old "built-ins only" verdict stands.
+  const { body } = await post({
+    action: 'serializeAccounts',
+    accountsYaml: '',
+    defaultAccount: 'work',
+    accounts: [{ name: 'work', provider: 'corp', user: 'w@corp.example', password: 'pw' }],
+  })
+  const out = body.value.accountsYaml
+  assert.equal(/provider/.test(out), false)
+  assert.equal('provider' in parseAccountsYaml(out).map.work, false)
+})
+
+test('serializeAccounts: a custom preset in the body still leaves an unknown name alone', async t => {
+  const { post } = mount(t)
+  const { body } = await post({
+    action: 'serializeAccounts',
+    serverPresets: CORP_PRESETS,
+    accountsYaml: '',
+    defaultAccount: 'work',
+    accounts: [{ name: 'work', provider: 'hotdog', user: 'w@x.y', password: 'pw' }],
+  })
+  assert.equal(/provider/.test(body.value.accountsYaml), false, 'only real preset names are persisted')
+})
+
+test('serializeAccounts: a built-in name wins over a custom preset that shadows it', async t => {
+  const { post } = mount(t)
+  const { body } = await post({
+    action: 'serializeAccounts',
+    serverPresets: 'qq: { imap: { host: imap.evil }, smtp: { host: smtp.evil } }\n',
+    accountsYaml: '',
+    defaultAccount: 'work',
+    accounts: [{ name: 'work', provider: 'qq', user: 'w@qq.com', password: 'pw' }],
+  })
+  const out = body.value.accountsYaml
+  assert.match(out, /provider: qq/)
+  // Resolution consults PROVIDER_PRESETS first, so the shadowing entry never wins.
+  const resolved = resolveEmailSettings({ accountsYaml: out, serverPresets: 'qq: { imap: { host: imap.evil }, smtp: { host: smtp.evil } }\n' })
+  assert.equal(resolved.accounts.get('work').imap.host, 'imap.qq.com', 'built-ins are looked up first')
+})
+
+test('serializeAccounts washes hand-written endpoints out of an existing account', async t => {
+  const { post } = mount(t)
+  const source = [
+    'work:',
+    '  provider: qq',
+    '  user: w@qq.com',
+    '  password: pw',
+    '  imap:',
+    '    host: imap.old.example',
+    '    port: 143',
+    '    socketTimeoutMs: 9000',
+    '  smtp: { host: smtp.old.example }',
+    '',
+  ].join('\n')
+  const { status, body } = await post({
+    action: 'serializeAccounts',
+    accountsYaml: source,
+    defaultAccount: 'work',
+    accounts: [{ name: 'work', provider: 'qq', user: 'w@qq.com' }],
+  })
+  assert.equal(status, 200)
+  const out = body.value.accountsYaml
+  assert.equal(/imap\.old\.example|smtp\.old\.example/.test(out), false, 'the stored endpoints are washed away')
+  const parsed = parseAccountsYaml(out)
+  assert.equal(parsed.map.work.provider, 'qq')
+  assert.equal(parsed.map.work.password, 'pw', 'washing endpoints must not cost the stored secret')
+  assert.equal(parsed.map.work.user, 'w@qq.com')
+  // The account is now purely "provider qq", so the preset decides the endpoints.
+  const resolved = resolveEmailSettings({ accountsYaml: out })
+  assert.equal(resolved.accounts.get('work').imap.host, 'imap.qq.com')
+  assert.equal(resolved.accounts.get('work').imap.port, 993)
+})
+
+test('snapshot: a custom preset fills the card and reports its label', async t => {
+  const { get } = mount(t, {
+    value: { accountsYaml: 'work: { provider: corp, user: w@corp.example, password: pw }\n', serverPresets: CORP_PRESETS },
+  })
+  const card = (await get()).body.value.accountsDetail.list.find(entry => entry.name === 'work')
+  assert.equal(card.provider, 'corp')
+  assert.equal(card.providerLabel, '公司邮箱', 'the preset label rides along for the dropdown')
+  assert.equal(card.imap.host, 'imap.corp')
+  assert.equal(card.imap.port, 143)
+  assert.equal(card.smtp.host, 'smtp.corp')
+})
+
+test('snapshot: a built-in preset has no label, an unknown provider has neither endpoints nor label', async t => {
+  const { get } = mount(t, {
+    value: { accountsYaml: 'work: { provider: qq, user: w@qq.com }\nweird: { provider: hotdog, user: w@x.y }\n', serverPresets: CORP_PRESETS },
+  })
+  const list = (await get()).body.value.accountsDetail.list
+  const work = list.find(entry => entry.name === 'work')
+  assert.equal(work.providerLabel, undefined, 'a built-in carries no label of its own')
+  const weird = list.find(entry => entry.name === 'weird')
+  assert.equal(weird.providerLabel, undefined)
+  assert.equal(weird.imap.host, '', 'no preset to expand -> placeholder host')
+  assert.equal(weird.imap.port, 993)
+  assert.equal(weird.smtp.port, 465)
+})
+
+test('parseAccounts: a custom preset in the body expands the card', async t => {
+  const { post } = mount(t)
+  const { body } = await post({
+    action: 'parseAccounts',
+    serverPresets: CORP_PRESETS,
+    value: { accountsYaml: 'work: { provider: corp, user: w@corp.example }\n' },
+  })
+  assert.equal(body.value.ok, true)
+  const card = body.value.list[0]
+  assert.equal(card.provider, 'corp')
+  assert.equal(card.providerLabel, '公司邮箱')
+  assert.equal(card.imap.host, 'imap.corp')
+  assert.equal(card.smtp.host, 'smtp.corp')
+})
+
+test('a preset deleted after saving makes the error name the built-ins and the remaining presets', async t => {
+  const { post } = mount(t)
+  // Saved while "corp" existed; the preset is gone from the body that follows.
+  const { body } = await post({
+    action: 'serializeAccounts',
+    accountsYaml: 'work: { provider: corp, user: w@corp.example, password: pw }\n',
+    serverPresets: CORP_PRESETS,
+    defaultAccount: 'work',
+    accounts: [{ name: 'work', provider: 'corp', user: 'w@corp.example' }],
+  })
+  const out = body.value.accountsYaml
+  assert.match(out, /provider: corp/)
+  // Resolution with the preset list no longer carrying "corp" must still be plain
+  // about what is wrong and what would be accepted.
+  let message = ''
+  try {
+    resolveEmailSettings({ accountsYaml: out, serverPresets: 'home: { imap: { host: imap.home }, smtp: { host: smtp.home } }\n' })
+  } catch (error) {
+    message = error.message
+  }
+  assert.match(message, /账号 "work" 的 provider "corp" 未知/)
+  for (const name of [...PROVIDER_NAMES, 'home']) assert.equal(message.includes(name), true, `must name ${name}`)
+})
+
+test('test action: a custom preset provider resolves (the stored table is consulted)', async t => {
+  // Stub the dial: this test is about which host gets dialled, not the network.
+  t.mock.method(EmailPool.prototype, 'withImap', async function (name) { return name })
+  const mounted = mount(t, {
+    value: { accountsYaml: 'work: { provider: corp, user: w@corp.example, password: pw }\n', serverPresets: CORP_PRESETS },
+  })
+  // The card's 「测试连接」 posts only accountsYaml; serverPresets is absent from
+  // the body, so the route must fall back to the stored table.
+  const { status, body } = await mounted.post({ action: 'test', account: 'work', value: { accountsYaml: 'work: { provider: corp, user: w@corp.example, password: pw }\n' } })
+  assert.equal(status, 200, JSON.stringify(body))
+  assert.equal(body.value.imapHost, 'imap.corp')
+  assert.equal(body.value.imapPort, 143)
+})
+
+test('test action: a custom preset posted in the body resolves before it is saved', async t => {
+  t.mock.method(EmailPool.prototype, 'withImap', async function (name) { return name })
+  // Nothing stored yet: the user typed the preset and the card in one draft.
+  const { post } = mount(t)
+  const { status, body } = await post({
+    action: 'test',
+    account: 'work',
+    value: { accountsYaml: 'work: { provider: corp, user: w@corp.example, password: pw }\n', serverPresets: CORP_PRESETS },
+  })
+  assert.equal(status, 200, JSON.stringify(body))
+  assert.equal(body.value.imapHost, 'imap.corp')
+  assert.equal(body.value.imapPort, 143)
+})
+
+test('save action: a value naming a custom preset in effect is accepted', async t => {
+  const mounted = mount(t, { revision: 7, value: { serverPresets: CORP_PRESETS } })
+  const value = { ...BASE, provider: 'corp', serverPresets: CORP_PRESETS }
+  const { status, body } = await mounted.post({ action: 'save', expectedRevision: 7, value })
+  assert.equal(status, 200, JSON.stringify(body))
+  assert.equal(body.value.settings.revision, 8)
+
+  // Without the preset table the same name is still an unknown provider.
+  const strict = mount(t, { revision: 7 })
+  const rejected = await strict.post({ action: 'save', expectedRevision: 7, value: { ...BASE, provider: 'corp' } })
+  assert.equal(rejected.status, 400)
+  assert.match(rejected.body.error.message, /未知的邮箱服务商 "corp"/)
+})
+
+test('an account with no provider loses its hand-written endpoints on save (documented consequence)', async t => {
+  const { post } = mount(t)
+  // 「自定义服务器」 is the one card shape with no preset behind it, so its
+  // endpoints live only in the YAML. The wash is unconditional by design —
+  // every account endpoint is preset-derived — which means such an account has
+  // nothing left to resolve and says so. Pinned deliberately: if the front end
+  // keeps offering a provider-less card, it must stop posting endpoints and
+  // start requiring a preset, or this test is the tripwire that fires.
+  const source = 'work: { user: w@corp.example, password: pw, imap: { host: imap.corp, port: 143 }, smtp: { host: smtp.corp } }\n'
+  const { status, body } = await post({
+    action: 'serializeAccounts',
+    accountsYaml: source,
+    defaultAccount: 'work',
+    accounts: [{
+      name: 'work',
+      provider: '',
+      user: 'w@corp.example',
+      imap: { host: 'imap.corp', port: 143 },
+      smtp: { host: 'smtp.corp' },
+    }],
+  })
+  assert.equal(status, 200)
+  const out = body.value.accountsYaml
+  assert.equal(/imap\.corp|smtp\.corp|host:/.test(out), false, 'the endpoints are gone')
+  const parsed = parseAccountsYaml(out)
+  assert.equal(parsed.map.work.user, 'w@corp.example')
+  assert.equal(parsed.map.work.password, 'pw', 'the credentials survive — only the endpoints are dropped')
+  assert.throws(() => resolveEmailSettings({ accountsYaml: out }), /imap\.host 未填写/, 'and the loss is reported, not silent')
 })

@@ -1,4 +1,11 @@
+/** The 8 built-in provider ids. A `provider` may also name a custom preset. */
 export type ProviderName = 'qq' | '163' | '126' | 'sina' | 'aliyun' | 'gmail' | 'outlook' | 'icloud';
+/**
+ * A provider id as an account stores it: one of the built-in names, or the name
+ * of a custom `serverPresets` entry. The union keeps autocomplete for the
+ * built-ins while admitting a preset name the schema cannot know in advance.
+ */
+export type ProviderRef = ProviderName | (string & {});
 export interface ImapConfig {
     host?: string;
     port?: number;
@@ -13,7 +20,8 @@ export interface SmtpConfig {
 }
 /** One mailbox account. Top-level shorthand fields act as shared defaults. */
 export interface AccountConfig {
-    provider?: ProviderName;
+    /** Built-in provider name, or a custom serverPresets name. */
+    provider?: ProviderRef;
     user?: string;
     password?: string;
     imap?: ImapConfig;
@@ -59,6 +67,24 @@ export interface ProviderPreset {
         port: number;
         secure: boolean;
     };
+}
+/**
+ * Anything that can stand in for a provider: a built-in preset, or a custom
+ * `serverPresets` entry (whose port/secure are optional and whose label is
+ * editor-facing only). Both are looked up the same way.
+ */
+export interface EndpointPreset {
+    imap: {
+        host: string;
+        port?: number;
+        secure?: boolean;
+    };
+    smtp: {
+        host: string;
+        port?: number;
+        secure?: boolean;
+    };
+    label?: string;
 }
 export declare const PROVIDER_PRESETS: Record<string, ProviderPreset>;
 export declare const PROVIDER_NAMES: string[];
@@ -138,6 +164,14 @@ export declare function serializeAccountsYaml(raw: unknown, defaultAccount?: str
  * account is not fully specified.
  */
 export declare function resolveEmailSettings(config: EmailConfig | undefined): ResolvedEmailSettings;
+/** Every name a `provider:` may legally use, built-ins first. */
+export declare function providerNames(custom?: Record<string, ServerPreset>): string[];
+/**
+ * The custom preset names in a serverPresets text, best-effort: a malformed
+ * text yields no names instead of throwing. Callers use this to answer "may
+ * this provider name be written?", where a broken table can only mean "no".
+ */
+export declare function presetNamesIn(text: string | undefined): string[];
 /** v0.1-compatible wrapper: resolve the single (or default) account. */
 export declare function resolveEmailConfig(config: EmailConfig | undefined): ResolvedEmailConfig;
 export declare function clampInt(value: unknown, fallback: number, min: number, max: number): number;

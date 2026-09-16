@@ -2,7 +2,15 @@ import { homedir } from 'node:os'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { join } from 'node:path'
 
+/** The 8 built-in provider ids. A `provider` may also name a custom preset. */
 export type ProviderName = 'qq' | '163' | '126' | 'sina' | 'aliyun' | 'gmail' | 'outlook' | 'icloud'
+
+/**
+ * A provider id as an account stores it: one of the built-in names, or the name
+ * of a custom `serverPresets` entry. The union keeps autocomplete for the
+ * built-ins while admitting a preset name the schema cannot know in advance.
+ */
+export type ProviderRef = ProviderName | (string & {})
 
 export interface ImapConfig {
   host?: string
@@ -20,7 +28,8 @@ export interface SmtpConfig {
 
 /** One mailbox account. Top-level shorthand fields act as shared defaults. */
 export interface AccountConfig {
-  provider?: ProviderName
+  /** Built-in provider name, or a custom serverPresets name. */
+  provider?: ProviderRef
   user?: string
   password?: string
   imap?: ImapConfig
@@ -60,6 +69,17 @@ export interface EmailConfig extends AccountConfig {
 export interface ProviderPreset {
   imap: { host: string; port: number; secure: boolean }
   smtp: { host: string; port: number; secure: boolean }
+}
+
+/**
+ * Anything that can stand in for a provider: a built-in preset, or a custom
+ * `serverPresets` entry (whose port/secure are optional and whose label is
+ * editor-facing only). Both are looked up the same way.
+ */
+export interface EndpointPreset {
+  imap: { host: string; port?: number; secure?: boolean }
+  smtp: { host: string; port?: number; secure?: boolean }
+  label?: string
 }
 
 export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
@@ -261,12 +281,24 @@ export function resolveEmailSettings(config: EmailConfig | undefined): ResolvedE
   const entries = parsedYaml !== undefined
     ? parsedYaml.map
     : (raw.accounts === undefined || Object.keys(raw.accounts).length === 0 ? undefined : raw.accounts)
+  // The custom preset table is read once, here, and never stored on the result:
+  // it is a lookup source for provider names, not part of the resolved config.
+  // A broken preset text degrades to "no custom presets" — the account-level
+  // error below stays explicit about which name could not be resolved.
+  let customPresets: Record<string, ServerPreset> = {}
+  try {
+    customPresets = parseServerPresets(raw.serverPresets ?? '')
+  } catch {
+    customPresets = {}
+  }
+  const providers = providerTable(customPresets)
+  const known = providerNames(customPresets)
   const accounts = new Map<string, ResolvedEmailConfig>()
   if (entries === undefined) {
-    accounts.set('default', resolveAccount('default', common, {}, true))
+    accounts.set('default', resolveAccount('default', common, {}, true, providers, known))
   } else {
     for (const [name, acc] of Object.entries(entries)) {
-      accounts.set(name, resolveAccount(name, common, acc ?? {}, false))
+      accounts.set(name, resolveAccount(name, common, acc ?? {}, false, providers, known))
     }
   }
   let defaultName: string
@@ -298,11 +330,57 @@ export function resolveEmailSettings(config: EmailConfig | undefined): ResolvedE
   }
 }
 
+/**
+ * The provider lookup order: the 8 built-ins first, then the custom presets.
+ * A built-in name always wins, so a custom preset cannot shadow `qq` — and an
+ * inherited Object member (`constructor`, `toString`) is never a provider.
+ *
+ * The table has a null prototype on purpose: a plain `{}` answers
+ * `table['constructor']` with Object's own constructor through the prototype
+ * chain, which would be mistaken for a preset and then blow up on `.imap.host`.
+ */
+function providerTable(custom: Record<string, ServerPreset>): Record<string, EndpointPreset> {
+  const table: Record<string, EndpointPreset> = Object.create(null)
+  for (const [name, preset] of Object.entries(PROVIDER_PRESETS)) table[name] = preset
+  for (const [name, preset] of Object.entries(custom)) {
+    if (table[name] === undefined) table[name] = preset
+  }
+  return table
+}
+
+/** Every name a `provider:` may legally use, built-ins first. */
+export function providerNames(custom: Record<string, ServerPreset> = {}): string[] {
+  const names = [...PROVIDER_NAMES]
+  for (const name of Object.keys(custom)) if (!names.includes(name)) names.push(name)
+  return names
+}
+
+/**
+ * The custom preset names in a serverPresets text, best-effort: a malformed
+ * text yields no names instead of throwing. Callers use this to answer "may
+ * this provider name be written?", where a broken table can only mean "no".
+ */
+export function presetNamesIn(text: string | undefined): string[] {
+  try {
+    return Object.keys(parseServerPresets(text ?? ''))
+  } catch {
+    return []
+  }
+}
+
 /** Merge one account over the shared shorthand and validate it. */
-function resolveAccount(name: string, common: AccountConfig, acc: AccountConfig, allowEnvPassword: boolean): ResolvedEmailConfig {
-  const preset = acc.provider === undefined ? PROVIDER_PRESETS[common.provider ?? ''] : PROVIDER_PRESETS[acc.provider]
-  if ((acc.provider ?? common.provider) !== undefined && preset === undefined) {
-    throw new Error(`dsh-email：账号 "${name}" 的 provider "${acc.provider ?? common.provider}" 未知，可选：${PROVIDER_NAMES.join('/')}；或省略 provider 直接填 imap.host 与 smtp.host`)
+function resolveAccount(
+  name: string,
+  common: AccountConfig,
+  acc: AccountConfig,
+  allowEnvPassword: boolean,
+  providers: Record<string, EndpointPreset>,
+  known: string[],
+): ResolvedEmailConfig {
+  const requested = acc.provider ?? common.provider
+  const preset = requested === undefined ? undefined : providers[requested]
+  if (requested !== undefined && preset === undefined) {
+    throw new Error(`dsh-email：账号 "${name}" 的 provider "${requested}" 未知，可选：${known.join('/')}；或省略 provider 直接填 imap.host 与 smtp.host`)
   }
   const user = (acc.user ?? common.user ?? '').trim()
   // The settings form uses '' for an empty password. In single-account mode
@@ -323,7 +401,7 @@ function resolveAccount(name: string, common: AccountConfig, acc: AccountConfig,
   const problems: string[] = []
   if (user === '') problems.push(`账号 "${name}" 的 user（邮箱地址）未填写`)
   if (password === '') problems.push(`账号 "${name}" 的 password 未填写（单账号可用环境变量 ${EMAIL_PASSWORD_ENV}）`)
-  if (imap.host === undefined || imap.host === '') problems.push(`账号 "${name}" 的 imap.host 未填写（可填 provider 预设：${PROVIDER_NAMES.join('/')}）`)
+  if (imap.host === undefined || imap.host === '') problems.push(`账号 "${name}" 的 imap.host 未填写（可填 provider 预设：${known.join('/')}）`)
   if (smtp.host === undefined || smtp.host === '') problems.push(`账号 "${name}" 的 smtp.host 未填写（同上）`)
   if (problems.length > 0) {
     throw new Error(`dsh-email 未配置：${problems.join('；')}。请在 profile 的 cordis.patch.yml 中覆盖 tool-email 行并重启（见插件 README）`)

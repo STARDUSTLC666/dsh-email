@@ -190,12 +190,17 @@ function describeValue(value: unknown): string {
  * and the card editor's own POST never carries the form fields. 「Missing」 is
  * 「未设置」 for every one of them, exactly as toEmailConfig projects them, so a
  * partial draft is validated only for the fields it actually has.
+ *
+ * `extraProviders` are the custom preset names in effect: the settings page's
+ * provider dropdown offers them beside the 8 built-ins, so a value naming one
+ * is a legal choice, not an unknown provider.
  */
-export function validateSettingsValue(value: EmailSettingsValue): void {
+export function validateSettingsValue(value: EmailSettingsValue, extraProviders: readonly string[] = []): void {
   const draft = (value ?? {}) as Partial<EmailSettingsValue>
   const provider = draft.provider
-  if (isSet(provider) && provider !== '' && !PROVIDER_NAMES.includes(provider)) {
-    throw new Error('未知的邮箱服务商 ' + describeValue(provider) + '，可选：' + PROVIDER_NAMES.join('/') + '（或留空手填 IMAP/SMTP 主机）')
+  if (isSet(provider) && provider !== '' && !PROVIDER_NAMES.includes(provider) && !extraProviders.includes(provider)) {
+    const names = [...PROVIDER_NAMES, ...extraProviders]
+    throw new Error('未知的邮箱服务商 ' + describeValue(provider) + '，可选：' + names.join('/') + '（或留空手填 IMAP/SMTP 主机）')
   }
   const imapPort = endpointPort(draft.imap)
   if (portOutOfRange(imapPort)) {

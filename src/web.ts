@@ -6,10 +6,12 @@ import { SETTINGS_NAMESPACE, toEmailConfig, validateSettingsValue, type EmailSet
 import {
   parseAccountsYaml,
   parseServerPresets,
+  presetNamesIn,
   PROVIDER_PRESETS,
   resolveEmailSettings,
   serializeAccountsYaml,
   type EmailConfig,
+  type EndpointPreset,
   type ProviderPreset,
   type ServerPreset,
 } from './config.js'
@@ -41,6 +43,8 @@ export interface AccountCardData {
   name: string
   /** undefined = 自定义服务器（无 provider 预设） */
   provider?: string
+  /** 预设自带的显示名；没有 label 时省略，前端回退显示 provider 名 */
+  providerLabel?: string
   user: string
   hasPassword: boolean
   imap: { host: string; port: number; secure: boolean }
@@ -85,26 +89,17 @@ export interface AccountCardInput {
 }
 
 /**
- * One endpoint for the card, resolved exactly like resolveAccount(): the
- * account's own fields win, the provider preset fills the gaps, and a
- * placeholder closes whatever is still missing. Empty is a legitimate value —
- * the card is the draft, not a validated config.
+ * One endpoint for the card, resolved from the provider preset: a preset value
+ * wins where it has one, and a placeholder closes whatever is still missing.
+ * Empty is a legitimate value — the card is the draft, not a validated config.
  */
 function endpointOf(
-  raw: unknown,
   preset: ProviderPreset['imap'] | ServerPreset['imap'] | undefined,
   fallback: Endpoint,
 ): Endpoint {
-  const value = raw !== null && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {}
-  const host = typeof value.host === 'string' && value.host !== ''
-    ? value.host
-    : (typeof preset?.host === 'string' ? preset.host : fallback.host)
-  const port = typeof value.port === 'number' && Number.isFinite(value.port)
-    ? value.port
-    : (typeof preset?.port === 'number' ? preset.port : fallback.port)
-  const secure = typeof value.secure === 'boolean'
-    ? value.secure
-    : (typeof preset?.secure === 'boolean' ? preset.secure : fallback.secure)
+  const host = typeof preset?.host === 'string' ? preset.host : fallback.host
+  const port = typeof preset?.port === 'number' ? preset.port : fallback.port
+  const secure = typeof preset?.secure === 'boolean' ? preset.secure : fallback.secure
   return { host, port, secure }
 }
 
@@ -113,6 +108,10 @@ function endpointOf(
  * half-filled account is exactly what the user is typing, so it must still
  * render as a card. Nothing here resolves, validates or touches the network —
  * an unknown provider degrades that one card's endpoints, never the list.
+ *
+ * The endpoints are read from the *preset* only: an account stores a provider
+ * id, so a stale hand-written `imap.host` in an existing YAML must not show up
+ * in the editor as if it still drove the connection.
  */
 function buildAccountCards(
   raw: Record<string, unknown>,
@@ -125,20 +124,34 @@ function buildAccountCards(
       ? value as Record<string, unknown>
       : {}
     const providerName = typeof account.provider === 'string' && account.provider !== '' ? account.provider : undefined
-    const builtin = providerName === undefined ? undefined : PROVIDER_PRESETS[providerName]
-    const custom = providerName === undefined ? undefined : presets[providerName]
+    const preset = providerName === undefined ? undefined : providerOf(providerName, presets)
     list.push({
       name,
       provider: providerName,
+      ...(preset?.label !== undefined && preset.label !== '' ? { providerLabel: preset.label } : {}),
       user: typeof account.user === 'string' ? account.user : '',
       hasPassword: typeof account.password === 'string' && account.password !== '',
-      imap: endpointOf(account.imap, builtin?.imap ?? custom?.imap, IMAP_FALLBACK),
-      smtp: endpointOf(account.smtp, builtin?.smtp ?? custom?.smtp, SMTP_FALLBACK),
+      imap: endpointOf(preset?.imap, IMAP_FALLBACK),
+      smtp: endpointOf(preset?.smtp, SMTP_FALLBACK),
       inboxFolder: typeof account.inboxFolder === 'string' && account.inboxFolder !== '' ? account.inboxFolder : 'INBOX',
       isDefault: name === defaultAccount,
     })
   }
   return list
+}
+
+/**
+ * Parse the custom preset table. A broken text degrades to "no custom presets"
+ * and reports why: the account cards must keep rendering so the user can fix
+ * the YAML, and the writer must reach the same verdict as the reader — a name
+ * that exists only in an unparseable table is not a name.
+ */
+function customPresetsOf(serverPresets: string | undefined): { custom: Record<string, ServerPreset>; error?: string } {
+  try {
+    return { custom: parseServerPresets(serverPresets ?? '') as Record<string, ServerPreset> }
+  } catch (error) {
+    return { custom: {}, error: messageOf(error, 'serverPresets 解析失败') }
+  }
 }
 
 /** The 8 built-in presets plus whatever the user defined in serverPresets. */
@@ -147,13 +160,17 @@ function presetsSnapshot(serverPresets: string | undefined) {
   for (const [name, preset] of Object.entries(PROVIDER_PRESETS)) {
     builtin[name] = { imap: { ...preset.imap }, smtp: { ...preset.smtp } }
   }
-  try {
-    return { builtin, custom: parseServerPresets(serverPresets ?? '') as Record<string, ServerPreset> }
-  } catch (error) {
-    // A broken preset list degrades to "no custom presets" and reports why:
-    // the account cards must keep rendering so the user can fix the YAML.
-    return { builtin, custom: {} as Record<string, ServerPreset>, error: messageOf(error, 'serverPresets 解析失败') }
-  }
+  return { builtin, ...customPresetsOf(serverPresets) }
+}
+
+/**
+ * Resolve a provider name to its preset, in the same order resolveAccount()
+ * uses: the 8 built-ins first, then the custom serverPresets. A name that
+ * matches neither (or an inherited Object member) has no preset.
+ */
+function providerOf(name: string, custom: Record<string, ServerPreset>): EndpointPreset | undefined {
+  if (Object.prototype.hasOwnProperty.call(PROVIDER_PRESETS, name)) return PROVIDER_PRESETS[name]
+  return Object.prototype.hasOwnProperty.call(custom, name) ? custom[name] : undefined
 }
 
 /**
@@ -273,38 +290,45 @@ function ensureMap(doc: Document, node: YAMLMap, key: unknown): YAMLMap {
   return fresh
 }
 
-function writeEndpoint(doc: Document, account: YAMLMap, key: 'imap' | 'smtp', endpoint: unknown): void {
-  if (endpoint === undefined) return
-  const raw = endpoint !== null && typeof endpoint === 'object' && !Array.isArray(endpoint)
-    ? endpoint as Record<string, unknown>
-    : {}
-  // Only the three known keys are touched, so an advanced key the card does
-  // not model (socketTimeoutMs, connectionTimeoutMs) survives in place.
-  const target = ensureMap(doc, account, key)
-  writeField(target, 'host', typeof raw.host === 'string' ? raw.host : undefined)
-  writeField(target, 'port', typeof raw.port === 'number' && Number.isFinite(raw.port) ? raw.port : undefined)
-  writeField(target, 'secure', typeof raw.secure === 'boolean' ? raw.secure : undefined)
+/**
+ * Wash the endpoint fields out of one stored imap/smtp node.
+ *
+ * An account stores a provider id; host/port/secure are expanded from the
+ * preset at resolution time, so a hand-written copy is stale by definition and
+ * must not survive an edit. Only those three keys go: an advanced key the card
+ * does not model (socketTimeoutMs, connectionTimeoutMs) is not an endpoint and
+ * stays exactly where it was. An endpoint map left with nothing in it is
+ * removed, so the account keeps only the fields that still mean something.
+ */
+function washEndpoint(account: YAMLMap, key: 'imap' | 'smtp'): void {
+  const target = account.get(key, true)
+  if (!isMap(target)) return
+  for (const field of ['host', 'port', 'secure']) target.delete(field)
+  if (target.items.length === 0) account.delete(key)
 }
 
 /**
- * The `provider` value that may be written back to accountsYaml: a built-in
- * preset name, or nothing at all.
+ * The `provider` value that may be written back to accountsYaml.
  *
- * A custom `serverPresets` entry is an *endpoint expansion*, not a provider
- * reference. resolveAccount() only ever consults PROVIDER_PRESETS, so persisting
- * the custom name makes resolution throw 「账号 "work" 的 provider "corp" 未知」
- * the moment the draft is saved — the card already carries the expanded
- * endpoints, so "no provider key + explicit endpoints" is the canonical form for
- * a custom preset. Any other unknown name is dropped for exactly the same
- * reason, as is '' (which writeField/delete already treats as "no key").
+ * The account stores a provider *id* and nothing else, so a name the provider
+ * table can resolve is exactly what belongs in the document: a built-in preset,
+ * or a custom `serverPresets` entry (resolveAccount() consults built-ins first
+ * and then the custom table). Anything else — a name the user typed that no
+ * preset defines, '' — is dropped, because persisting it would only produce
+ * 「账号 "work" 的 provider "corp" 未知」 on the very next connection.
+ *
+ * `customNames` is the set of preset names in effect for this request. The card
+ * editor posts its own control bundle, and an older front end sends no
+ * serverPresets at all: the empty set then reproduces the previous
+ * "built-ins only" behaviour rather than inventing names.
  *
  * hasOwnProperty, not a plain lookup: `constructor`/`toString` must not be
  * mistaken for preset names through the prototype chain.
  */
-function persistedProvider(provider: unknown): string | undefined {
-  return typeof provider === 'string' && Object.prototype.hasOwnProperty.call(PROVIDER_PRESETS, provider)
-    ? provider
-    : undefined
+function persistedProvider(provider: unknown, customNames: ReadonlySet<string>): string | undefined {
+  if (typeof provider !== 'string' || provider === '') return undefined
+  if (Object.prototype.hasOwnProperty.call(PROVIDER_PRESETS, provider)) return provider
+  return customNames.has(provider) ? provider : undefined
 }
 
 /**
@@ -312,14 +336,23 @@ function persistedProvider(provider: unknown): string | undefined {
  * disappears (writing it back resolves as 「provider "" 未知」) and a numeric
  * password becomes a string (YAML would otherwise read back a number).
  *
+ * The card's `imap`/`smtp` are deliberately *not* written: an account stores a
+ * provider id, and the endpoints are expanded from the preset table at
+ * resolution time. Writing them back would freeze a stale copy of a preset the
+ * user may later edit.
+ *
  * `inheritedPassword` is the value stored in the source YAML for this account.
  * It is used only when the card carries no password at all — see the three-state
  * contract on AccountCardInput: the card omits the field whenever the editor has
  * nothing to say about it, which must leave the stored secret untouched.
  */
-function normalizeCardForYaml(card: AccountCardInput, inheritedPassword?: unknown): Record<string, unknown> {
+function normalizeCardForYaml(
+  card: AccountCardInput,
+  customNames: ReadonlySet<string>,
+  inheritedPassword?: unknown,
+): Record<string, unknown> {
   const out: Record<string, unknown> = {}
-  const provider = persistedProvider(card.provider)
+  const provider = persistedProvider(card.provider, customNames)
   if (provider !== undefined) out.provider = provider
   if (card.user !== undefined) out.user = card.user
   if (card.password === undefined) {
@@ -333,8 +366,6 @@ function normalizeCardForYaml(card: AccountCardInput, inheritedPassword?: unknow
       : card.password
   }
   if (card.inboxFolder !== undefined) out.inboxFolder = card.inboxFolder
-  if (card.imap !== undefined) out.imap = { ...card.imap }
-  if (card.smtp !== undefined) out.smtp = { ...card.smtp }
   return out
 }
 
@@ -361,6 +392,7 @@ function fallbackSerialize(
   cards: AccountCardInput[],
   defaultAccount: string,
   source: string,
+  customNames: ReadonlySet<string>,
 ): { accountsYaml: string; passwordsDropped?: boolean } {
   let stored: Record<string, unknown> | undefined
   try {
@@ -380,7 +412,7 @@ function fallbackSerialize(
       const { present, value } = storedPasswordOf(stored, name)
       if (present) inherited = value
     }
-    raw[name] = normalizeCardForYaml(card, inherited)
+    raw[name] = normalizeCardForYaml(card, customNames, inherited)
   }
   return {
     accountsYaml: serializeAccountsYaml(raw, defaultAccount),
@@ -401,11 +433,12 @@ function serializeAccountsDraft(
   source: string,
   cards: AccountCardInput[],
   defaultAccount: string,
+  customNames: ReadonlySet<string>,
 ): { accountsYaml: string; commentsDropped?: boolean; passwordsDropped?: boolean } {
   const doc = parseDocument(source)
   // parseDocument never throws — a broken document surfaces as doc.errors, and
   // String(doc) then refuses to run at all. Degrade to the stringify path.
-  if (doc.errors.length > 0) return { ...fallbackSerialize(cards, defaultAccount, source), commentsDropped: true }
+  if (doc.errors.length > 0) return { ...fallbackSerialize(cards, defaultAccount, source, customNames), commentsDropped: true }
   let root: YAMLMap
   if (doc.contents === null) {
     root = doc.createNode({}) as unknown as YAMLMap
@@ -414,7 +447,7 @@ function serializeAccountsDraft(
     root = doc.contents as YAMLMap
   } else {
     // A sequence or scalar document cannot carry accounts at all.
-    return { ...fallbackSerialize(cards, defaultAccount, source), commentsDropped: true }
+    return { ...fallbackSerialize(cards, defaultAccount, source, customNames), commentsDropped: true }
   }
 
   const desired = new Set(cards.map(card => card.name as string))
@@ -442,10 +475,10 @@ function serializeAccountsDraft(
       // Reuse the stored key node (163 vs "163") so the name keeps its spelling.
       account = ensureMap(doc, root, rawKeyOf(pair))
     }
-    // Only a built-in preset name may be persisted; a custom preset (or any
-    // unknown name the user typed) is an endpoint expansion, so the key is
-    // deleted and the expanded imap/smtp below carry the connection instead.
-    writeField(account, 'provider', persistedProvider(card.provider))
+    // The provider is the account's whole connection identity: a resolvable
+    // preset name is written, anything else deletes the key. Endpoints are
+    // never written — a stored copy is washed out below instead.
+    writeField(account, 'provider', persistedProvider(card.provider, customNames))
     writeField(account, 'user', card.user)
     // Password is three-state, unlike every other field: the card is never given
     // the plaintext (snapshot exposes hasPassword only), so an omitted password
@@ -463,8 +496,11 @@ function serializeAccountsDraft(
         : card.password)
     }
     writeField(account, 'inboxFolder', card.inboxFolder)
-    writeEndpoint(doc, account, 'imap', card.imap)
-    writeEndpoint(doc, account, 'smtp', card.smtp)
+    // Endpoints are washed, not written: an account is a provider id, and a
+    // hand-written host/port/secure in an older YAML is exactly the stale copy
+    // this migration removes.
+    washEndpoint(account, 'imap')
+    washEndpoint(account, 'smtp')
   }
 
   if (defaultAccount !== '') root.set('defaultAccount', defaultAccount)
@@ -547,7 +583,12 @@ export class EmailSettingsBackend {
 
   /** Effective config for the stored value (row + user-set fields only). */
   private effectiveStored(): EmailConfig {
-    return { ...this.rowConfig, ...toEmailConfig(this.scope.get() as EmailSettingsValue, this.userSection()) }
+    const stored = this.scope.get() as EmailSettingsValue
+    const merged = { ...this.rowConfig, ...toEmailConfig(stored, this.userSection()) }
+    // toEmailConfig drops serverPresets — it must never enter the fingerprint —
+    // but resolution needs it as a provider lookup source. The scope value
+    // already resolves row-vs-user precedence for it, so it is re-added as-is.
+    return { ...merged, ...(typeof stored?.serverPresets === 'string' ? { serverPresets: stored.serverPresets } : {}) }
   }
 
   async snapshot() {
@@ -590,7 +631,9 @@ export class EmailSettingsBackend {
 
   async save(value: EmailSettingsValue, expectedRevision: number) {
     if (this.ctx.settings.writable === false) throw new Error('settings provider is read-only')
-    validateSettingsValue(value)
+    // The provider dropdown offers the custom preset names, so a value naming
+    // one of them is a legal choice rather than an unknown provider.
+    validateSettingsValue(value, presetNamesIn(value?.serverPresets ?? this.scope.get()?.serverPresets))
     await this.ctx.settings.replace(SETTINGS_NAMESPACE, value, expectedRevision)
     return this.snapshot()
   }
@@ -601,9 +644,17 @@ export class EmailSettingsBackend {
    * what was actually tried — including on failure.
    */
   async test(value: EmailSettingsValue, accountName?: string) {
-    validateSettingsValue(value)
+    validateSettingsValue(value, presetNamesIn(value?.serverPresets ?? this.scope.get()?.serverPresets))
     // null projects the complete draft: test the form as the user typed it.
-    const settings = resolveEmailSettings({ ...this.rowConfig, ...toEmailConfig(value, null) })
+    // serverPresets rides along as the provider lookup source, exactly as it
+    // does for the stored settings (it never enters the resolved fingerprint).
+    const draft = toEmailConfig(value, null)
+    const presets = value?.serverPresets ?? this.scope.get()?.serverPresets
+    const settings = resolveEmailSettings({
+      ...this.rowConfig,
+      ...draft,
+      ...(typeof presets === 'string' ? { serverPresets: presets } : {}),
+    })
     const requested = typeof accountName === 'string' && accountName.trim() !== '' ? accountName.trim() : ''
     const available = [...settings.accounts.keys()]
     const name = requested !== '' ? requested : settings.defaultAccount
@@ -691,7 +742,9 @@ export class EmailSettingsBackend {
         // Pure and always 200: the editor calls this on every keystroke, so a
         // half-typed document is the normal case, not an HTTP failure.
         const text = typeof body.value?.accountsYaml === 'string' ? body.value.accountsYaml : ''
-        const presets = presetsSnapshot((this.scope.get() as EmailSettingsValue).serverPresets).custom
+        const presets = typeof body.serverPresets === 'string'
+          ? customPresetsOf(body.serverPresets).custom
+          : customPresetsOf((this.scope.get() as EmailSettingsValue).serverPresets).custom
         const draft = readAccountsDraft(text, presets, this.rowConfig.defaultAccount)
         this.responseJson(res, 200, {
           ok: true,
@@ -715,7 +768,13 @@ export class EmailSettingsBackend {
         }
         const source = typeof body.accountsYaml === 'string' ? body.accountsYaml : ''
         const chosen = typeof body.defaultAccount === 'string' ? body.defaultAccount.trim() : ''
-        const written = serializeAccountsDraft(source, cards, chosen)
+        // The body may carry the preset table the page is editing: a custom
+        // preset name is only persistable when the table in effect defines it.
+        // An older front end sends none, which reproduces "built-ins only".
+        const bodyPresets = typeof body.serverPresets === 'string'
+          ? customPresetsOf(body.serverPresets).custom
+          : customPresetsOf((this.scope.get() as EmailSettingsValue).serverPresets).custom
+        const written = serializeAccountsDraft(source, cards, chosen, new Set(Object.keys(bodyPresets)))
         this.responseJson(res, 200, {
           ok: true,
           value: {

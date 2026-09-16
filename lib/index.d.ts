@@ -4,7 +4,7 @@ export declare const inject: string[];
 export type Config = EmailConfig;
 /** Compose settings/pool lifecycle, tools, browser routes and the outgoing-mail gate. */
 export declare function apply(ctx: any, config?: Config): void;
-export { clampInt, defaultDownloadDir, EMAIL_PASSWORD_ENV, parseAccountsYaml, parseServerPresets, PROVIDER_NAMES, resolveEmailConfig, resolveEmailSettings, serializeAccountsYaml } from './config.js';
+export { clampInt, defaultDownloadDir, EMAIL_PASSWORD_ENV, parseAccountsYaml, parseServerPresets, presetNamesIn, providerNames, PROVIDER_NAMES, resolveEmailConfig, resolveEmailSettings, serializeAccountsYaml } from './config.js';
 export { buildReplyMessage, EmailPool, extractMessageIds, MailError, messageMatchesQuery, messageOf, selectAttachmentPart, validateAttachmentPaths } from './mail-client.js';
 export { flattenAddresses, parseRawMessage, sanitizeFilename, stripHtml, truncateText } from './parse.js';
 export { EmailSettingsSchema, SETTINGS_NAMESPACE, toEmailConfig, toSettingsBase, validateSettingsValue } from './settings.js';

@@ -397,3 +397,114 @@ test('serverPresets never reaches EmailConfig (saving one must not drop live con
   assert.deepEqual(withPresets, without, 'the pool fingerprint must be blind to serverPresets')
 })
 
+// --- serverPresets as a provider namespace ----------------------------------
+//
+// An account stores a provider id and nothing else; every endpoint comes from
+// the preset table. The lookup order is built-in PROVIDER_PRESETS first, then
+// the custom serverPresets — so `provider: corp` resolves as long as the preset
+// exists, and a preset name that was deleted afterwards still fails loud.
+
+const CORP_PRESETS = [
+  'corp:',
+  '  label: 公司邮箱',
+  '  imap: { host: imap.corp, port: 143, secure: false }',
+  '  smtp: { host: smtp.corp, port: 587, secure: false }',
+  '',
+].join('\n')
+
+test('serverPresets: a custom preset name resolves as a provider, endpoints included', async () => {
+  const { resolveEmailSettings } = await import('../lib/index.js')
+  const s = resolveEmailSettings({
+    serverPresets: CORP_PRESETS,
+    accountsYaml: 'work: { provider: corp, user: w@corp.example, password: pw }\n',
+  })
+  const work = s.accounts.get('work')
+  assert.equal(work.imap.host, 'imap.corp')
+  assert.equal(work.imap.port, 143)
+  assert.equal(work.imap.secure, false)
+  assert.equal(work.smtp.host, 'smtp.corp')
+  assert.equal(work.smtp.port, 587)
+  assert.equal(work.smtp.secure, false)
+  assert.equal(work.user, 'w@corp.example')
+  assert.equal(work.password, 'pw')
+})
+
+test('serverPresets: the shared shorthand can name a custom preset too', async () => {
+  const { resolveEmailSettings } = await import('../lib/index.js')
+  const s = resolveEmailSettings({ serverPresets: CORP_PRESETS, provider: 'corp', user: 'me@corp.example', password: 'p' })
+  assert.equal(s.accounts.get('default').imap.host, 'imap.corp')
+  assert.equal(s.accounts.get('default').smtp.host, 'smtp.corp')
+})
+
+test('serverPresets: an explicit account endpoint still beats the custom preset', async () => {
+  const { resolveEmailSettings } = await import('../lib/index.js')
+  const s = resolveEmailSettings({
+    serverPresets: CORP_PRESETS,
+    accountsYaml: 'work: { provider: corp, user: w@corp.example, password: pw, imap: { host: imap.override, port: 993, secure: true } }\n',
+  })
+  assert.equal(s.accounts.get('work').imap.host, 'imap.override', 'the account still wins over the preset')
+  assert.equal(s.accounts.get('work').imap.port, 993)
+  assert.equal(s.accounts.get('work').smtp.host, 'smtp.corp', 'the untouched endpoint still comes from the preset')
+})
+
+test('serverPresets: a broken preset list degrades to "no custom presets" without breaking a usable account', async () => {
+  const { resolveEmailSettings } = await import('../lib/index.js')
+  const broken = 'corp: [unclosed'
+  // A built-in account is untouched: a broken preset text must never take the
+  // whole resolution down with it.
+  const ok = resolveEmailSettings({ serverPresets: broken, provider: 'qq', user: 'a@qq.com', password: 'p' })
+  assert.equal(ok.accounts.get('default').imap.host, 'imap.qq.com')
+  // The account-level reference still fails loud — the preset silently missing
+  // would only resurface as a baffling "imap.host 未填写".
+  assert.throws(
+    () => resolveEmailSettings({ serverPresets: broken, provider: 'corp', user: 'a@b.c', password: 'p' }),
+    /账号 "default" 的 provider "corp" 未知/,
+  )
+})
+
+test('an unknown provider lists the 8 built-ins plus the custom preset names that do exist', async () => {
+  const { resolveEmailSettings } = await import('../lib/index.js')
+  const presets = 'corp: { imap: { host: imap.corp }, smtp: { host: smtp.corp } }\nhome: { imap: { host: imap.home }, smtp: { host: smtp.home } }\n'
+  let message = ''
+  try {
+    resolveEmailSettings({ serverPresets: presets, provider: 'nope', user: 'a@b.c', password: 'p' })
+  } catch (error) {
+    message = error.message
+  }
+  assert.match(message, /provider "nope" 未知/)
+  for (const name of [...PROVIDER_NAMES, 'corp', 'home']) {
+    assert.equal(message.includes(name), true, `the error must name ${name}`)
+  }
+  // Inherited Object members are not preset names.
+  let inherited = ''
+  try {
+    resolveEmailSettings({ provider: 'constructor', user: 'a@b.c', password: 'p' })
+  } catch (error) {
+    inherited = error.message
+  }
+  assert.match(inherited, /provider "constructor" 未知/)
+})
+
+test('serverPresets: editing an unreferenced preset never changes resolved settings', async () => {
+  const { resolveEmailSettings } = await import('../lib/index.js')
+  const base = { provider: 'qq', user: 'me@qq.com', password: 'p' }
+  const first = resolveEmailSettings({ ...base, serverPresets: CORP_PRESETS })
+  const second = resolveEmailSettings({ ...base, serverPresets: 'corp:\n  imap: { host: imap.moved }\n  smtp: { host: smtp.moved }\n' })
+  assert.equal('serverPresets' in first, false, 'must not appear on ResolvedEmailSettings')
+  assert.deepEqual(first, second, 'the pool fingerprint must stay blind to an unreferenced preset')
+})
+
+test('serverPresets: a preset may be bare — its endpoints are copied verbatim', async () => {
+  const { resolveEmailSettings } = await import('../lib/index.js')
+  const s = resolveEmailSettings({
+    serverPresets: 'bare: { imap: { host: imap.bare }, smtp: { host: smtp.bare } }\n',
+    provider: 'bare',
+    user: 'a@bare.example',
+    password: 'p',
+  })
+  const bare = s.accounts.get('default')
+  assert.equal(bare.imap.host, 'imap.bare')
+  assert.equal(bare.imap.port, undefined, 'an omitted port stays omitted — the preset is copied, not guessed')
+  assert.equal(bare.smtp.host, 'smtp.bare')
+})
+

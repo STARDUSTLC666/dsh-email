@@ -114,5 +114,9 @@ export declare function toEmailConfig(value: EmailSettingsValue, user?: Partial<
  * and the card editor's own POST never carries the form fields. 「Missing」 is
  * 「未设置」 for every one of them, exactly as toEmailConfig projects them, so a
  * partial draft is validated only for the fields it actually has.
+ *
+ * `extraProviders` are the custom preset names in effect: the settings page's
+ * provider dropdown offers them beside the 8 built-ins, so a value naming one
+ * is a legal choice, not an unknown provider.
  */
-export declare function validateSettingsValue(value: EmailSettingsValue): void;
+export declare function validateSettingsValue(value: EmailSettingsValue, extraProviders?: readonly string[]): void;
