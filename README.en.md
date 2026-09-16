@@ -37,6 +37,7 @@ Example:
 
 ### Changelog
 
+- **0.10.8 (2026-09-16)**: integrate GUODnuli's [PR #9](https://github.com/STARDUSTLC666/dsh-email/pull/9), replacing nonexistent text and border variables in settings and notifications with official theme tokens; revalidate Harness 0.1.5-rc.2 and 0.1.6-alpha.1.
 - **0.10.7 (2026-09-11)**: revalidate official Harness 0.1.5-rc.1 and refresh suite co-load and live-service evidence; runtime code is unchanged.
 - **0.10.6 (2026-09-10)**: fix an empty authorization-code field shadowing `DSH_EMAIL_PASSWORD` in single-account connection tests and saved settings. Explicit passwords still take precedence; named accounts cannot borrow this environment variable. Refresh the settings tool count, multi-account guidance and real QQ mailbox validation notes.
 - **0.10.5 (2026-09-08)**: document installation, tool registration and the Web settings endpoint in official Harness 0.1.3-alpha.2; update Node requirements and clarify that `email_health` checks configuration only. Runtime code is unchanged from 0.10.4.
@@ -49,9 +50,9 @@ Example:
 
 ## Compatibility
 
-Verified with official `@deepseek-ai/dsh@0.1.5-rc.1` and Node `24.16.0` on 2026-09-11: all 18 components load alongside Modlens, with passing tool-schema, skill-registration and offline read-only invocation checks. Uses the `cordis.patch.yml` + `dsh.bundle.patch` bundle model. Node requirements match this Harness release: 22.19 or later within 22.x, or 24 or later. Live external-service workflows require separate configuration and validation.
+Verified with official source builds of Harness `0.1.5-rc.2` and `0.1.6-alpha.1` on 2026-09-16: all 18 components load alongside ModLens, with passing tool schemas, skill registration and offline read-only calls; Email builds and passes 81 tests. Uses the `cordis.patch.yml` + `dsh.bundle.patch` bundle model. Node requirements are 22.19 or later within 22.x, or 24 or later. Live external-service workflows require separate configuration and validation.
 
-On 2026-09-10, npm `dsh-email@0.10.6` passed registration of all 10 tools, real QQ mailbox folder/list/read/search calls, and the settings page's connection test and Save & Apply in this Harness release. An empty authorization-code field correctly uses `DSH_EMAIL_PASSWORD`. Separate SMTP authentication also passed. No mail was sent, modified or deleted. This patch does not change runtime code.
+On 2026-09-10, npm `dsh-email@0.10.6` passed real QQ mailbox folder/list/read/search calls, the settings page's connection test and Save & Apply, and separate SMTP authentication. An empty authorization-code field correctly used `DSH_EMAIL_PASSWORD`. This recheck did not connect to a real mailbox or send, modify or delete mail.
 
 Follows the official [plugin packaging and installation requirements](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.md): an ESM entry point, prebuilt `lib/`, `dsh.bundle.patch` and a `cordis.patch.yml` layer. The plugin explicitly injects its required services and supplies JSON Schema parameters, canonical output and rendering, with no runtime imports of `@deepseek-ai/*` internals. Use Node 22.19 or later within 22.x, or Node 24 or later. Harness is evolving rapidly; the version above is the tested baseline.
 

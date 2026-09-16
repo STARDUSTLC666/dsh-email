@@ -45,6 +45,7 @@ IMAP/SMTP email tools for DeepSeek Harness, with replies, forwarding, mailbox or
 
 ### 版本记录
 
+- **0.10.8（2026-09-16）**：合入 GUODnuli 的 [PR #9](https://github.com/STARDUSTLC666/dsh-email/pull/9)，将设置页及新邮件弹窗的文字、边框引用改为官方主题变量，修复深色主题文字不可读；复验官方 Harness 0.1.5-rc.2 和 0.1.6-alpha.1。
 - **0.10.7（2026-09-11）**：复验官方 Harness 0.1.5-rc.1，更新整套同载与真实服务验证记录；运行时代码未变。
 - **0.10.6（2026-09-10）**：修复单账号设置页授权码留空时，空字符串遮蔽 `DSH_EMAIL_PASSWORD`，导致“测试连接”和保存后工具调用报未配置的问题；显式密码仍优先，多账号不会借用该环境变量。更新设置页工具数量、多账号说明，并补充真实 QQ 邮箱验证结果。
 - **0.10.5（2026-09-08）**：补充官方 Harness 0.1.3-alpha.2 的安装、工具注册及 Web 设置接口验证，更新 Node 版本要求，明确 `email_health` 只检查配置；运行时代码与 0.10.4 相同。
@@ -60,9 +61,9 @@ IMAP/SMTP email tools for DeepSeek Harness, with replies, forwarding, mailbox or
 
 ## 兼容性
 
-已在官方 `@deepseek-ai/dsh@0.1.5-rc.1`、Node `24.16.0` 上验证（2026-09-11）：18 个组件与 Modlens 同载，工具 schema、技能注册及离线只读调用检查通过。采用 `cordis.patch.yml` + `dsh.bundle.patch` 组合包模型。Node 要求与该版本 Harness 一致：22.19 及以上的 22.x，或 24 及以上。外部服务的实际业务操作需按各组件配置单独验证。
+已在官方源码构建的 Harness `0.1.5-rc.2` 和 `0.1.6-alpha.1` 上验证（2026-09-16）：18 个组件与 ModLens 同载，工具 schema、技能注册及离线只读调用检查通过；Email 构建及 81 项测试通过。采用 `cordis.patch.yml` + `dsh.bundle.patch` 组合包模型。Node 要求为 22.19 及以上的 22.x，或 24 及以上。外部服务的实际业务操作需按各组件配置单独验证。
 
-2026-09-10，npm `dsh-email@0.10.6` 在该 Harness 中通过 10 个工具注册，真实 QQ 邮箱目录、列表、读取和搜索，以及设置页“测试连接”“保存并应用”检查；授权码留空时能继续使用 `DSH_EMAIL_PASSWORD`。独立 SMTP 登录认证也已通过。未发送、修改或删除邮件；本次补丁不修改运行时代码。
+2026-09-10，npm `dsh-email@0.10.6` 曾通过真实 QQ 邮箱目录、列表、读取和搜索，以及设置页“测试连接”“保存并应用”检查；授权码留空时能继续使用 `DSH_EMAIL_PASSWORD`。独立 SMTP 登录认证也已通过。此次复验未连接真实邮箱，未发送、修改或删除邮件。
 
 遵循官方[插件打包与安装要求](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.md)：ESM 入口、预构建 `lib/`、`dsh.bundle.patch` 和 `cordis.patch.yml` 配置层；显式注入所需服务，提供 JSON Schema 参数、规范化输出和渲染函数，运行时不 import `@deepseek-ai/*` 内部模块。使用 Node 22.19 及以上的 22.x 或 Node 24 及以上版本；Harness 仍在快速迭代，上述版本是实测基线。
 
