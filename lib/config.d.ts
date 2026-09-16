@@ -29,6 +29,12 @@ export interface EmailConfig extends AccountConfig {
     accounts?: Record<string, AccountConfig>;
     /** YAML text of the accounts map, editable from the settings page. Wins over accounts when non-empty. */
     accountsYaml?: string;
+    /**
+     * YAML text of the reusable server presets (connection endpoints only).
+     * Deliberately never part of ResolvedEmailSettings: editing a preset must not
+     * change the pool fingerprint and tear down live IMAP connections.
+     */
+    serverPresets?: string;
     /** Which account tools use when the call omits account. Required with 2+ accounts. */
     defaultAccount?: string;
     /** Directory email_attachment writes into. Default: the session workspace's .dsh-email-downloads (falls back to $DSH_HOME/email-downloads). */
@@ -96,6 +102,36 @@ export declare function parseAccountsYaml(text: string): {
     map: Record<string, AccountConfig>;
     defaultAccount?: string;
 };
+/** Reusable IMAP/SMTP endpoints. Credentials are never stored in a preset. */
+export interface ServerPreset {
+    label?: string;
+    imap: {
+        host: string;
+        port?: number;
+        secure?: boolean;
+    };
+    smtp: {
+        host: string;
+        port?: number;
+        secure?: boolean;
+    };
+}
+/**
+ * Parse the settings-page server presets: a name -> endpoints map, e.g.
+ * `corp: { imap: { host: imap.corp }, smtp: { host: smtp.corp } }`.
+ * Blank text means "no presets"; a malformed document fails loud, because a
+ * silently dropped preset would only resurface later as an unresolvable
+ * account reference.
+ */
+export declare function parseServerPresets(text: string): Record<string, ServerPreset>;
+/**
+ * Serialize a raw accounts mapping (account name -> account config, optionally
+ * carrying a defaultAccount key) back into accountsYaml text.
+ *
+ * Returns '' when no account is left: resolveEmailSettings decides "is the YAML
+ * authoritative" with `.trim()`, so an empty list must never become '{}'.
+ */
+export declare function serializeAccountsYaml(raw: unknown, defaultAccount?: string): string;
 /**
  * Resolve and validate the raw row config. Throws with an actionable message
  * (in Chinese, since it is what the user and the model both read) when the

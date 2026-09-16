@@ -1,5 +1,5 @@
 import { homedir } from 'node:os'
-import { parse as parseYaml } from 'yaml'
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { join } from 'node:path'
 
 export type ProviderName = 'qq' | '163' | '126' | 'sina' | 'aliyun' | 'gmail' | 'outlook' | 'icloud'
@@ -37,6 +37,12 @@ export interface EmailConfig extends AccountConfig {
   accounts?: Record<string, AccountConfig>
   /** YAML text of the accounts map, editable from the settings page. Wins over accounts when non-empty. */
   accountsYaml?: string
+  /**
+   * YAML text of the reusable server presets (connection endpoints only).
+   * Deliberately never part of ResolvedEmailSettings: editing a preset must not
+   * change the pool fingerprint and tear down live IMAP connections.
+   */
+  serverPresets?: string
   /** Which account tools use when the call omits account. Required with 2+ accounts. */
   defaultAccount?: string
   /** Directory email_attachment writes into. Default: the session workspace's .dsh-email-downloads (falls back to $DSH_HOME/email-downloads). */
@@ -127,6 +133,113 @@ export function parseAccountsYaml(text: string): { map: Record<string, AccountCo
     map[key] = value as AccountConfig
   }
   return { map, defaultAccount }
+}
+
+/** Reusable IMAP/SMTP endpoints. Credentials are never stored in a preset. */
+export interface ServerPreset {
+  label?: string
+  imap: { host: string; port?: number; secure?: boolean }
+  smtp: { host: string; port?: number; secure?: boolean }
+}
+
+/**
+ * Parse the settings-page server presets: a name -> endpoints map, e.g.
+ * `corp: { imap: { host: imap.corp }, smtp: { host: smtp.corp } }`.
+ * Blank text means "no presets"; a malformed document fails loud, because a
+ * silently dropped preset would only resurface later as an unresolvable
+ * account reference.
+ */
+export function parseServerPresets(text: string): Record<string, ServerPreset> {
+  if (text.trim() === '') return {}
+  let doc: unknown
+  try {
+    doc = parseYaml(text)
+  } catch (error) {
+    throw new Error('dsh-email：serverPresets 不是合法的 YAML：' + (error instanceof Error ? error.message : String(error)))
+  }
+  if (doc === null || typeof doc !== 'object' || Array.isArray(doc)) {
+    throw new Error('dsh-email：serverPresets 不是合法的对象映射')
+  }
+  const presets: Record<string, ServerPreset> = {}
+  for (const [name, value] of Object.entries(doc as Record<string, unknown>)) {
+    presets[name] = parseServerPreset(name, value)
+  }
+  return presets
+}
+
+/** Validate one preset entry. Both endpoints are required; port/secure optional. */
+function parseServerPreset(name: string, value: unknown): ServerPreset {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`dsh-email：服务器预设 "${name}" 必须是含 imap 与 smtp 的对象`)
+  }
+  const raw = value as Record<string, unknown>
+  if (raw.label !== undefined && typeof raw.label !== 'string') {
+    throw new Error(`dsh-email：服务器预设 "${name}" 的 label 必须是字符串`)
+  }
+  return {
+    ...(raw.label !== undefined ? { label: raw.label as string } : {}),
+    imap: parseServerPresetEndpoint(name, 'imap', raw.imap),
+    smtp: parseServerPresetEndpoint(name, 'smtp', raw.smtp),
+  }
+}
+
+function parseServerPresetEndpoint(name: string, kind: 'imap' | 'smtp', value: unknown): ServerPreset['imap'] {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`dsh-email：服务器预设 "${name}" 缺少 ${kind}（需为含 host 的对象）`)
+  }
+  const raw = value as Record<string, unknown>
+  const host = typeof raw.host === 'string' ? raw.host.trim() : ''
+  if (host === '') throw new Error(`dsh-email：服务器预设 "${name}" 的 ${kind}.host 未填写`)
+  if (raw.port !== undefined && (typeof raw.port !== 'number' || !Number.isFinite(raw.port))) {
+    throw new Error(`dsh-email：服务器预设 "${name}" 的 ${kind}.port 必须是数字`)
+  }
+  if (raw.secure !== undefined && typeof raw.secure !== 'boolean') {
+    throw new Error(`dsh-email：服务器预设 "${name}" 的 ${kind}.secure 必须是布尔值`)
+  }
+  return {
+    host,
+    ...(raw.port !== undefined ? { port: raw.port as number } : {}),
+    ...(raw.secure !== undefined ? { secure: raw.secure as boolean } : {}),
+  }
+}
+
+/**
+ * Serialize a raw accounts mapping (account name -> account config, optionally
+ * carrying a defaultAccount key) back into accountsYaml text.
+ *
+ * Returns '' when no account is left: resolveEmailSettings decides "is the YAML
+ * authoritative" with `.trim()`, so an empty list must never become '{}'.
+ */
+export function serializeAccountsYaml(raw: unknown, defaultAccount?: string): string {
+  const doc = raw !== null && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {}
+  const accounts: Record<string, unknown> = {}
+  for (const [name, value] of Object.entries(doc)) {
+    if (name === 'defaultAccount') continue
+    accounts[name] = normalizeAccountForYaml(value)
+  }
+  if (Object.keys(accounts).length === 0) return ''
+  const stored = typeof doc.defaultAccount === 'string' ? doc.defaultAccount.trim() : ''
+  const chosen = (defaultAccount ?? '').trim() || stored
+  const out: Record<string, unknown> = { ...accounts }
+  if (chosen !== '') out.defaultAccount = chosen
+  return stringifyYaml(out, { aliasDuplicateObjects: false, lineWidth: 0 })
+}
+
+/**
+ * Prepare one account entry for the YAML writer.
+ *
+ * `provider` disappears when unset or '' — the settings page uses '' for
+ * "custom server", and writing it back would make resolution throw
+ * 「provider "" 未知」 (same normalization as toEmailConfig). A numeric
+ * password is coerced to a string so the writer quotes it: YAML would
+ * otherwise read `password: 123456` back as a number.
+ */
+function normalizeAccountForYaml(value: unknown): unknown {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return value ?? {}
+  const account = { ...(value as Record<string, unknown>) }
+  if (account.provider === undefined || account.provider === '') delete account.provider
+  if (typeof account.password === 'number' || typeof account.password === 'boolean') account.password = String(account.password)
+  return account
 }
 
 /**

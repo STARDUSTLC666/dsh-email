@@ -261,3 +261,139 @@ test('empty accountsYaml leaves the row accounts untouched', async () => {
   const s = resolveEmailSettings({ accountsYaml: '   ', accounts: { a: { provider: 'qq', user: 'a@b.c', password: 'p' } } })
   assert.deepEqual([...s.accounts.keys()], ['a'])
 })
+
+test('parseServerPresets: blank text means no presets', async () => {
+  const { parseServerPresets } = await import('../lib/index.js')
+  assert.deepEqual(parseServerPresets(''), {})
+  assert.deepEqual(parseServerPresets('   \n'), {})
+})
+
+test('parseServerPresets: keeps host/port/secure/label and defaults the optional keys away', async () => {
+  const { parseServerPresets } = await import('../lib/index.js')
+  const presets = parseServerPresets([
+    'corp:',
+    '  label: 公司邮箱',
+    '  imap:',
+    '    host: imap.corp',
+    '    port: 993',
+    '    secure: true',
+    '  smtp:',
+    '    host: smtp.corp',
+    '    port: 587',
+    '    secure: false',
+    'bare:',
+    '  imap: { host: imap.bare }',
+    '  smtp: { host: smtp.bare }',
+    '',
+  ].join('\n'))
+  assert.deepEqual(presets.corp, {
+    label: '公司邮箱',
+    imap: { host: 'imap.corp', port: 993, secure: true },
+    smtp: { host: 'smtp.corp', port: 587, secure: false },
+  })
+  assert.deepEqual(presets.bare, { imap: { host: 'imap.bare' }, smtp: { host: 'smtp.bare' } })
+  assert.equal('port' in presets.bare.imap, false, 'unset port must stay unset, not default')
+  assert.equal('secure' in presets.bare.smtp, false, 'unset secure must stay unset, not default')
+})
+
+test('parseServerPresets: a preset without both hosts names the offender', async () => {
+  const { parseServerPresets } = await import('../lib/index.js')
+  assert.throws(() => parseServerPresets('corp:\n  imap:\n    host: imap.corp\n'), /预设 "corp".*smtp/)
+  assert.throws(() => parseServerPresets('corp:\n  imap:\n    host: imap.corp\n  smtp: {}\n'), /预设 "corp".*smtp\.host/)
+  assert.throws(() => parseServerPresets('corp:\n  imap: { host: "" }\n  smtp: { host: smtp.corp }\n'), /预设 "corp".*imap\.host/)
+  assert.throws(() => parseServerPresets('corp:\n  imap: { host: imap.corp, port: 993, secure: maybe }\n  smtp: { host: smtp.corp }\n'), /预设 "corp".*imap\.secure/)
+})
+
+test('parseServerPresets: non-object documents fail loud in Chinese', async () => {
+  const { parseServerPresets } = await import('../lib/index.js')
+  for (const text of ['- a\n- b\n', 'just a scalar', 'null', '42']) {
+    assert.throws(() => parseServerPresets(text), /serverPresets 不是合法的对象映射/, `input: ${JSON.stringify(text)}`)
+  }
+  assert.throws(() => parseServerPresets('corp: [unclosed'), /不是合法的 YAML/)
+  assert.throws(() => parseServerPresets('corp: 公司\n'), /必须是含 imap 与 smtp 的对象/)
+})
+
+test('serializeAccountsYaml: no accounts serializes to "", never "{}"', async () => {
+  const { serializeAccountsYaml, resolveEmailSettings } = await import('../lib/index.js')
+  assert.equal(serializeAccountsYaml({}), '')
+  assert.equal(serializeAccountsYaml({ defaultAccount: 'work' }), '')
+  // '' must leave the row accounts authoritative; '{}' parses to an empty map
+  // and then fails resolution with a nonsense "multiple accounts ()" error.
+  const s = resolveEmailSettings({ accountsYaml: serializeAccountsYaml({}), accounts: { a: { provider: 'qq', user: 'a@b.c', password: 'p' } } })
+  assert.deepEqual([...s.accounts.keys()], ['a'])
+  assert.throws(() => resolveEmailSettings({ accountsYaml: '{}' }), /配置了多个账号/)
+})
+
+test('serializeAccountsYaml: an account that only inherits the shared shorthand survives', async () => {
+  const { serializeAccountsYaml, resolveEmailSettings } = await import('../lib/index.js')
+  // `work: {}` is legitimate — it inherits the top-level shorthand — so the
+  // serializer must not silently delete it (losing an account is worse than
+  // writing back a broken one).
+  const text = serializeAccountsYaml({ work: {} }, 'work')
+  assert.match(text, /^work: \{\}$/m)
+  const s = resolveEmailSettings({ provider: 'qq', user: 'shared@qq.com', password: 'p', accountsYaml: text })
+  assert.equal(s.accounts.get('work').user, 'shared@qq.com')
+  assert.equal(s.defaultAccount, 'work')
+})
+
+test('serializeAccountsYaml: round-trips an account and omits an empty provider', async () => {
+  const { serializeAccountsYaml, parseAccountsYaml } = await import('../lib/index.js')
+  const text = serializeAccountsYaml({ work: { provider: '', user: 'a@b.c', password: 'p' } })
+  assert.equal(text.includes('provider'), false, 'provider "" would resolve as 「provider "" 未知」')
+  const parsed = parseAccountsYaml(text)
+  assert.deepEqual(Object.keys(parsed.map), ['work'])
+  assert.equal(parsed.map.work.user, 'a@b.c')
+  assert.equal(parsed.map.work.password, 'p')
+  assert.equal('provider' in parsed.map.work, false)
+})
+
+test('serializeAccountsYaml: writes defaultAccount and quotes a numeric password', async () => {
+  const { serializeAccountsYaml } = await import('../lib/index.js')
+  const text = serializeAccountsYaml({ work: { user: 'a@b.c', password: 123456 } }, 'work')
+  assert.match(text, /^defaultAccount: work$/m)
+  assert.equal(text.includes('password: "123456"'), true, 'YAML would read a bare 123456 back as a number')
+  // The chosen default wins over whatever the raw mapping carried.
+  assert.match(serializeAccountsYaml({ work: { user: 'a@b.c' }, defaultAccount: 'old' }, 'work'), /^defaultAccount: work$/m)
+  assert.match(serializeAccountsYaml({ work: { user: 'a@b.c' }, defaultAccount: 'old' }), /^defaultAccount: old$/m)
+})
+
+test('serializeAccountsYaml: output resolves back to the same accounts', async () => {
+  const { serializeAccountsYaml, resolveEmailSettings } = await import('../lib/index.js')
+  const raw = {
+    work: { provider: 'qq', user: 'w@qq.com', password: 'p1', imap: { host: 'imap.corp', port: 143, secure: false } },
+    home: { provider: '163', user: 'h@163.com', password: 'p2', inboxFolder: 'Archive' },
+  }
+  const text = serializeAccountsYaml(raw, 'home')
+  const s = resolveEmailSettings({ accountsYaml: text })
+  assert.deepEqual([...s.accounts.keys()].sort(), ['home', 'work'])
+  assert.equal(s.defaultAccount, 'home')
+  assert.equal(s.accounts.get('work').imap.host, 'imap.corp')
+  assert.equal(s.accounts.get('work').imap.port, 143)
+  assert.equal(s.accounts.get('work').imap.secure, false)
+  assert.equal(s.accounts.get('home').inboxFolder, 'Archive')
+  assert.equal(s.accounts.get('home').password, 'p2')
+})
+
+test('serverPresets never reaches EmailConfig (saving one must not drop live connections)', async () => {
+  const { toEmailConfig, resolveEmailSettings } = await import('../lib/index.js')
+  const value = {
+    provider: 'qq', user: 'me@qq.com', password: 'p', inboxFolder: 'INBOX',
+    sendApproval: true, maxBodyChars: 20000, downloadDir: '', accountsYaml: '',
+    serverPresets: 'corp:\n  imap: { host: imap.corp }\n  smtp: { host: smtp.corp }\n',
+    imap: { host: '', port: 993, secure: true },
+    smtp: { host: '', port: 465, secure: true },
+  }
+  const out = toEmailConfig(value, { serverPresets: value.serverPresets })
+  assert.equal('serverPresets' in out, false, 'projecting it would enter the pool fingerprint')
+  assert.equal('serverPresets' in toEmailConfig(value, null), false)
+
+  // The real red line: adding presets must not change what resolution produces,
+  // because runtime.fingerprintSettings() is computed from exactly that — a
+  // changed fingerprint disposes the pool and drops every live IMAP session.
+  const base = { provider: 'qq', user: 'me@qq.com', password: 'p' }
+  const withPresets = resolveEmailSettings({ ...base, serverPresets: value.serverPresets })
+  const without = resolveEmailSettings(base)
+  assert.equal('serverPresets' in withPresets, false, 'must not appear on ResolvedEmailSettings')
+  assert.deepEqual(withPresets, without, 'the pool fingerprint must be blind to serverPresets')
+})
+

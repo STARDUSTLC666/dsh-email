@@ -18,6 +18,10 @@ export const EmailSettingsSchema = z.object({
   maxBodyChars: z.number().default(20000),
   downloadDir: z.string().default(''),
   accountsYaml: z.string().role('secret').default(''),
+  // Reusable IMAP/SMTP endpoints for the account cards. No credentials, so no
+  // role('secret') — and deliberately not projected into EmailConfig, or
+  // editing a preset would change the pool fingerprint and drop live sessions.
+  serverPresets: z.string().default(''),
   imap: z.object({
     host: z.string().default(''),
     port: z.number().default(993),
@@ -39,6 +43,7 @@ export interface EmailSettingsValue {
   maxBodyChars: number
   downloadDir: string
   accountsYaml: string
+  serverPresets?: string
   imap: { host: string; port: number; secure: boolean }
   smtp: { host: string; port: number; secure: boolean }
 }
@@ -53,6 +58,7 @@ export function toSettingsBase(config: EmailConfig): Partial<EmailSettingsValue>
     ...(config.sendApproval !== undefined ? { sendApproval: config.sendApproval } : {}),
     ...(config.maxBodyChars !== undefined ? { maxBodyChars: config.maxBodyChars } : {}),
     ...(config.downloadDir !== undefined && config.downloadDir !== '' ? { downloadDir: config.downloadDir } : {}),
+    ...(config.serverPresets !== undefined && config.serverPresets !== '' ? { serverPresets: config.serverPresets } : {}),
     ...(config.imap !== undefined ? {
       imap: {
         host: config.imap.host ?? '',
@@ -89,6 +95,9 @@ export function toEmailConfig(value: EmailSettingsValue, user?: Partial<EmailSet
   if (has('maxBodyChars')) out.maxBodyChars = value.maxBodyChars
   if (has('downloadDir')) out.downloadDir = value.downloadDir
   if (has('accountsYaml')) out.accountsYaml = value.accountsYaml
+  // serverPresets is intentionally NOT projected: it is UI-side metadata that
+  // resolution never reads, and projecting it would put it into the resolved
+  // fingerprint, so saving a preset would dispose every live IMAP connection.
   if (user === null || user?.imap !== undefined) {
     const fields: Partial<EmailSettingsValue['imap']> = user === null ? value.imap : (user.imap ?? {})
     const imap: EmailConfig['imap'] = {}

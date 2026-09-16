@@ -16,6 +16,7 @@ export declare const EmailSettingsSchema: z<Schemastery.ObjectS<{
     maxBodyChars: z<number, number>;
     downloadDir: z<string, string>;
     accountsYaml: z<string, string>;
+    serverPresets: z<string, string>;
     imap: z<Schemastery.ObjectS<{
         host: z<string, string>;
         port: z<number, number>;
@@ -43,6 +44,7 @@ export declare const EmailSettingsSchema: z<Schemastery.ObjectS<{
     maxBodyChars: z<number, number>;
     downloadDir: z<string, string>;
     accountsYaml: z<string, string>;
+    serverPresets: z<string, string>;
     imap: z<Schemastery.ObjectS<{
         host: z<string, string>;
         port: z<number, number>;
@@ -71,6 +73,7 @@ export interface EmailSettingsValue {
     maxBodyChars: number;
     downloadDir: string;
     accountsYaml: string;
+    serverPresets?: string;
     imap: {
         host: string;
         port: number;

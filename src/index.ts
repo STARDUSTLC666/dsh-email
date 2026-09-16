@@ -18,9 +18,10 @@ export function apply(ctx: any, config: Config = {}): void {
   installSendApproval(ctx, runtime)
 }
 
-export { clampInt, defaultDownloadDir, EMAIL_PASSWORD_ENV, parseAccountsYaml, PROVIDER_NAMES, resolveEmailConfig, resolveEmailSettings } from './config.js'
+export { clampInt, defaultDownloadDir, EMAIL_PASSWORD_ENV, parseAccountsYaml, parseServerPresets, PROVIDER_NAMES, resolveEmailConfig, resolveEmailSettings, serializeAccountsYaml } from './config.js'
 export { buildReplyMessage, EmailPool, extractMessageIds, MailError, messageMatchesQuery, messageOf, selectAttachmentPart, validateAttachmentPaths } from './mail-client.js'
 export { flattenAddresses, parseRawMessage, sanitizeFilename, stripHtml, truncateText } from './parse.js'
 export { EmailSettingsSchema, SETTINGS_NAMESPACE, toEmailConfig, toSettingsBase, validateSettingsValue } from './settings.js'
 export { parseEmailDay } from './tool-contract.js'
 export { EmailSettingsBackend, installEmailSettingsWeb, SETTINGS_ROUTE } from './web.js'
+export type { AccountCardData, AccountCardInput } from './web.js'

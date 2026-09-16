@@ -45,6 +45,7 @@ IMAP/SMTP email tools for DeepSeek Harness, with replies, forwarding, mailbox or
 
 ### 版本记录
 
+- **0.10.8-dev（未发布）**：设置页三处升级——①暗色主题收尾：修掉 0.10.8 引入的不存在边框变量（暗色下刺眼浅灰边框），面板全部样式引用官方 `--dsw-alias-*` 设计变量；②多账号可视化卡片编辑器：增删改/改名/设默认/按账号名单卡测试连接，半填账号不阻断，已存授权码留空即保持，YAML 直接编辑保留为逃生口（序列化尽量保留注释，无法保留时明确提示）；③服务器预设：新增 `serverPresets` 配置（自定义服务商端点，不含凭证），设置页可视化增删改，账号服务商下拉自动列出预设名并预填端点。序列化时非内置 provider 值不落 YAML（自定义预设按端点展开，避免解析报「provider 未知」）。测试 127 → 132 项。
 - **0.10.8（2026-09-16）**：合入 GUODnuli 的 [PR #9](https://github.com/STARDUSTLC666/dsh-email/pull/9)，将设置页及新邮件弹窗的文字、边框引用改为官方主题变量，修复深色主题文字不可读；复验官方 Harness 0.1.5-rc.2 和 0.1.6-alpha.1。
 - **0.10.7（2026-09-11）**：复验官方 Harness 0.1.5-rc.1，更新整套同载与真实服务验证记录；运行时代码未变。
 - **0.10.6（2026-09-10）**：修复单账号设置页授权码留空时，空字符串遮蔽 `DSH_EMAIL_PASSWORD`，导致“测试连接”和保存后工具调用报未配置的问题；显式密码仍优先，多账号不会借用该环境变量。更新设置页工具数量、多账号说明，并补充真实 QQ 邮箱验证结果。
@@ -61,7 +62,7 @@ IMAP/SMTP email tools for DeepSeek Harness, with replies, forwarding, mailbox or
 
 ## 兼容性
 
-已在官方源码构建的 Harness `0.1.5-rc.2` 和 `0.1.6-alpha.1` 上验证（2026-09-16）：18 个组件与 ModLens 同载，工具 schema、技能注册及离线只读调用检查通过；Email 构建及 81 项测试通过。采用 `cordis.patch.yml` + `dsh.bundle.patch` 组合包模型。Node 要求为 22.19 及以上的 22.x，或 24 及以上。外部服务的实际业务操作需按各组件配置单独验证。
+已在官方源码构建的 Harness `0.1.5-rc.2` 和 `0.1.6-alpha.1` 上验证（2026-09-16）：18 个组件与 ModLens 同载，工具 schema、技能注册及离线只读调用检查通过；Email 构建及 132 项测试通过。采用 `cordis.patch.yml` + `dsh.bundle.patch` 组合包模型。Node 要求为 22.19 及以上的 22.x，或 24 及以上。外部服务的实际业务操作需按各组件配置单独验证。
 
 2026-09-10，npm `dsh-email@0.10.6` 曾通过真实 QQ 邮箱目录、列表、读取和搜索，以及设置页“测试连接”“保存并应用”检查；授权码留空时能继续使用 `DSH_EMAIL_PASSWORD`。独立 SMTP 登录认证也已通过。此次复验未连接真实邮箱，未发送、修改或删除邮件。
 
@@ -79,8 +80,12 @@ dsh plugin --profile web add dsh-email
 
 **配置方式有两种（任选其一）：**
 
-1. **网页设置（推荐）**：重启后打开 **设置 → 邮件 (dsh-email)**，表单里填邮箱地址和授权码，点「保存并应用」，还带「测试连接」按钮。零 YAML、零重启。
-2. **YAML**：按下面的 cordis.patch.yml 模板手写；设置页的「多账号（高级，YAML）」文本框也能填账号映射（覆盖 YAML 里的 accounts）。
+1. **网页设置（推荐）**：重启后打开 **设置 → 邮件 (dsh-email)**，在账号卡片里填邮箱地址和授权码，点「保存并应用」；每张卡片还能单独「测试连接」。零 YAML、零重启。
+2. **YAML**：按下面的 cordis.patch.yml 模板手写；设置页的「多账号（高级，YAML）」文本框也能填账号映射（覆盖 YAML 里的 accounts），卡片与文本框互为逃生口。
+
+设置页整体跟随 DSH 的深浅主题：面板样式全部引用官方 `--dsw-alias-*` 设计变量、不写死颜色，切换浅色/深色即时生效（0.10.8 曾引用一个并不存在的边框变量，暗色下会出现刺眼的浅灰边框，已修掉）。
+
+多账号可以在设置页可视化编辑：账号卡片支持增删改账号、改名、设默认、按账号名单独「测试连接」；没填完的账号不阻断保存，只标一个「未完成」。卡片的改动先落到 YAML 文本，再和整份表单一起「保存并应用」才算生效。保存卡片时，已存的授权码默认保持（密码栏留空 = 不变，填内容 = 覆盖）；YAML 里的注释尽量原地保留，实在保不住时会明确提示。
 
 设置页保存的值存在 `settings.yaml` 的 `dsh-email` 命名空间里，覆盖 YAML 的默认账号配置。授权码字段标记为 secret，但填写后保存仍会写入本机配置文件。单账号如需避免保存授权码，可设置 `DSH_EMAIL_PASSWORD` 并将授权码栏留空；环境变量不会被复制进设置文件。
 
@@ -131,6 +136,20 @@ dsh plugin --profile web remove dsh-email
 
 顶层的 `provider`/`user`/`password`/`imap`/`smtp`/`inboxFolder` 仍然可用，作为各账号的共享默认值（v0.1 单账号写法完全兼容）。
 
+想在多个账号之间复用同一套连接端点，可以用 `serverPresets` 自定义服务商预设（YAML 映射，键 = 预设名，值含可选的 `label` 与 `imap`/`smtp`）：
+
+```yaml
+- id: tool-email
+  config:
+    serverPresets: |
+      corp:
+        label: 公司邮箱
+        imap: { host: imap.corp.example, port: 993, secure: true }
+        smtp: { host: smtp.corp.example, port: 465, secure: true }
+```
+
+设置页的「服务器预设」折叠区能可视化增删改这些预设，账号卡片的服务商下拉里会自动多出预设名，选中即把端点预填进账号。预设只记连接参数，**不含邮箱地址和授权码**；`port`/`secure` 可省略（默认 993/465 与 SSL）。
+
 ### 常用邮箱预设
 
 | provider | IMAP | SMTP |
@@ -158,6 +177,7 @@ dsh plugin --profile web remove dsh-email
 | `maxBodyChars` | `20000` | email_read 正文截断上限（1000–200000） |
 | `accounts` | 无 | 具名账号表；账号级字段覆盖顶层简写 |
 | `accountsYaml` | 无 | 设置页「多账号（高级）」文本框的 YAML 文本；非空时覆盖 accounts |
+| `serverPresets` | 无 | 自定义服务商预设的 YAML 文本（键=预设名，值含 `label?`/`imap`/`smtp`）；只存端点、不含凭证，设置页下拉会列出预设名并把端点预填进账号卡片，改预设不会重连已建立的连接 |
 | `defaultAccount` | 单账号时自动 | 工具省略 account 参数时使用的账号（多账号必填） |
 | `downloadDir` | 会话工作区下 .dsh-email-downloads（回退 $DSH_HOME/email-downloads） | email_attachment 的落盘目录；显式设置后固定 |
 | `maxAttachmentBytes` | 20 MiB | 单个附件与附件总大小上限（1024–512 MiB） |
@@ -187,6 +207,7 @@ dsh plugin --profile web remove dsh-email
 - **正文搜索**：服务器端只搜 subject / from / to / cc；多数服务器（如 QQ）的 IMAP `TEXT` / `HEADER` 搜索不可靠，无结果时回退到最近 `bodySearchLimit` 封的正文扫描（较慢，可用 `bodySearchFallback` 关闭）。
 - **附件**：内嵌图片暂不支持单独下载；附件定位失败会直接报错而不是下载错误文件（安全默认）。
 - **密码落盘**：设置页保存的授权码以明文写在本机 `settings.yaml`（secret 标记只保证它不进日志 / 导出 / 诊断，不做磁盘加密）。请勿把 `settings.yaml` 交给不信任的人。
+- **本地改动会被 `pnpm install` 还原**：如果你是直接改 `node_modules/dsh-email/` 里的文件做本地部署，任何一次 `pnpm install` 都会把它还原成 registry 上的版本（例如 0.10.7）；要长期保留请改成从本地路径或 Git 提交安装。
 
 ## 开发
 
@@ -196,9 +217,9 @@ pnpm run build   # tsc → lib/
 pnpm test        # 构建 + 离线测试，无需真实邮箱
 ```
 
-`src/index.ts` 只负责组合插件。`runtime.ts` 管理动态设置、账号连接池和网页/工具各自的监视游标；`tools.ts` 接线十个工具的执行逻辑；`tool-contract.ts` 集中维护参数、输出 schema 和中文渲染；`approval.ts` 管理发信审批。IMAP/SMTP 传输仍由 `mail-client.ts` 负责，网页路由由 `web.ts` 负责。
+`src/index.ts` 只负责组合插件。`runtime.ts` 管理动态设置、账号连接池和网页/工具各自的监视游标；`tools.ts` 接线十个工具的执行逻辑；`tool-contract.ts` 集中维护参数、输出 schema 和中文渲染；`approval.ts` 管理发信审批。IMAP/SMTP 传输仍由 `mail-client.ts` 负责，网页路由由 `web.ts` 负责——设置页的账号卡片编辑器要的解析、序列化（保留注释、保住已存授权码）和自定义预设快照也在这里。
 
-测试覆盖动态配置换池、卸载释放、取消信号与工作区透传、工具/网页游标隔离，以及审批拒绝时不会进入发送执行。测试用内存客户端替代邮箱连接。
+测试覆盖动态配置换池、卸载释放、取消信号与工作区透传、工具/网页游标隔离、账号卡片序列化与预设解析，以及审批拒绝时不会进入发送执行。测试用内存客户端替代邮箱连接。
 
 ## 协议
 

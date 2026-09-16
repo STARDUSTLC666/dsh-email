@@ -37,6 +37,7 @@ Example:
 
 ### Changelog
 
+- **0.10.8-dev (unreleased)**: three settings-page upgrades — ① dark-theme fix: the border token 0.10.8 introduced did not exist (glaring light-gray borders in dark mode); every panel style now references official `--dsw-alias-*` design tokens; ② visual multi-account card editor: add/edit/rename/set-default with per-account connection tests, half-filled accounts never block saving, stored auth codes are kept when left blank, the raw YAML editor remains as an escape hatch (serialization preserves comments when possible and says so when it cannot); ③ server presets: a new `serverPresets` option (custom provider endpoints, no credentials) with visual management, and account provider dropdowns list preset names and pre-fill endpoints. Non-builtin provider values are no longer written to YAML (custom presets expand to endpoints, avoiding an "unknown provider" resolution error). Tests: 127 → 132.
 - **0.10.8 (2026-09-16)**: integrate GUODnuli's [PR #9](https://github.com/STARDUSTLC666/dsh-email/pull/9), replacing nonexistent text and border variables in settings and notifications with official theme tokens; revalidate Harness 0.1.5-rc.2 and 0.1.6-alpha.1.
 - **0.10.7 (2026-09-11)**: revalidate official Harness 0.1.5-rc.1 and refresh suite co-load and live-service evidence; runtime code is unchanged.
 - **0.10.6 (2026-09-10)**: fix an empty authorization-code field shadowing `DSH_EMAIL_PASSWORD` in single-account connection tests and saved settings. Explicit passwords still take precedence; named accounts cannot borrow this environment variable. Refresh the settings tool count, multi-account guidance and real QQ mailbox validation notes.
@@ -50,7 +51,7 @@ Example:
 
 ## Compatibility
 
-Verified with official source builds of Harness `0.1.5-rc.2` and `0.1.6-alpha.1` on 2026-09-16: all 18 components load alongside ModLens, with passing tool schemas, skill registration and offline read-only calls; Email builds and passes 81 tests. Uses the `cordis.patch.yml` + `dsh.bundle.patch` bundle model. Node requirements are 22.19 or later within 22.x, or 24 or later. Live external-service workflows require separate configuration and validation.
+Verified with official source builds of Harness `0.1.5-rc.2` and `0.1.6-alpha.1` on 2026-09-16: all 18 components load alongside ModLens, with passing tool schemas, skill registration and offline read-only calls; Email builds and passes 132 tests. Uses the `cordis.patch.yml` + `dsh.bundle.patch` bundle model. Node requirements are 22.19 or later within 22.x, or 24 or later. Live external-service workflows require separate configuration and validation.
 
 On 2026-09-10, npm `dsh-email@0.10.6` passed real QQ mailbox folder/list/read/search calls, the settings page's connection test and Save & Apply, and separate SMTP authentication. An empty authorization-code field correctly used `DSH_EMAIL_PASSWORD`. This recheck did not connect to a real mailbox or send, modify or delete mail.
 
@@ -68,8 +69,12 @@ After installing, restart `dsh web`. The plugin ships with an empty config and *
 
 **Two configuration methods (pick one):**
 
-1. **Web settings (recommended)**: after restart, open **Settings → Mail (dsh-email)**, fill in the email address and authorization code, and click "Save & Apply"; a "Test connection" button is also provided. Zero YAML, zero restart.
-2. **YAML**: hand-write the cordis.patch.yml template below; the settings page's "Multiple accounts (advanced, YAML)" textbox can also hold the account map (overriding `accounts` in YAML).
+1. **Web settings (recommended)**: after restart, open **Settings → Mail (dsh-email)**, fill in the email address and authorization code in an account card, and click "Save & Apply"; each card also has its own "Test connection" button. Zero YAML, zero restart.
+2. **YAML**: hand-write the cordis.patch.yml template below; the settings page's "Multiple accounts (advanced, YAML)" textbox can also hold the account map (overriding `accounts` in YAML). The cards and that textbox are escape hatches for each other.
+
+The whole settings page follows DSH's light and dark themes: every panel style references the official `--dsw-alias-*` design tokens instead of hard-coded colors, so switching themes takes effect immediately (0.10.8 referenced a border token that does not exist, which produced a glaring light-gray border in dark mode; that is fixed).
+
+Multiple accounts can be edited visually in the settings page: account cards add, edit and delete accounts, rename them, pick the default, and run "Test connection" per account name; a half-filled account never blocks saving — it just gets an "incomplete" badge. Card edits land in the YAML text first and only take effect when the form is saved with "Save & Apply". When a card is saved, an already-stored authorization code is kept by default (leave the password field empty to keep it, type into it to overwrite), and comments in the YAML are preserved in place where possible — with an explicit notice when they cannot be.
 
 Values saved in the settings page live in the `dsh-email` namespace of `settings.yaml` and override the YAML default-account config. Authorization-code fields are marked secret, but saving a filled field still writes its value to the local settings file. For a single account, set `DSH_EMAIL_PASSWORD` and leave the authorization-code field empty to avoid saving it; the environment value is not copied into settings.
 
@@ -120,6 +125,20 @@ Multiple accounts: one `tool-email` line can hold several mailboxes; select one 
 
 Top-level `provider`/`user`/`password`/`imap`/`smtp`/`inboxFolder` remain available as shared defaults for all accounts (the v0.1 single-account style stays fully compatible).
 
+To reuse one set of connection endpoints across accounts, define your own provider presets with `serverPresets` (a YAML map: key = preset name, value has an optional `label` plus `imap`/`smtp`):
+
+```yaml
+- id: tool-email
+  config:
+    serverPresets: |
+      corp:
+        label: 公司邮箱
+        imap: { host: imap.corp.example, port: 993, secure: true }
+        smtp: { host: smtp.corp.example, port: 465, secure: true }
+```
+
+The settings page's "Server presets" fold-out edits these presets visually, and the account cards' provider dropdown automatically gains the preset names — picking one pre-fills its endpoints into the account. A preset holds connection endpoints only — **never an email address or authorization code**. `port`/`secure` may be omitted (defaults are 993/465 with SSL).
+
 ## Presets
 
 | provider | IMAP | SMTP |
@@ -155,6 +174,7 @@ Every provider requires an authorization code / app-specific password instead of
 - **Body search**: the server side only searches subject / from / to / cc. Most servers (e.g. QQ) have unreliable IMAP `TEXT` / `HEADER` search, so with no results it falls back to a body scan of the most recent `bodySearchLimit` messages (slower; disable with `bodySearchFallback`).
 - **Attachments**: inline images aren't downloadable separately yet; a failed attachment match errors instead of downloading the wrong file (safe default).
 - **Password storage**: the authorization code saved in the settings page is written in plaintext to the local `settings.yaml` (the secret mark only keeps it out of logs / exports / diagnostics; no disk encryption). Don't hand `settings.yaml` to untrusted people.
+- **Local edits are undone by `pnpm install`**: if you deploy by editing files inside `node_modules/dsh-email/`, any `pnpm install` restores the registry version (0.10.7, for example). To keep changes long-term, install from a local path or a Git commit instead.
 
 ## Development
 
@@ -164,9 +184,9 @@ pnpm run build   # tsc → lib/
 pnpm test        # build + offline tests; no real mailbox required
 ```
 
-`src/index.ts` composes the plugin. `runtime.ts` owns live settings, account pools, and separate tool/web watch cursors. `tools.ts` wires the ten tool implementations. `tool-contract.ts` defines parameters, output schemas, and text rendering. `approval.ts` owns the outgoing-mail gate. IMAP/SMTP transport remains in `mail-client.ts`, and browser routes remain in `web.ts`.
+`src/index.ts` composes the plugin. `runtime.ts` owns live settings, account pools, and separate tool/web watch cursors. `tools.ts` wires the ten tool implementations. `tool-contract.ts` defines parameters, output schemas, and text rendering. `approval.ts` owns the outgoing-mail gate. IMAP/SMTP transport remains in `mail-client.ts`, and browser routes remain in `web.ts` — which also hosts the parsing, serialization (comment-preserving, keeping stored authorization codes) and custom-preset snapshot the account-card editor depends on.
 
-Tests cover pool replacement after live settings changes, unload cleanup, cancellation and workspace propagation, independent tool/web cursors, and rejected approval preventing send execution. In-memory clients replace mailbox connections.
+Tests cover pool replacement after live settings changes, unload cleanup, cancellation and workspace propagation, independent tool/web cursors, account-card serialization and preset parsing, and rejected approval preventing send execution. In-memory clients replace mailbox connections.
 
 ## License
 
