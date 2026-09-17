@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { isMap, parseDocument, type Document, type YAMLMap } from 'yaml'
 import { SETTINGS_NAMESPACE, toEmailConfig, validateSettingsValue, type EmailSettingsValue } from './settings.js'
 import {
+  isOAuth2Account,
   parseAccountsYaml,
   parseServerPresets,
   presetNamesIn,
@@ -15,7 +16,15 @@ import {
   type ProviderPreset,
   type ServerPreset,
 } from './config.js'
+import {
+  getFreshAccessToken,
+  oauth2StateOf,
+  pollDeviceFlow,
+  startDeviceFlow,
+  type OAuth2State,
+} from './oauth2.js'
 import { EmailPool, messageOf } from './mail-client.js'
+import type { ResolvedEmailConfig } from './config.js'
 import type { EmailWatchResult } from './types.js'
 
 /** Same-origin route the browser settings section talks to. */
@@ -47,6 +56,15 @@ export interface AccountCardData {
   providerLabel?: string
   user: string
   hasPassword: boolean
+  /**
+   * How this account authenticates. An `oauth2` card shows the device-code
+   * login button instead of a 授权码, because Microsoft no longer accepts one.
+   */
+  authKind: 'oauth2' | 'password'
+  /** Login state of an OAuth2 account: none / a device code in flight / logged in. */
+  oauthState: OAuth2State
+  /** The mailbox address the stored token belongs to (OAuth2 accounts only). */
+  oauthUser?: string
   imap: { host: string; port: number; secure: boolean }
   smtp: { host: string; port: number; secure: boolean }
   inboxFolder: string
@@ -112,11 +130,16 @@ function endpointOf(
  * The endpoints are read from the *preset* only: an account stores a provider
  * id, so a stale hand-written `imap.host` in an existing YAML must not show up
  * in the editor as if it still drove the connection.
+ *
+ * `tokens` is the OAuth2 login state, looked up once per snapshot rather than
+ * per card: the token file is read from disk, and a card is rendered on every
+ * keystroke of the settings editor.
  */
 function buildAccountCards(
   raw: Record<string, unknown>,
   defaultAccount: string | undefined,
   presets: Record<string, ServerPreset>,
+  tokens: (name: string, user: string) => { state: OAuth2State; user?: string } = () => ({ state: 'none' }),
 ): AccountCardData[] {
   const list: AccountCardData[] = []
   for (const [name, value] of Object.entries(raw)) {
@@ -125,13 +148,22 @@ function buildAccountCards(
       : {}
     const providerName = typeof account.provider === 'string' && account.provider !== '' ? account.provider : undefined
     const preset = providerName === undefined ? undefined : providerOf(providerName, presets)
+    const imap = endpointOf(preset?.imap, IMAP_FALLBACK)
+    // The same verdict resolution reaches: the provider, or the Exchange Online
+    // host a custom preset or a hand-written endpoint points at.
+    const authKind = isOAuth2Account(providerName, imap.host) ? 'oauth2' as const : 'password' as const
+    const user = typeof account.user === 'string' ? account.user : ''
+    const oauth = authKind === 'oauth2' ? tokens(name, user) : { state: 'none' as OAuth2State }
     list.push({
       name,
       provider: providerName,
       ...(preset?.label !== undefined && preset.label !== '' ? { providerLabel: preset.label } : {}),
-      user: typeof account.user === 'string' ? account.user : '',
+      user,
       hasPassword: typeof account.password === 'string' && account.password !== '',
-      imap: endpointOf(preset?.imap, IMAP_FALLBACK),
+      authKind,
+      oauthState: oauth.state,
+      ...(oauth.user !== undefined ? { oauthUser: oauth.user } : {}),
+      imap,
       smtp: endpointOf(preset?.smtp, SMTP_FALLBACK),
       inboxFolder: typeof account.inboxFolder === 'string' && account.inboxFolder !== '' ? account.inboxFolder : 'INBOX',
       isDefault: name === defaultAccount,
@@ -232,6 +264,7 @@ function readAccountsDraft(
   text: string,
   presets: Record<string, ServerPreset>,
   rowDefault?: string,
+  tokens: (name: string, user: string) => { state: OAuth2State; user?: string } = () => ({ state: 'none' }),
 ): AccountsDraft {
   if (isBlankAccountsText(text)) {
     const { defaultAccount, error } = adjudicateAccounts({}, undefined, rowDefault)
@@ -251,8 +284,25 @@ function readAccountsDraft(
   return {
     raw,
     ...(verdict.defaultAccount !== undefined ? { defaultAccount: verdict.defaultAccount } : {}),
-    list: buildAccountCards(raw, verdict.defaultAccount, presets),
+    list: buildAccountCards(raw, verdict.defaultAccount, presets, tokens),
     ...(verdict.error !== undefined ? { error: verdict.error } : {}),
+  }
+}
+
+/**
+ * The OAuth2 login state lookup for a card list. The token file is read once
+ * and answered from memory afterwards: the editor calls parseAccounts on every
+ * keystroke, and one disk read per card would be paid on each of them.
+ */
+function tokenLookup(): (name: string, user: string) => { state: OAuth2State; user?: string } {
+  const cache = new Map<string, { state: OAuth2State; user?: string }>()
+  return (name, user) => {
+    const key = name + '\u0000' + user
+    const hit = cache.get(key)
+    if (hit !== undefined) return hit
+    const fresh = oauth2StateOf(name, user)
+    cache.set(key, fresh)
+    return fresh
   }
 }
 
@@ -599,7 +649,7 @@ export class EmailSettingsBackend {
     // The cards describe the *effective* accountsYaml — the same text the
     // advanced editor shows, and the same source the accounts field reads.
     const effective = this.effectiveStored()
-    const draft = readAccountsDraft(effective.accountsYaml ?? '', presets.custom, effective.defaultAccount)
+    const draft = readAccountsDraft(effective.accountsYaml ?? '', presets.custom, effective.defaultAccount, tokenLookup())
     return {
       settings: {
         value,
@@ -663,6 +713,15 @@ export class EmailSettingsBackend {
       throw new Error(`未知账号 "${name}"，可用：${available.join('、')}`)
     }
     const target = { account: name, imapHost: cfg.imap.host, imapPort: cfg.imap.port }
+    // An OAuth2 account has no password to check: without a token there is
+    // nothing to dial with, and a failed dial would only say so less clearly.
+    if (cfg.authKind === 'oauth2') {
+      try {
+        await getFreshAccessToken(name, cfg)
+      } catch (error) {
+        throw new Error(messageOf(error, '尚未登录：请先在设置页完成设备码登录'))
+      }
+    }
     const pool = new EmailPool(settings)
     try {
       const started = Date.now()
@@ -679,6 +738,83 @@ export class EmailSettingsBackend {
       throw error
     } finally {
       pool.dispose()
+    }
+  }
+
+  /**
+   * Resolve one named account of the *stored* settings — the same accounts the
+   * tools and the card list see. A login is not a draft operation: the settings
+   * page saves the card before it starts one, so the account being logged into
+   * is by definition already persisted.
+   */
+  private oauthAccount(name: unknown, action: string): { name: string; cfg: ResolvedEmailConfig } {
+    const wanted = typeof name === 'string' ? name.trim() : ''
+    if (wanted === '') throw new Error(action + ' 需要 account 参数（账号名）')
+    let settings
+    try {
+      settings = resolveEmailSettings(this.effectiveStored())
+    } catch (error) {
+      throw new Error(messageOf(error, '邮箱账号未配置'))
+    }
+    const cfg = settings.accounts.get(wanted)
+    if (cfg === undefined) {
+      throw new Error('未知账号 "' + wanted + '"，可用：' + [...settings.accounts.keys()].join('、'))
+    }
+    if (cfg.authKind !== 'oauth2') {
+      // The card only offers the login button on an OAuth2 account; reaching
+      // here means the page is stale or the provider was just changed.
+      throw new Error('账号 "' + wanted + '" 不需要设备码登录：只有 outlook（Exchange Online）账号使用 OAuth2')
+    }
+    return { name: wanted, cfg }
+  }
+
+  /**
+   * Start (or report) the device-code login for one OAuth2 account.
+   *
+   * An account that already holds a token answers `already` — the card shows
+   * 「已登录」and there is no second code to hand out. Otherwise the authority's
+   * device code is returned verbatim: url = verification_uri, code = user_code,
+   * and both interval and expires_in in seconds, which is the unit the page
+   * schedules its polling with.
+   */
+  async oauthLogin(name: unknown): Promise<Record<string, unknown>> {
+    try {
+      const { name: account, cfg } = this.oauthAccount(name, 'oauthLogin')
+      // Same verdict the card renders: a token belonging to a different
+      // address is not a login for this account, so it starts a fresh flow.
+      const state = oauth2StateOf(account, cfg.user)
+      if (state.state === 'logged-in') return { ok: true, status: 'already' }
+      const start = await startDeviceFlow(account, cfg)
+      return {
+        ok: true,
+        status: 'pending',
+        url: start.url,
+        code: start.code,
+        interval: start.interval,
+        expires_in: start.expiresIn,
+      }
+    } catch (error) {
+      return { ok: false, message: messageOf(error, '登录失败：请稍后重试') }
+    }
+  }
+
+  /**
+   * One poll of an in-flight device-code login.
+   *
+   * `authorization_pending` is the ordinary answer for as long as the user has
+   * not finished in the browser, so it is reported as a state rather than an
+   * error: only a refused or expired flow comes back as ok:false.
+   */
+  async oauthPoll(name: unknown): Promise<Record<string, unknown>> {
+    try {
+      const { name: account } = this.oauthAccount(name, 'oauthPoll')
+      const result = await pollDeviceFlow(account)
+      if (result.status === 'pending') return { ok: true, status: 'pending' }
+      return { ok: true, status: 'ok', user: result.user }
+    } catch (error) {
+      // Every failure of a poll is a login failure the user has to see, so it
+      // leaves as the flat { ok:false, message } the page renders.
+      return { ok: false, message: messageOf(error, '登录失败：请稍后重试') }
     }
   }
 
@@ -727,7 +863,16 @@ export class EmailSettingsBackend {
       return
     }
     try {
-      if (body?.action === 'save') {
+      if (body?.action === 'oauthLogin' || body?.action === 'oauthPoll') {
+        // The two login actions answer with the flat object itself, not the
+        // { ok, value } envelope the other actions use: their whole meaning is
+        // { ok, status }, and a failure is a flat { ok:false, message } rather
+        // than the error envelope. The page reads them straight off the body.
+        const answer = body.action === 'oauthLogin'
+          ? await this.oauthLogin(body.account)
+          : await this.oauthPoll(body.account)
+        this.responseJson(res, 200, answer)
+      } else if (body?.action === 'save') {
         if (!Number.isSafeInteger(body.expectedRevision)) throw new Error('expectedRevision must be a non-negative integer')
         this.responseJson(res, 200, { ok: true, value: await this.save(body.value, body.expectedRevision) })
       } else if (body?.action === 'test') {
@@ -745,7 +890,7 @@ export class EmailSettingsBackend {
         const presets = typeof body.serverPresets === 'string'
           ? customPresetsOf(body.serverPresets).custom
           : customPresetsOf((this.scope.get() as EmailSettingsValue).serverPresets).custom
-        const draft = readAccountsDraft(text, presets, this.rowConfig.defaultAccount)
+        const draft = readAccountsDraft(text, presets, this.rowConfig.defaultAccount, tokenLookup())
         this.responseJson(res, 200, {
           ok: true,
           value: {

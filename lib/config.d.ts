@@ -6,6 +6,28 @@ export type ProviderName = 'qq' | '163' | '126' | 'sina' | 'aliyun' | 'gmail' | 
  * built-ins while admitting a preset name the schema cannot know in advance.
  */
 export type ProviderRef = ProviderName | (string & {});
+/**
+ * The provider that authenticates with OAuth2 instead of a password.
+ *
+ * Microsoft retired basic authentication for Exchange Online, so `outlook` is
+ * not a password provider with different endpoints — it is the same endpoints
+ * (imap/smtp.office365.com, straight out of PROVIDER_PRESETS) behind a
+ * completely different authentication scheme. `authKind` below is that fact.
+ */
+export declare const OUTLOOK_PROVIDER = "outlook";
+/** The Exchange Online IMAP host. Any account dialling it is an OAuth2 account. */
+export declare const OUTLOOK_IMAP_HOST = "outlook.office365.com";
+/**
+ * The client id of the public application this plugin uses for the device-code
+ * flow. A well-known multi-tenant registration with the IMAP/SMTP delegated
+ * permissions; an account may override it with its own `clientId`.
+ */
+export declare const OUTLOOK_OAUTH2_CLIENT_ID = "15dcd5aa-00dd-487f-82d7-1d2b2c299e14";
+/**
+ * How an account proves who it is. `password` covers every existing provider
+ * (an app password / 授权码) and is the default, so nothing about them changes.
+ */
+export type AuthKind = 'oauth2' | 'password';
 export interface ImapConfig {
     host?: string;
     port?: number;
@@ -24,6 +46,11 @@ export interface AccountConfig {
     provider?: ProviderRef;
     user?: string;
     password?: string;
+    /**
+     * Public-client id used by the OAuth2 device-code flow. Only read for an
+     * OAuth2 account, where it overrides OUTLOOK_OAUTH2_CLIENT_ID.
+     */
+    clientId?: string;
     imap?: ImapConfig;
     smtp?: SmtpConfig;
     inboxFolder?: string;
@@ -92,7 +119,15 @@ export declare const EMAIL_PASSWORD_ENV = "DSH_EMAIL_PASSWORD";
 /** Fully resolved, validated configuration for one account. */
 export interface ResolvedEmailConfig {
     user: string;
+    /**
+     * The app password / 授权码. Empty for an OAuth2 account — that is the point:
+     * nothing is stored, the token store holds the credential instead.
+     */
     password: string;
+    /** How this account authenticates. Chosen by `provider`, never by the user directly. */
+    authKind: AuthKind;
+    /** Public-client id for the device-code flow (OAuth2 accounts only). */
+    clientId?: string;
     imap: ImapConfig & {
         host: string;
         port: number;
@@ -105,6 +140,16 @@ export interface ResolvedEmailConfig {
     };
     inboxFolder: string;
 }
+/**
+ * True when an account authenticates with OAuth2 rather than a password.
+ *
+ * Two ways in, and only these two: the built-in `outlook` provider, or an
+ * account pointed at the Exchange Online IMAP host by hand (a custom preset or
+ * an explicit `imap.host`). The host test is what keeps a custom preset to
+ * outlook.office365.com from silently demanding a password Microsoft no longer
+ * accepts — the endpoints are identical, only the credentials are not.
+ */
+export declare function isOAuth2Account(provider: string | undefined, imapHost: string | undefined): boolean;
 /** Fully resolved plugin settings: the account map plus shared policy. */
 export interface ResolvedEmailSettings {
     accounts: Map<string, ResolvedEmailConfig>;

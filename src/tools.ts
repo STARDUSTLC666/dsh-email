@@ -1,5 +1,6 @@
 import { clampInt, PROVIDER_PRESETS } from './config.js'
 import { messageOf } from './mail-client.js'
+import { NOT_LOGGED_IN_MESSAGE, oauth2StateOf } from './oauth2.js'
 import type { EmailRuntime } from './runtime.js'
 import {
   descriptions, parameters, MAX_LIMIT, MARK_ACTIONS, REPLY_MODES,
@@ -192,11 +193,25 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
             const provider = Object.entries(PROVIDER_PRESETS).find(([, preset]) => (
               preset.imap.host === account.imap.host && preset.smtp.host === account.smtp.host
             ))?.[0] ?? 'custom'
-            checks.push({
-              name: '账号 ' + accountName,
-              ok: true,
-              detail: provider + ' / ' + account.user + ' / IMAP ' + account.imap.host + ' / SMTP ' + account.smtp.host,
-            })
+            const base = provider + ' / ' + account.user + ' / IMAP ' + account.imap.host + ' / SMTP ' + account.smtp.host
+            // An OAuth2 account with no token is configured, not broken: the
+            // missing piece is a browser login, and saying so is the whole
+            // point of this check.
+            if (account.authKind === 'oauth2') {
+              // The address is passed along so a token belonging to a different
+              // mailbox is not reported as a working login.
+              const state = oauth2StateOf(accountName, account.user)
+              const loggedIn = state.state === 'logged-in'
+              checks.push({
+                name: '账号 ' + accountName,
+                ok: true,
+                detail: loggedIn
+                  ? base + ' / OAuth2 已登录' + (state.user !== undefined ? '（' + state.user + '）' : '')
+                  : base + ' / OAuth2 ' + NOT_LOGGED_IN_MESSAGE,
+              })
+              continue
+            }
+            checks.push({ name: '账号 ' + accountName, ok: true, detail: base })
           }
           return { ok: true, plugin: 'dsh-email', accountCount: entries.length, checks }
         } catch (error) {

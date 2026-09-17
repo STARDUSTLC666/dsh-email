@@ -1,7 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { apply, EmailPool, SETTINGS_ROUTE } from '../lib/index.js'
 import { parseAccountsYaml, parseServerPresets, PROVIDER_NAMES, PROVIDER_PRESETS, resolveEmailSettings, serializeAccountsYaml } from '../lib/config.js'
+import { oauth2TokenFile, readTokenStore, writeTokenStore } from '../lib/oauth2.js'
 
 const BASE = {
   provider: 'qq',
@@ -867,7 +871,15 @@ test('snapshot never leaks a password through the card list', async t => {
   const serialized = JSON.stringify((await get()).body)
   assert.equal(serialized.includes('super-secret'), true, 'the raw mapping is what the editor edits, so it carries the password')
   const card = (await get()).body.value.accountsDetail.list[0]
-  assert.deepEqual(Object.keys(card).sort(), ['hasPassword', 'imap', 'inboxFolder', 'isDefault', 'name', 'provider', 'smtp', 'user'])
+  // authKind/oauthState are the OAuth2 login projection; oauthUser stays absent
+  // for a password account, where there is no login to describe.
+  assert.deepEqual(
+    Object.keys(card).sort(),
+    ['authKind', 'hasPassword', 'imap', 'inboxFolder', 'isDefault', 'name', 'oauthState', 'provider', 'smtp', 'user'],
+  )
+  assert.equal(card.authKind, 'password')
+  assert.equal(card.oauthState, 'none')
+  assert.equal('oauthUser' in card, false)
   assert.equal(card.hasPassword, true, 'the card only reports whether a password exists')
   assert.equal(JSON.stringify(card).includes('super-secret'), false)
 })
@@ -1328,4 +1340,277 @@ test('an account with no provider loses its hand-written endpoints on save (docu
   assert.equal(parsed.map.work.user, 'w@corp.example')
   assert.equal(parsed.map.work.password, 'pw', 'the credentials survive — only the endpoints are dropped')
   assert.throws(() => resolveEmailSettings({ accountsYaml: out }), /imap\.host 未填写/, 'and the loss is reported, not silent')
+})
+
+// --- OAuth2: the frozen web action contract ----------------------------------
+//
+// The settings page drives the device-code login through two actions and reads
+// the login state off the account card. The shapes below are the contract the
+// front end is written against, so they are pinned here rather than left to the
+// implementation: url/code/interval/expires_in for the login, and the flat
+// { ok, status } / { ok:false, message } pair for both actions.
+
+const OAUTH_HOME = mkdtempSync(join(tmpdir(), 'dsh-email-web-oauth2-'))
+process.env.DSH_HOME = OAUTH_HOME
+
+const OUTLOOK_YAML = 'work: { provider: outlook, user: w@outlook.com }\n'
+const OAUTH_DEVICE_OK = {
+  device_code: 'dev-1',
+  user_code: 'WXYZ-1234',
+  verification_uri: 'https://microsoft.com/devicelogin',
+  expires_in: 900,
+  interval: 5,
+}
+
+function oauthFetch(t, handler) {
+  const calls = []
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    calls.push({ url: String(url), params: Object.fromEntries(new URLSearchParams(String(init?.body ?? ''))) })
+    return await handler(calls[calls.length - 1])
+  })
+  return calls
+}
+
+function oauthJson(payload, status = 200) {
+  return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json' } })
+}
+
+function storeToken(name, entry) {
+  const file = oauth2TokenFile()
+  assert.equal(file.startsWith(OAUTH_HOME), true, 'the suite must only write inside its temp DSH_HOME')
+  writeTokenStore({
+    version: 1,
+    accounts: {
+      ...readTokenStore().accounts,
+      [name]: {
+        user: 'w@outlook.com', clientId: 'c', refreshToken: 'r', accessToken: 'a',
+        expiresAt: Date.now() + 3600_000, ...entry,
+      },
+    },
+  })
+}
+
+function clearTokens() {
+  writeTokenStore({ version: 1, accounts: {} })
+}
+
+test.after(() => rmSync(OAUTH_HOME, { recursive: true, force: true }))
+
+test('oauthLogin: an account that is already logged in answers already', async t => {
+  clearTokens()
+  storeToken('work')
+  const calls = oauthFetch(t, () => oauthJson(OAUTH_DEVICE_OK))
+  const { post } = mount(t, { value: { accountsYaml: OUTLOOK_YAML } })
+  const { status, body } = await post({ action: 'oauthLogin', account: 'work' })
+  assert.equal(status, 200)
+  assert.deepEqual(body, { ok: true, status: 'already' })
+  assert.equal(calls.length, 0, 'a logged-in account needs no new device code')
+})
+
+test('oauthLogin: an account with no token starts the device flow with the frozen field names', async t => {
+  clearTokens()
+  const calls = oauthFetch(t, () => oauthJson(OAUTH_DEVICE_OK))
+  const { post } = mount(t, { value: { accountsYaml: OUTLOOK_YAML } })
+  const { status, body } = await post({ action: 'oauthLogin', account: 'work' })
+  assert.equal(status, 200)
+  assert.deepEqual(body, {
+    ok: true,
+    status: 'pending',
+    url: 'https://microsoft.com/devicelogin',
+    code: 'WXYZ-1234',
+    interval: 5,
+    expires_in: 900,
+  })
+  assert.equal(calls[0].url, 'https://login.microsoftonline.com/common/oauth2/v2.0/devicecode')
+  assert.match(calls[0].params.scope, /IMAP\.AccessAsUser\.All/)
+})
+
+test('oauthLogin: a failure is a flat { ok:false, message }, never an HTTP error', async t => {
+  clearTokens()
+  oauthFetch(t, () => oauthJson({
+    error: 'unauthorized_client',
+    error_description: 'AADSTS7000218: client_assertion required',
+    error_codes: [7000218],
+  }, 400))
+  const { post } = mount(t, { value: { accountsYaml: OUTLOOK_YAML } })
+  const { status, body } = await post({ action: 'oauthLogin', account: 'work' })
+  assert.equal(status, 200, 'the page reads the message off the body, so this must not be an HTTP failure')
+  assert.equal(body.ok, false)
+  assert.match(body.message, /允许公共客户端流/)
+  assert.equal(body.status, undefined, 'there is no state to describe a login that never started')
+})
+
+test('oauthLogin/oauthPoll: an unknown, missing or non-OAuth account is refused with a message', async t => {
+  clearTokens()
+  const yaml = OUTLOOK_YAML + 'home: { provider: qq, user: h@qq.com, password: p }\ndefaultAccount: work\n'
+  const { post } = mount(t, { value: { accountsYaml: yaml } })
+  const unknown = await post({ action: 'oauthLogin', account: 'nope' })
+  assert.equal(unknown.status, 200)
+  assert.equal(unknown.body.ok, false)
+  assert.match(unknown.body.message, /未知账号 "nope"/)
+  assert.match(unknown.body.message, /work/, 'the message names what would have worked')
+
+  const missing = await post({ action: 'oauthLogin', account: '   ' })
+  assert.equal(missing.body.ok, false)
+  assert.match(missing.body.message, /account 参数/)
+
+  // A password account has no device code to hand out: reaching this means the
+  // page is stale or the provider was just changed.
+  const password = await post({ action: 'oauthLogin', account: 'home' })
+  assert.equal(password.body.ok, false)
+  assert.match(password.body.message, /不需要设备码登录/)
+  assert.match(password.body.message, /outlook/)
+})
+
+test('oauthPoll: pending / ok / failure follow the frozen contract', async t => {
+  clearTokens()
+  // The two endpoints answer differently: the device-code call must keep
+  // succeeding while the token call reports the poll's own state.
+  let tokenAnswer = { error: 'authorization_pending', error_description: 'waiting' }
+  let tokenStatus = 400
+  oauthFetch(t, call => call.url.endsWith('/devicecode')
+    ? oauthJson(OAUTH_DEVICE_OK)
+    : oauthJson(tokenAnswer, tokenStatus))
+  const { post } = mount(t, { value: { accountsYaml: OUTLOOK_YAML } })
+
+  await post({ action: 'oauthLogin', account: 'work' })
+  const pending = await post({ action: 'oauthPoll', account: 'work' })
+  assert.equal(pending.status, 200)
+  assert.deepEqual(pending.body, { ok: true, status: 'pending' })
+
+  tokenAnswer = { token_type: 'Bearer', expires_in: 3600, access_token: 'access-9', refresh_token: 'refresh-9' }
+  tokenStatus = 200
+  const done = await post({ action: 'oauthPoll', account: 'work' })
+  assert.deepEqual(done.body, { ok: true, status: 'ok', user: 'w@outlook.com' })
+  assert.equal(readTokenStore().accounts.work.refreshToken, 'refresh-9', 'the token is persisted by the poll')
+
+  // A dead device code is reported as a failure, and the flow is dropped.
+  clearTokens()
+  tokenAnswer = { error: 'expired_token', error_description: 'expired' }
+  tokenStatus = 400
+  await post({ action: 'oauthLogin', account: 'work' })
+  const expired = await post({ action: 'oauthPoll', account: 'work' })
+  assert.equal(expired.body.ok, false)
+  assert.match(expired.body.message, /设备码超时/)
+  const after = await post({ action: 'oauthPoll', account: 'work' })
+  assert.equal(after.body.ok, false)
+  assert.match(after.body.message, /尚未发起设备码登录/)
+})
+
+test('the card carries authKind/oauthState/oauthUser for an OAuth2 account', async t => {
+  clearTokens()
+  const yaml = OUTLOOK_YAML + 'home: { provider: qq, user: h@qq.com, password: p }\ndefaultAccount: work\n'
+  const mounted = mount(t, { value: { accountsYaml: yaml } })
+
+  const loggedOut = (await mounted.get()).body.value.accountsDetail.list.find(card => card.name === 'work')
+  assert.equal(loggedOut.authKind, 'oauth2')
+  assert.equal(loggedOut.oauthState, 'none')
+  assert.equal('oauthUser' in loggedOut, false, 'no login means nothing to name')
+  assert.equal(loggedOut.hasPassword, false, 'an OAuth2 account stores no password')
+  const home = (await mounted.get()).body.value.accountsDetail.list.find(card => card.name === 'home')
+  assert.equal(home.authKind, 'password')
+  assert.equal(home.oauthState, 'none')
+
+  storeToken('work')
+  const loggedIn = (await mounted.get()).body.value.accountsDetail.list.find(card => card.name === 'work')
+  assert.equal(loggedIn.oauthState, 'logged-in')
+  assert.equal(loggedIn.oauthUser, 'w@outlook.com')
+})
+
+test('editing the address of a logged-in OAuth2 account makes the card say 未登录 again', async t => {
+  clearTokens()
+  storeToken('work')
+  // The token belongs to w@outlook.com; the user has just retyped the address.
+  const edited = mount(t, { value: { accountsYaml: 'work: { provider: outlook, user: someone-else@outlook.com }\n' } })
+  const card = (await edited.get()).body.value.accountsDetail.list.find(entry => entry.name === 'work')
+  assert.equal(card.oauthState, 'none', 'a token for another mailbox is not a login for this account')
+  assert.equal('oauthUser' in card, false)
+
+  // And the login button does not answer「already」for it either: the two
+  // verdicts have to agree, or the card would be stuck on a broken login.
+  const calls = oauthFetch(t, () => oauthJson(OAUTH_DEVICE_OK))
+  const { status, body } = await edited.post({ action: 'oauthLogin', account: 'work' })
+  assert.equal(status, 200)
+  assert.equal(body.ok, true)
+  assert.equal(body.status, 'pending', 'a stale token must not satisfy the login request')
+  assert.equal(calls.length, 1)
+})
+
+test('parseAccounts reports the same OAuth2 projection as the snapshot', async t => {
+  clearTokens()
+  storeToken('work')
+  const { post } = mount(t, { value: { accountsYaml: '' } })
+  const { body } = await post({ action: 'parseAccounts', value: { accountsYaml: OUTLOOK_YAML } })
+  assert.equal(body.value.ok, true)
+  const card = body.value.list[0]
+  assert.equal(card.authKind, 'oauth2')
+  assert.equal(card.oauthState, 'logged-in')
+  assert.equal(card.oauthUser, 'w@outlook.com')
+})
+
+test('test action: an OAuth2 account with no token says to log in and never dials', async t => {
+  clearTokens()
+  // No pool stub: reaching the network here would be the bug, so the assertion
+  // is that the route refuses before a connection is even attempted.
+  t.mock.method(EmailPool.prototype, 'withImap', async function () {
+    assert.fail('an OAuth2 account with no token must not dial')
+  })
+  const calls = oauthFetch(t, () => oauthJson({ token_type: 'Bearer', expires_in: 3600, access_token: 'a', refresh_token: 'r' }))
+  const { post } = mount(t, { value: { accountsYaml: OUTLOOK_YAML } })
+  const { status, body } = await post({ action: 'test', account: 'work', value: { ...BASE, accountsYaml: OUTLOOK_YAML } })
+  assert.equal(status, 400)
+  assert.equal(body.ok, false)
+  assert.match(body.error.message, /尚未登录/)
+  assert.match(body.error.message, /设置页/)
+  assert.equal(calls.length, 0, 'no token is a local fact, not a server round trip')
+})
+
+test('test action: an OAuth2 account with a valid token does dial, and a broken one does not', async t => {
+  clearTokens()
+  t.mock.method(EmailPool.prototype, 'withImap', async function (name) { return name })
+  const calls = oauthFetch(t, () => oauthJson({ token_type: 'Bearer', expires_in: 3600, access_token: 'fresh', refresh_token: 'r2' }))
+
+  // Fresh token: the dial proceeds and nothing is refreshed.
+  storeToken('work')
+  const ok = await mount(t, { value: { accountsYaml: OUTLOOK_YAML } })
+    .post({ action: 'test', account: 'work', value: { ...BASE, accountsYaml: OUTLOOK_YAML } })
+  assert.equal(ok.status, 200, JSON.stringify(ok.body))
+  assert.equal(ok.body.value.imapHost, 'outlook.office365.com')
+  assert.equal(calls.length, 0, 'a fresh token is not refreshed just to test a connection')
+
+  // Stale token: the route mints a new one before dialling.
+  storeToken('work', { expiresAt: Date.now() - 1000 })
+  const refreshed = await mount(t, { value: { accountsYaml: OUTLOOK_YAML } })
+    .post({ action: 'test', account: 'work', value: { ...BASE, accountsYaml: OUTLOOK_YAML } })
+  assert.equal(refreshed.status, 200, JSON.stringify(refreshed.body))
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].params.grant_type, 'refresh_token')
+})
+
+test('the OAuth2 actions stay localhost-only like the rest of the route', async t => {
+  clearTokens()
+  const { call } = mount(t, { value: { accountsYaml: OUTLOOK_YAML } })
+  const login = await call({ action: 'oauthLogin', account: 'work' }, { remoteAddress: '10.0.0.7' })
+  assert.equal(login.status, 403)
+  const poll = await call({ action: 'oauthPoll', account: 'work' }, { remoteAddress: '10.0.0.7' })
+  assert.equal(poll.status, 403)
+})
+
+test('an OAuth2 account round-trips through the card editor without a password', async t => {
+  clearTokens()
+  const { post } = mount(t)
+  // The page saves the card before it starts a login, so this is the exact
+  // document the device flow is then run against.
+  const written = await post({
+    action: 'serializeAccounts',
+    accountsYaml: '',
+    defaultAccount: 'work',
+    accounts: [{ name: 'work', provider: 'outlook', user: 'w@outlook.com', inboxFolder: 'INBOX' }],
+  })
+  const out = written.body.value.accountsYaml
+  assert.match(out, /provider: outlook/)
+  assert.equal(/password/.test(out), false, 'an OAuth2 card never writes a credential')
+  const resolved = resolveEmailSettings({ accountsYaml: out })
+  assert.equal(resolved.accounts.get('work').authKind, 'oauth2')
+  assert.equal(resolved.accounts.get('work').user, 'w@outlook.com')
 })

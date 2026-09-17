@@ -1,5 +1,6 @@
 import { type EmailSettingsValue } from './settings.js';
 import { type EmailConfig, type ProviderPreset, type ServerPreset } from './config.js';
+import { type OAuth2State } from './oauth2.js';
 import type { EmailWatchResult } from './types.js';
 /** Same-origin route the browser settings section talks to. */
 export declare const SETTINGS_ROUTE = "/_dsh/dsh-email/settings";
@@ -18,6 +19,15 @@ export interface AccountCardData {
     providerLabel?: string;
     user: string;
     hasPassword: boolean;
+    /**
+     * How this account authenticates. An `oauth2` card shows the device-code
+     * login button instead of a 授权码, because Microsoft no longer accepts one.
+     */
+    authKind: 'oauth2' | 'password';
+    /** Login state of an OAuth2 account: none / a device code in flight / logged in. */
+    oauthState: OAuth2State;
+    /** The mailbox address the stored token belongs to (OAuth2 accounts only). */
+    oauthUser?: string;
     imap: {
         host: string;
         port: number;
@@ -132,6 +142,31 @@ export declare class EmailSettingsBackend {
         ok: boolean;
         ms: number;
     }>;
+    /**
+     * Resolve one named account of the *stored* settings — the same accounts the
+     * tools and the card list see. A login is not a draft operation: the settings
+     * page saves the card before it starts one, so the account being logged into
+     * is by definition already persisted.
+     */
+    private oauthAccount;
+    /**
+     * Start (or report) the device-code login for one OAuth2 account.
+     *
+     * An account that already holds a token answers `already` — the card shows
+     * 「已登录」and there is no second code to hand out. Otherwise the authority's
+     * device code is returned verbatim: url = verification_uri, code = user_code,
+     * and both interval and expires_in in seconds, which is the unit the page
+     * schedules its polling with.
+     */
+    oauthLogin(name: unknown): Promise<Record<string, unknown>>;
+    /**
+     * One poll of an in-flight device-code login.
+     *
+     * `authorization_pending` is the ordinary answer for as long as the user has
+     * not finished in the browser, so it is reported as a state rather than an
+     * error: only a refused or expired flow comes back as ok:false.
+     */
+    oauthPoll(name: unknown): Promise<Record<string, unknown>>;
     responseJson(res: any, status: number, body: unknown): void;
     handle(req: any, res: any): Promise<void>;
     /** GET-only localhost route serving the whale-girl courier image. */
