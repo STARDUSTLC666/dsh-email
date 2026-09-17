@@ -3,7 +3,8 @@ import nodemailer, { type Transporter } from 'nodemailer'
 import { mkdir, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Readable } from 'node:stream'
-import type { ResolvedEmailConfig, ResolvedEmailSettings } from './config.js'
+import type { AuthKind, ResolvedEmailConfig, ResolvedEmailSettings } from './config.js'
+import { getFreshAccessToken, OAuth2Error } from './oauth2.js'
 import { flattenAddresses, parseRawMessage, sanitizeFilename } from './parse.js'
 import type {
   AddressEntry,
@@ -30,6 +31,86 @@ export class MailError extends Error {
 
 export function messageOf(error: unknown, fallback: string): string {
   return error instanceof Error && error.message !== '' ? error.message : fallback
+}
+
+/**
+ * Replace anything credential-shaped in a server's own error text before it
+ * reaches a user.
+ *
+ * IMAP and SMTP servers routinely quote back the authentication string they
+ * rejected. For XOAUTH2 that string is `user=…\x01auth=Bearer <token>\x01\x01`,
+ * usually base64'd — so the raw message carries a live access token, and these
+ * messages are rendered in the settings panel, returned by the mail tools, and
+ * pasted into bug reports.
+ *
+ * Two shapes are masked: a JWT (three base64url segments, which is what every
+ * OAuth2 access token looks like) and a long base64 run (the quoted XOAUTH2
+ * blob). The replacement keeps the length so a report still says how big the
+ * thing was, without saying what it was.
+ */
+export function redactCredentials(text: string): string {
+  return text
+    .replace(/[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{8,}/g, match => `<已隐去 ${match.length} 字符的令牌>`)
+    .replace(/[A-Za-z0-9+/]{40,}={0,2}/g, match => `<已隐去 ${match.length} 字符的凭据>`)
+}
+
+/** The IMAP auth shape imapflow accepts: a password, or an OAuth2 access token. */
+export interface ImapAuth {
+  user: string
+  pass?: string
+  accessToken?: string
+}
+
+/**
+ * The SMTP auth shape nodemailer accepts. `type` is the literal union
+ * nodemailer's typings model, not a loose string: anything wider makes the
+ * whole transport options object fail to match and silently degrades the type.
+ */
+export type SmtpAuth =
+  | { user: string; pass: string }
+  | { type: 'OAuth2'; user: string; accessToken: string }
+
+/**
+ * The IMAP `auth` block for one account. Pure so the shape the library
+ * receives is testable without a socket: an OAuth2 account authenticates with
+ * `accessToken` (imapflow then runs AUTHENTICATE XOAUTH2) and a password
+ * account with `pass`, exactly as before.
+ */
+export function imapAuthOf(cfg: Pick<ResolvedEmailConfig, 'user' | 'password' | 'authKind'>, accessToken?: string): ImapAuth {
+  return cfg.authKind === 'oauth2'
+    ? { user: cfg.user, accessToken: accessToken ?? '' }
+    : { user: cfg.user, pass: cfg.password }
+}
+
+/**
+ * Nodemailer consumes an OAuth2 token through accessToken, not pass.
+ * Refresh remains owned by this plugin; no refresh credentials leave here.
+ */
+export function smtpAuthOf(cfg: Pick<ResolvedEmailConfig, 'user' | 'password' | 'authKind'>, accessToken?: string): SmtpAuth {
+  return cfg.authKind === 'oauth2'
+    ? { type: 'OAuth2', user: cfg.user, accessToken: accessToken ?? '' }
+    : { user: cfg.user, pass: cfg.password }
+}
+
+/** The message an OAuth2 account gets when the mailbox has to be logged into again. */
+export const OAUTH2_RELOGIN_MESSAGE = '邮箱登录失败：请到设置页重新登录（Microsoft 账号使用设备码登录，不使用授权码）'
+
+/**
+ * True for the errors both libraries report when the server rejects the
+ * credentials. An expired access token is indistinguishable from a wrong
+ * password at this level, so the connection retries once with a forced refresh
+ * before it believes the token is really dead.
+ */
+export function looksLikeAuthFailure(error: unknown): boolean {
+  const raw = messageOf(error, '').toLowerCase()
+  if (raw === '') return false
+  return raw.includes('authentication')
+    || raw.includes('authenticate')
+    || raw.includes('auth failed')
+    || raw.includes('login')
+    || raw.includes('command failed')
+    || raw.includes('invalid credentials')
+    || raw.includes('xoauth2')
 }
 
 /** True when any bodyStructure node declares an attachment disposition. */
@@ -283,12 +364,12 @@ export class EmailPool {
     return this.enqueue(name, () => this.imapRun(name, cfg, folder, readOnly, run, signal), signal)
   }
 
-  private createImap(cfg: ResolvedEmailConfig): ImapFlow {
+  private createImap(auth: ImapAuth, cfg: ResolvedEmailConfig): ImapFlow {
     const client = new ImapFlow({
       host: cfg.imap.host,
       port: cfg.imap.port,
       secure: cfg.imap.secure,
-      auth: { user: cfg.user, pass: cfg.password },
+      auth,
       logger: false,
       connectionTimeout: cfg.imap.connectionTimeoutMs ?? 30000,
       greetingTimeout: 30000,
@@ -307,6 +388,50 @@ export class EmailPool {
       }
     })
     return client
+  }
+
+  /**
+   * Dial and authenticate one fresh IMAP connection.
+   *
+   * A password account connects once. An OAuth2 account connects with a fresh
+   * access token and, when the server rejects it, refreshes once and tries
+   * again: a token that expired between the freshness check and the dial is
+   * indistinguishable from a wrong password at the socket, and guessing wrong
+   * would send the user through a browser login for nothing.
+   */
+  private async connectImap(name: string, cfg: ResolvedEmailConfig, forceToken = false): Promise<ImapFlow> {
+    const oauth2 = cfg.authKind === 'oauth2'
+    const attempt = async (token: string | undefined): Promise<ImapFlow> => {
+      const client = this.createImap(imapAuthOf(cfg, token), cfg)
+      await client.connect()
+      return client
+    }
+    let token: string | undefined
+    if (oauth2) {
+      try {
+        token = await getFreshAccessToken(name, cfg, { force: forceToken })
+      } catch (error) {
+        throw this.oauth2ErrorOf(error)
+      }
+    }
+    try {
+      return await attempt(token)
+    } catch (error) {
+      if (!oauth2 || !looksLikeAuthFailure(error)) throw error
+      try {
+        token = await getFreshAccessToken(name, cfg, { force: true })
+      } catch (refreshError) {
+        throw this.oauth2ErrorOf(refreshError)
+      }
+      return await attempt(token)
+    }
+  }
+
+  /** The token store's own errors are already actionable; never dress them as IMAP failures. */
+  private oauth2ErrorOf(error: unknown): Error {
+    if (error instanceof OAuth2Error) return new MailError(error.message)
+    if (error instanceof MailError) return error
+    return new MailError(OAUTH2_RELOGIN_MESSAGE + '（' + redactCredentials(messageOf(error, '未知错误')) + '）')
   }
 
   private async imapRun<T>(
@@ -330,10 +455,8 @@ export class EmailPool {
     try {
       if (entry === undefined || !entry.client.usable) {
         if (entry !== undefined) await this.evictImap(name)
-        const client = this.createImap(cfg)
+        const client = await this.connectImap(name, cfg)
         activeClient = client
-        signal?.throwIfAborted()
-        await client.connect()
         signal?.throwIfAborted()
         entry = { client, selected: null, selectedReadOnly: true, lastUsed: Date.now(), inUse: 0 }
         this.imaps.set(name, entry)
@@ -356,18 +479,21 @@ export class EmailPool {
     } catch (error) {
       await this.evictImap(name)
       signal?.throwIfAborted()
-      throw this.normalizeImapError(error, folder)
+      throw this.normalizeImapError(error, folder, cfg.authKind)
     } finally {
       signal?.removeEventListener('abort', onAbort)
       if (entry !== undefined) entry.inUse = Math.max(0, entry.inUse - 1)
     }
   }
 
-  private normalizeImapError(error: unknown, folder: string | null): Error {
+  private normalizeImapError(error: unknown, folder: string | null, authKind: AuthKind = 'password'): Error {
     const raw = messageOf(error, 'IMAP 操作失败')
     const lower = raw.toLowerCase()
     if (lower.includes('authentication') || lower.includes('login')) {
-      return new MailError('邮箱登录失败：' + raw + '（请检查 user 与授权码）')
+      // An OAuth2 account has no 授权码 to check: the only fix is a new login.
+      return new MailError(authKind === 'oauth2'
+        ? OAUTH2_RELOGIN_MESSAGE + '（' + raw + '）'
+        : '邮箱登录失败：' + raw + '（请检查 user 与授权码）')
     }
     if (lower.includes('nonselect') || lower.includes('does not exist') || lower.includes('nonexistent')) {
       return new MailError('找不到邮箱文件夹 "' + (folder ?? '') + '"：' + raw)
@@ -405,7 +531,12 @@ export class EmailPool {
     this.smtps.clear()
   }
 
-  private transporter(name: string, cfg: ResolvedEmailConfig): Transporter {
+  /**
+   * A pooled transporter for one account. The token is captured when the
+   * transporter is built; an OAuth2 token that turns out to be stale is
+   * re-minted in sendMail, which rebuilds the transporter.
+   */
+  private transporter(name: string, cfg: ResolvedEmailConfig, accessToken?: string): Transporter {
     let t = this.smtps.get(name)
     if (t === undefined) {
       t = nodemailer.createTransport({
@@ -413,7 +544,7 @@ export class EmailPool {
         host: cfg.smtp.host,
         port: cfg.smtp.port,
         secure: cfg.smtp.secure,
-        auth: { user: cfg.user, pass: cfg.password },
+        auth: smtpAuthOf(cfg, accessToken),
         connectionTimeout: 30000,
         greetingTimeout: 10000,
         socketTimeout: 60000,
@@ -425,24 +556,56 @@ export class EmailPool {
     return t
   }
 
-  /** Send through the pooled transporter while making cancellation close it. */
+  private dropTransporter(name: string, transporter: Transporter): void {
+    if (this.smtps.get(name) === transporter) this.smtps.delete(name)
+    transporter.close()
+  }
+
+  /**
+   * Send through the pooled transporter while making cancellation close it.
+   *
+   * An OAuth2 transporter carries a token that was minted when it was built,
+   * so a rejection is retried once against a freshly built one (and a fresh
+   * form of whatever stored token state exists). Password accounts keep the
+   * single attempt they always had.
+   */
   private async sendMail(name: string, cfg: ResolvedEmailConfig, message: any, signal?: AbortSignal): Promise<any> {
     signal?.throwIfAborted()
-    const transporter = this.transporter(name, cfg)
-    const onAbort = (): void => {
-      if (this.smtps.get(name) === transporter) this.smtps.delete(name)
-      transporter.close()
+    const attempt = async (forceToken: boolean): Promise<any> => {
+      const token = cfg.authKind === 'oauth2' ? await getFreshAccessToken(name, cfg, { force: forceToken }) : undefined
+      const transporter = this.transporter(name, cfg, token)
+      const onAbort = (): void => {
+        this.dropTransporter(name, transporter)
+      }
+      signal?.addEventListener('abort', onAbort, { once: true })
+      try {
+        const info = await transporter.sendMail(message)
+        signal?.throwIfAborted()
+        return info
+      } finally {
+        signal?.removeEventListener('abort', onAbort)
+      }
     }
-    signal?.addEventListener('abort', onAbort, { once: true })
     try {
-      const info = await transporter.sendMail(message)
-      signal?.throwIfAborted()
-      return info
+      return await attempt(false)
     } catch (error) {
       signal?.throwIfAborted()
-      throw error
-    } finally {
-      signal?.removeEventListener('abort', onAbort)
+      if (cfg.authKind !== 'oauth2') throw error
+      // A pooled connection that already authenticated can fail for reasons no
+      // token can fix (a rejected recipient, a full mailbox). Only a credential
+      // rejection is worth a second, freshly-tokened attempt — and a token
+      // store that refused outright is reported as itself.
+      if (!looksLikeAuthFailure(error)) throw this.oauth2ErrorOf(error)
+      // The cached transporter holds the old token: it has to go, or the retry
+      // would reuse the very credential that was just refused.
+      const stale = this.smtps.get(name)
+      if (stale !== undefined) this.dropTransporter(name, stale)
+      try {
+        return await attempt(true)
+      } catch (retryError) {
+        signal?.throwIfAborted()
+        throw this.oauth2ErrorOf(retryError)
+      }
     }
   }
 

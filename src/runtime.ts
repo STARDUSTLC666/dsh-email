@@ -1,5 +1,5 @@
 /** Live settings, account-pool ownership, and independent tool/web watch cursors. */
-import { clampInt, resolveEmailSettings, type EmailConfig, type ResolvedEmailSettings } from './config.js'
+import { clampInt, presetNamesIn, resolveEmailSettings, type EmailConfig, type ResolvedEmailSettings } from './config.js'
 import { EmailPool, messageOf } from './mail-client.js'
 import { EmailSettingsSchema, SETTINGS_NAMESPACE, toEmailConfig, toSettingsBase, validateSettingsValue, type EmailSettingsValue } from './settings.js'
 import type { EmailWatchResult } from './types.js'
@@ -57,13 +57,26 @@ export function createEmailRuntime(
   const settingsScope = ctx.settings.register(SETTINGS_NAMESPACE, EmailSettingsSchema, {
     base: toSettingsBase(config),
     applies: 'live',
-    validate: value => validateSettingsValue(value as EmailSettingsValue),
+    // The provider dropdown offers the custom preset names beside the built-ins,
+    // so validation must accept whatever the table in effect defines.
+    validate: value => validateSettingsValue(value as EmailSettingsValue, presetNamesIn((value as EmailSettingsValue | undefined)?.serverPresets ?? config.serverPresets)),
   })
   const getSettingsValue = (): EmailSettingsValue => settingsScope.get() as EmailSettingsValue
   const getEffectiveSettings = (): ResolvedEmailSettings => {
     // Form defaults must not overwrite row settings or provider presets.
     const descriptor = (ctx.settings.describe?.() ?? []).find(row => row.ns === SETTINGS_NAMESPACE)
-    return resolveEmailSettings({ ...config, ...toEmailConfig(getSettingsValue(), descriptor?.user) })
+    const value = getSettingsValue()
+    // serverPresets is a *lookup source* for provider ids, not part of the
+    // resolved config: it is handed to resolution here and never stored on the
+    // result, so editing a preset no account references cannot change the pool
+    // fingerprint. toEmailConfig deliberately drops the field, so it is re-added
+    // from the scope value — which already merges the row's text with the user's.
+    const presets = value.serverPresets
+    return resolveEmailSettings({
+      ...config,
+      ...toEmailConfig(value, descriptor?.user),
+      ...(typeof presets === 'string' ? { serverPresets: presets } : {}),
+    })
   }
 
   let pool: EmailClient | null = null

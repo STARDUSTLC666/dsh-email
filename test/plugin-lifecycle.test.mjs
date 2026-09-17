@@ -37,6 +37,12 @@ test('apply shares watch behavior with the web route and releases owned resource
   const webWatch = async () => {
     const req = {
       method: 'POST', socket: { remoteAddress: '127.0.0.1' },
+      headers: {
+        host: '127.0.0.1:3080',
+        'content-type': 'application/json',
+        origin: 'http://127.0.0.1:3080',
+        'sec-fetch-site': 'same-origin',
+      },
       async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify({ action: 'watch' })) },
     }
     let status

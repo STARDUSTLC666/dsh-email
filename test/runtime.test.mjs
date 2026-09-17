@@ -11,7 +11,7 @@ function fixture(t, row = account) {
   let base = {}
   const defaults = {
     provider: '', user: '', password: '', inboxFolder: 'INBOX', sendApproval: true,
-    maxBodyChars: 20000, downloadDir: '', accountsYaml: '',
+    maxBodyChars: 20000, downloadDir: '', accountsYaml: '', serverPresets: '',
     imap: { host: '', port: 993, secure: true }, smtp: { host: '', port: 465, secure: true },
   }
   const ctx = {
@@ -159,4 +159,67 @@ test('approval controls tool execution and observes live changes to the send pol
   state.user = { sendApproval: false }
   assert.deepEqual(await listener(exec, next), { kind: 'allow' })
   assert.equal(requests.length, 2)
+})
+
+// --- serverPresets as a provider lookup source ------------------------------
+//
+// The settings page lets the user name a custom preset as an account's
+// provider. Resolution therefore needs the preset text — but toEmailConfig
+// deliberately drops it, since projecting it would put it in the pool
+// fingerprint and tear down live connections on every preset edit. These tests
+// pin both halves of that contract: the runtime must *hand presets to*
+// resolution, and resolution must stay *blind to* an unreferenced preset.
+
+const CORP = 'corp: { imap: { host: imap.corp, port: 143, secure: false }, smtp: { host: smtp.corp } }\n'
+
+test('runtime resolution expands a custom preset named by a user-set provider', (t) => {
+  const { runtime, state } = fixture(t)
+  state.user = { accountsYaml: 'work: { provider: corp, user: w@corp.example, password: pw }\n', serverPresets: CORP }
+  const settings = runtime.getEffectiveSettings()
+  const work = settings.accounts.get('work')
+  assert.equal(work.imap.host, 'imap.corp', 'the preset text must reach resolution')
+  assert.equal(work.imap.port, 143)
+  assert.equal(work.imap.secure, false)
+  assert.equal(work.smtp.host, 'smtp.corp')
+  assert.equal('serverPresets' in settings, false, 'never stored on the resolved settings')
+})
+
+test('a custom preset as the shared shorthand provider resolves too', (t) => {
+  const { runtime, state } = fixture(t, { provider: 'corp', user: 'row@corp.example', password: 'p' })
+  state.user = { serverPresets: CORP }
+  assert.equal(runtime.getEffectiveSettings().accounts.get('default').imap.host, 'imap.corp')
+})
+
+test('editing a preset no account references never changes the fingerprint', (t) => {
+  const { runtime, state } = fixture(t)
+  const yaml = 'work: { provider: qq, user: w@qq.com, password: pw }\n'
+  state.user = { accountsYaml: yaml, serverPresets: CORP }
+  const first = runtime.getEffectiveSettings()
+  const pool = runtime.getPool()
+  // The referenced provider is the built-in qq, so a preset edit is inert: the
+  // same pool must survive, or every keystroke in the preset textarea would drop
+  // live IMAP sessions.
+  state.user = { accountsYaml: yaml, serverPresets: 'corp: { imap: { host: imap.moved }, smtp: { host: smtp.moved } }\n' }
+  assert.deepEqual(runtime.getEffectiveSettings(), first)
+  assert.equal(runtime.getPool(), pool, 'an unreferenced preset edit must not dispose the pool')
+})
+
+test('a preset edit that an account does reference does reconnect it', (t) => {
+  const { runtime, state } = fixture(t)
+  state.user = { accountsYaml: 'work: { provider: corp, user: w@corp.example, password: pw }\n', serverPresets: CORP }
+  const pool = runtime.getPool()
+  assert.equal(pool.settings.accounts.get('work').imap.host, 'imap.corp')
+  state.user = { accountsYaml: 'work: { provider: corp, user: w@corp.example, password: pw }\n', serverPresets: 'corp: { imap: { host: imap.moved }, smtp: { host: smtp.moved } }\n' }
+  const next = runtime.getPool()
+  assert.notEqual(next, pool, 'the endpoint really changed, so a new pool is correct')
+  assert.equal(next.settings.accounts.get('work').imap.host, 'imap.moved')
+})
+
+test('validateSettingsValue accepts the custom preset names in effect', async (t) => {
+  const { validateSettingsValue } = await import('../lib/settings.js')
+  const value = { ...account, provider: 'corp', serverPresets: CORP }
+  assert.throws(() => validateSettingsValue(value), /未知的邮箱服务商 "corp"/, 'without the table it is unknown')
+  assert.doesNotThrow(() => validateSettingsValue(value, ['corp']))
+  // The message still names everything that would be accepted.
+  assert.throws(() => validateSettingsValue({ ...account, provider: 'nope' }, ['corp']), /corp/)
 })
