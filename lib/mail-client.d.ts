@@ -122,6 +122,15 @@ export declare class EmailPool {
     resolveName(name?: string): string;
     /** Serialize operations per account: one IMAP connection serves one op at a time. */
     private enqueue;
+    private readonly readCache;
+    /** Remember a parsed attachment index so email_attachment can skip the refetch. */
+    private rememberRead;
+    /**
+     * The attachment index for one message: the cached one when email_read already
+     * produced it, otherwise a fresh parse of the full source plus its bodyStructure.
+     */
+    private attachmentIndexOf;
+    private recallRead;
     withImap<T>(accountName: string | undefined, folder: string | null, run: (client: ImapFlow) => Promise<T>, readOnly?: boolean, signal?: AbortSignal): Promise<T>;
     private createImap;
     /**

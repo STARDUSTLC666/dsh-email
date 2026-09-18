@@ -316,6 +316,16 @@ interface ImapEntry {
   inUse: number
 }
 
+/** email_attachment reuses the MIME index email_read already parsed; keep a few. */
+const READ_CACHE_MAX = 16
+const READ_CACHE_TTL_MS = 10 * 60 * 1000
+
+interface CachedAttachmentIndex {
+  attachments: Array<{ filename: string; contentType: string; size: number; part: string }>
+  parts: AttachmentPart[]
+  at: number
+}
+
 /**
  * One mailbox pool for the whole plugin: pooled IMAP connections per
  * account plus pooled SMTP transporters, with idle sweep and error eviction.
@@ -350,6 +360,49 @@ export class EmailPool {
     const next = prev.then(run, run)
     this.queues.set(name, next.then(() => undefined, () => undefined))
     return next
+  }
+
+  private readonly readCache = new Map<string, CachedAttachmentIndex>()
+
+  /** Remember a parsed attachment index so email_attachment can skip the refetch. */
+  private rememberRead(account: string, folder: string, uid: number, parsed: Omit<CachedAttachmentIndex, 'at'>): void {
+    const key = account + '\u0000' + folder + '\u0000' + uid
+    this.readCache.delete(key)
+    this.readCache.set(key, { ...parsed, at: Date.now() })
+    while (this.readCache.size > READ_CACHE_MAX) {
+      const oldest = this.readCache.keys().next()
+      if (oldest.done === true) break
+      this.readCache.delete(oldest.value)
+    }
+  }
+
+  /**
+   * The attachment index for one message: the cached one when email_read already
+   * produced it, otherwise a fresh parse of the full source plus its bodyStructure.
+   */
+  private async attachmentIndexOf(client: ImapFlow, account: string, folder: string, uid: number, signal?: AbortSignal): Promise<Omit<CachedAttachmentIndex, 'at'>> {
+    const cached = this.recallRead(account, folder, uid)
+    if (cached !== undefined) return cached
+    const message = await client.fetchOne(uid, { uid: true, bodyStructure: true, source: true }, { uid: true })
+    if (message === false || message.source === undefined) {
+      throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folder + '"）')
+    }
+    const body = await parseRawMessage(message.source, this.settings.maxBodyChars)
+    signal?.throwIfAborted()
+    const parsed = { attachments: body.attachments, parts: collectAttachmentParts(message.bodyStructure) }
+    this.rememberRead(account, folder, uid, parsed)
+    return parsed
+  }
+
+  private recallRead(account: string, folder: string, uid: number): CachedAttachmentIndex | undefined {
+    const key = account + '\u0000' + folder + '\u0000' + uid
+    const hit = this.readCache.get(key)
+    if (hit === undefined) return undefined
+    if (Date.now() - hit.at > READ_CACHE_TTL_MS) {
+      this.readCache.delete(key)
+      return undefined
+    }
+    return hit
   }
 
   async withImap<T>(
@@ -767,12 +820,13 @@ export class EmailPool {
     const cfg = this.account(name)
     const folderName = folder || cfg.inboxFolder
     return this.withImap(name, folderName, async (client) => {
-      const message = await client.fetchOne(uid, { uid: true, source: true }, { uid: true })
+      const message = await client.fetchOne(uid, { uid: true, source: true, bodyStructure: true }, { uid: true })
       if (message === false || message.source === undefined) {
         throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folderName + '"；可用 email_list 重新获取 uid）')
       }
       const body = await parseRawMessage(message.source, this.settings.maxBodyChars)
       signal?.throwIfAborted()
+      this.rememberRead(name, folderName, uid, { attachments: body.attachments, parts: collectAttachmentParts(message.bodyStructure) })
       return { account: name, uid, folder: folderName, ...body }
     }, true, signal)
   }
@@ -848,22 +902,18 @@ export class EmailPool {
     const cfg = this.account(name)
     const folderName = folder || cfg.inboxFolder
     return this.withImap(name, folderName, async (client) => {
-      const message = await client.fetchOne(uid, { uid: true, bodyStructure: true, source: true }, { uid: true })
-      if (message === false || message.source === undefined) {
-        throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folderName + '"）')
+      // The mailparser list is authoritative for the index email_read showed and
+      // the bodyStructure walk supplies the IMAP part to download. email_read
+      // already produced both in the usual read-then-download flow, so reuse that
+      // instead of pulling the whole message — attachments included — again.
+      const { attachments, parts } = await this.attachmentIndexOf(client, name, folderName, uid, signal)
+      if (attachments.length === 0) throw new MailError('该邮件没有附件')
+      if (attachments[index] === undefined) {
+        throw new MailError('附件序号 ' + index + ' 越界：共 ' + attachments.length + ' 个附件（序号从 0 开始，与 email_read 返回的 attachments 顺序一致）')
       }
-      // The mailparser list is authoritative for the index email_read showed;
-      // the bodyStructure walk supplies the IMAP part to download.
-      const body = await parseRawMessage(message.source, this.settings.maxBodyChars)
-      signal?.throwIfAborted()
-      const parts = collectAttachmentParts(message.bodyStructure)
-      if (body.attachments.length === 0) throw new MailError('该邮件没有附件')
-      if (body.attachments[index] === undefined) {
-        throw new MailError('附件序号 ' + index + ' 越界：共 ' + body.attachments.length + ' 个附件（序号从 0 开始，与 email_read 返回的 attachments 顺序一致）')
-      }
-      const att = selectAttachmentPart(body.attachments, parts, index)
+      const att = selectAttachmentPart(attachments, parts, index)
       if (att === undefined) {
-        throw new MailError('附件 #' + index + '（' + body.attachments[index].filename + '）无法在邮件结构中定位（可能是内嵌图片，暂不支持下载）')
+        throw new MailError('附件 #' + index + '（' + attachments[index].filename + '）无法在邮件结构中定位（可能是内嵌图片，暂不支持下载）')
       }
       if (att.size > this.settings.maxAttachmentBytes) {
         throw new MailError('附件 "' + att.filename + '" 大小 ' + att.size + ' 字节，超过上限 maxAttachmentBytes=' + this.settings.maxAttachmentBytes)
@@ -871,7 +921,7 @@ export class EmailPool {
       const dl = await client.download(uid, att.part, { uid: true, maxBytes: this.settings.maxAttachmentBytes })
       signal?.throwIfAborted()
       const buf = await collectStream(dl.content, this.settings.maxAttachmentBytes, signal)
-      const safeName = sanitizeFilename(dl.meta.filename ?? att.filename ?? body.attachments[index].filename)
+      const safeName = sanitizeFilename(dl.meta.filename ?? att.filename ?? attachments[index].filename)
       // Default the destination to the session workspace so the model can
       // read the file back; an explicit downloadDir always wins.
       const dir = this.settings.downloadDirExplicit
