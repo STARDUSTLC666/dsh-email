@@ -15,4 +15,10 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The committed lib/ is the published artifact: a build must not change it.
+      # (lib/client.js is hand-written and not produced by tsc; it is only checked
+      # for syntax below.) Catches "edited lib/ but not src/" drift before review.
+      - run: pnpm run build
+      - run: git diff --exit-code -- lib
+      - run: node --check lib/client.js
       - run: pnpm test
