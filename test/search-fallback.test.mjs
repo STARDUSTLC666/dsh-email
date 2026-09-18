@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { Readable } from 'node:stream'
 import { EmailPool, resolveEmailSettings } from '../lib/index.js'
 
 const QQ = { provider: 'qq', user: 'a@b.c', password: 'p' }
@@ -127,4 +128,75 @@ test('渲染时说明跳过了多少条', async () => {
   assert.match(paged, /跳过最新 2 条后展示 1 条/)
   const fresh = renderSearch({ account: 'a', query: '生日', count: 9, folder: 'INBOX', offset: 0, messages: [block] }).map(b => b.text).join('')
   assert.match(fresh, /展示最新 1 条/)
+})
+
+/** 信封 + bodyStructure + download 的假客户端：服务器只发请求过的东西，不再附带 source。 */
+function poolWithPartServer({ hits, messages, settings = {} }) {
+  const pool = new EmailPool(resolveEmailSettings({ ...QQ, ...settings }))
+  const calls = []
+  const byUid = new Map(messages.map(m => [m.uid, m]))
+  const bodyByUid = new Map(messages.map(m => [m.uid, m.__body ?? '']))
+  const fakeClient = {
+    mailbox: { exists: messages.length },
+    async search(query) { calls.push(['search', query]); return hits },
+    async fetchAll(seq, query) {
+      calls.push(['fetchAll', seq, query])
+      // 序列号区间在真实 IMAP 里按升序返回，和 searchBodies 的 [...fetched].reverse() 对应。
+      const wanted = Array.isArray(seq) ? seq : messages.map(m => m.uid).sort((a, b) => a - b)
+      return wanted.map(uid => byUid.get(uid)).filter(Boolean)
+    },
+    async download(uid, part) {
+      calls.push(['download', uid, part])
+      return { meta: { contentType: 'text/plain' }, content: Readable.from([Buffer.from(bodyByUid.get(uid) ?? '')]) }
+    },
+  }
+  pool.withImap = async (_account, _folder, run) => run(fakeClient)
+  return { pool, calls }
+}
+
+/** 只有 bodyStructure、没有 source 的邮件，正文要单独按分段下载。 */
+function partMessage(uid, { subject = '', from = 'someone@example.com', body = '' } = {}) {
+  return {
+    uid,
+    envelope: {
+      subject,
+      from: [{ name: '', address: from }],
+      to: [{ name: '', address: 'me@qq.com' }],
+      cc: [],
+      date: new Date('2026-09-17T02:00:00Z'),
+    },
+    flags: new Set(),
+    size: 1024,
+    bodyStructure: { childNodes: [{ part: '1', type: 'text/plain', size: Buffer.byteLength(body) }] },
+    internalDate: new Date('2026-09-17T02:00:00Z'),
+    __body: body,
+  }
+}
+
+test('30 封全命中、limit=10 时，渲染不得把本页条数说成总匹配数', async () => {
+  const { renderSearch } = await import('../lib/tool-contract.js')
+  const messages = Array.from({ length: 30 }, (_, i) => message(30 - i, { subject: '生日提醒 ' + i, body: '正文' }))
+  const { pool } = poolWithServer({ hits: [], messages })
+  const result = await pool.search(undefined, '生日', '', 10, 0)
+  assert.equal(result.countKind, 'scanned', '回退扫描必须标明这是扫描口径')
+  assert.equal(result.scannedLimit, 30, '渲染需要知道只扫描了最近多少封')
+  const text = renderSearch(result).map(block => block.text).join('')
+  assert.doesNotMatch(text, /共 10 条匹配/)
+  assert.match(text, /本页 10 条/)
+  assert.match(text, /最近 30 封/)
+})
+
+test('正文回退扫描只下载 text/* 分段，不再整封拉取（20MiB 附件也不下）', async () => {
+  const messages = [
+    partMessage(3, { subject: '会议纪要', body: '合同续签提醒：请本周处理' }),
+    partMessage(2, { subject: '周报', body: '本周进展' }),
+    partMessage(1, { subject: '账单', body: '发票已开' }),
+  ]
+  const { pool, calls } = poolWithPartServer({ hits: [], messages })
+  const result = await pool.search(undefined, '合同', '', 1, 0)
+  assert.deepEqual(result.messages.map(m => m.uid), [3])
+  const fetchAll = calls.find(call => call[0] === 'fetchAll')
+  assert.ok(fetchAll, '先取窗口内邮件的信封')
+  assert.equal(fetchAll[2].source, undefined, '不再请求 source（否则附件也会被拉下来）')
+  assert.deepEqual(calls.filter(call => call[0] === 'download').map(call => call[1]), [3], '只为要报告的那封下载正文分段')
 })

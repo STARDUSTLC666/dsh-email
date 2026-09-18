@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import type { Readable } from 'node:stream'
 import type { AuthKind, ResolvedEmailConfig, ResolvedEmailSettings } from './config.js'
 import { getFreshAccessToken, OAuth2Error } from './oauth2.js'
-import { flattenAddresses, parseRawMessage, sanitizeFilename } from './parse.js'
+import { flattenAddresses, parseRawMessage, sanitizeFilename, stripHtml, truncateText } from './parse.js'
 import type {
   AddressEntry,
   EmailAttachmentMeta,
@@ -166,6 +166,44 @@ export function selectAttachmentPart(
   const byTypeAndSize = parts.find(part =>
     part.contentType === meta.contentType && Math.abs(part.size - meta.size) <= tolerance)
   return byTypeAndSize
+}
+
+interface TextBodyPart {
+  /** IMAP section id; a single-part message has no part number and uses "1". */
+  key: string
+  type: string
+}
+
+/**
+ * Leaf text/* parts that can carry the message body, attachment parts excluded.
+ * This is what email_read / the search fallback fetch instead of the whole
+ * source: a 20 MiB attachment must not be downloaded just to read the text.
+ */
+function collectTextParts(node: any, out: TextBodyPart[] = []): TextBodyPart[] {
+  if (node === null || node === undefined || typeof node !== 'object') return out
+  // message/rfc822 整段是一封内嵌邮件（附件），它的正文分段不是本封的正文。
+  if (typeof node.type === 'string' && node.type.toLowerCase().startsWith('message/rfc822')) return out
+  const children = Array.isArray(node.childNodes) ? node.childNodes : []
+  if (children.length === 0) {
+    const type = typeof node.type === 'string' ? node.type.toLowerCase() : ''
+    if (type.startsWith('text/') && node.disposition !== 'attachment') {
+      out.push({ key: node.part === undefined || node.part === null ? '1' : String(node.part), type })
+    }
+    return out
+  }
+  for (const child of children) collectTextParts(child, out)
+  return out
+}
+
+/** The body parts worth fetching: text/plain first, text/html as the fallback. */
+function selectBodyParts(node: any): { plain?: TextBodyPart; html?: TextBodyPart } {
+  const parts = collectTextParts(node)
+  const plain = parts.find(part => part.type === 'text/plain')
+  const html = parts.find(part => part.type === 'text/html')
+  return {
+    ...(plain !== undefined ? { plain } : {}),
+    ...(html !== undefined ? { html } : {}),
+  }
 }
 
 /** The From header: `user` is the visible address, `senderName` only labels it. */
@@ -401,13 +439,30 @@ export class EmailPool {
     const uidValidity = this.uidValidityOf(client)
     const cached = this.recallRead(account, folder, uidValidity, uid)
     if (cached !== undefined) return cached
-    const message = await client.fetchOne(uid, { uid: true, bodyStructure: true, source: true }, { uid: true })
-    if (message === false || message.source === undefined) {
+    // 附件索引只需要 MIME 结构：bodyStructure 已经给出每个附件的 part/名称/大小，
+    // 不必为了拿它先拉整封 source（第一次就下载附件的邮件也一样）。
+    const message = await client.fetchOne(uid, { uid: true, bodyStructure: true }, { uid: true })
+    if (message === false) {
       throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folder + '"）')
     }
-    const body = await parseRawMessage(message.source, this.settings.maxBodyChars)
     signal?.throwIfAborted()
-    const parsed = { attachments: body.attachments, parts: collectAttachmentParts(message.bodyStructure) }
+    if (message.bodyStructure !== undefined) {
+      const parts = collectAttachmentParts(message.bodyStructure)
+      const attachments = parts.map(part => ({ filename: part.filename, contentType: part.contentType, size: part.size, part: part.part }))
+      const parsed = { attachments, parts }
+      this.rememberRead(account, folder, uidValidity, uid, parsed)
+      return parsed
+    }
+    // 服务器没给 bodyStructure：退回整封解析，行为和以前一样。
+    const full = message.source !== undefined
+      ? message
+      : await client.fetchOne(uid, { uid: true, source: true, bodyStructure: true }, { uid: true })
+    if (full === false || full.source === undefined) {
+      throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folder + '"）')
+    }
+    const body = await parseRawMessage(full.source, this.settings.maxBodyChars)
+    signal?.throwIfAborted()
+    const parsed = { attachments: body.attachments, parts: collectAttachmentParts(full.bodyStructure) }
     this.rememberRead(account, folder, uidValidity, uid, parsed)
     return parsed
   }
@@ -680,6 +735,33 @@ export class EmailPool {
     }
   }
 
+  /**
+   * Download one MIME part through imapflow's decode pipeline: transfer
+   * encoding and charset are handled there, maxBytes caps what is fetched.
+   */
+  private async downloadPartText(client: ImapFlow, uid: number, part: TextBodyPart, maxBytes: number, signal?: AbortSignal): Promise<string> {
+    const dl = await client.download(uid, part.key, { uid: true, maxBytes })
+    signal?.throwIfAborted()
+    const buf = await collectStream(dl.content, maxBytes, signal)
+    signal?.throwIfAborted()
+    return buf.toString('utf8')
+  }
+
+  /**
+   * The message body without its attachments. undefined when the structure has
+   * no usable text part or the server refuses the part fetch, so the caller can
+   * fall back to the full-source path for that one message.
+   */
+  private async bodyTextFromParts(client: ImapFlow, uid: number, structure: any, maxBytes: number, signal?: AbortSignal): Promise<string | undefined> {
+    const { plain, html } = selectBodyParts(structure)
+    if (plain !== undefined) {
+      const text = await this.downloadPartText(client, uid, plain, maxBytes, signal)
+      if (text.trim() !== '' || html === undefined) return text
+    }
+    if (html !== undefined) return stripHtml(await this.downloadPartText(client, uid, html, maxBytes, signal))
+    return undefined
+  }
+
   async list(accountName: string | undefined, folder: string, limit: number, offset: number, unreadOnly: boolean, since?: Date, until?: Date, signal?: AbortSignal): Promise<EmailListResult> {
     const name = this.resolveName(accountName)
     const cfg = this.account(name)
@@ -712,6 +794,33 @@ export class EmailPool {
       const messages = await this.fetchListed(client, window, signal)
       return { account: name, count: scopeCount, folder: folderName, uidValidity, messages }
     }, true, signal)
+  }
+
+  /**
+   * The uid index behind email_watch: SEARCH UNSEEN only, no envelopes and no
+   * bodies. The caller decides which uids it actually needs to report.
+   */
+  async unseenUids(accountName: string | undefined, folder: string, signal?: AbortSignal): Promise<{ account: string; folder: string; uidValidity: number; count: number; uids: number[] }> {
+    const name = this.resolveName(accountName)
+    const cfg = this.account(name)
+    const folderName = folder || cfg.inboxFolder
+    return this.withImap(name, folderName, async (client) => {
+      const mailbox = client.mailbox
+      const uidValidity = mailbox === false ? 0 : Number(mailbox.uidValidity ?? 0)
+      const found = await client.search({ seen: false }, { uid: true })
+      signal?.throwIfAborted()
+      const uids = (found === false ? [] : found).slice().sort((a, b) => b - a)
+      return { account: name, folder: folderName, uidValidity, count: uids.length, uids }
+    }, true, signal)
+  }
+
+  /** Fetch the envelopes for one uid batch: the rows email_watch will report. */
+  async fetchByUids(accountName: string | undefined, folder: string, uids: number[], signal?: AbortSignal): Promise<ListedMessage[]> {
+    if (uids.length === 0) return []
+    const name = this.resolveName(accountName)
+    const cfg = this.account(name)
+    const folderName = folder || cfg.inboxFolder
+    return this.withImap(name, folderName, (client) => this.fetchListed(client, uids, signal), true, signal)
   }
 
   async search(accountName: string | undefined, query: string, folder: string, limit: number, offset: number, since?: Date, until?: Date, signal?: AbortSignal): Promise<EmailSearchResult> {
@@ -752,7 +861,12 @@ export class EmailPool {
       // survive verification): scan the newest messages locally instead.
       if (this.settings.bodySearchFallback) {
         const messages = await this.searchBodies(client, query, folderName, limit, offset, since, until, signal)
-        return { account: name, query, count: messages.length, folder: folderName, offset, messages }
+        // 本地扫描不知道全文件夹有多少匹配，count 只是本页条数：用 countKind
+        // 让渲染说「本页 N 条（仅扫描最近 bodySearchLimit 封）」，不能说「共 N 条」。
+        return {
+          account: name, query, count: messages.length, folder: folderName, offset, messages,
+          countKind: 'scanned', scannedLimit: this.settings.bodySearchLimit,
+        }
       }
       return { account: name, query, count: 0, folder: folderName, offset, messages: [] }
     }, true, signal)
@@ -787,9 +901,10 @@ export class EmailPool {
     const total = mailbox === false ? 0 : mailbox.exists
     if (total === 0) return []
     const start = Math.max(1, total - this.settings.bodySearchLimit + 1)
+    // 只取信封与 MIME 结构；正文在下面按 text/* 分段下载，附件不进正文匹配。
     const fetched = await client.fetchAll(
       start + ':*',
-      { uid: true, envelope: true, flags: true, size: true, bodyStructure: true, source: true, internalDate: true },
+      { uid: true, envelope: true, flags: true, size: true, bodyStructure: true, internalDate: true },
     )
     const out: ListedMessage[] = []
     for (const message of [...fetched].reverse()) {
@@ -803,6 +918,7 @@ export class EmailPool {
         .map(flattenAddressText).join(' ')
       let body = ''
       if (message.source !== undefined) {
+        // 服务器多送了整封 source（测试/旧行为）：直接解析，不必再多一次往返。
         try {
           const parsed = await parseRawMessage(message.source, 4096)
           signal?.throwIfAborted()
@@ -810,6 +926,13 @@ export class EmailPool {
         } catch (error) {
           signal?.throwIfAborted()
           // 单封邮件解析失败不应中断整批回退扫描，继续用 subject/from/to/cc 匹配。
+        }
+      } else if (message.bodyStructure !== undefined) {
+        try {
+          body = await this.bodyTextFromParts(client, message.uid, message.bodyStructure, 4096 * 4, signal) ?? ''
+        } catch (error) {
+          signal?.throwIfAborted()
+          // 单封邮件分段下载失败不应中断整批回退扫描，继续用 subject/from/to/cc 匹配。
         }
       }
       if (messageMatchesQuery(subject, recipientSearchText, body, query)) {
@@ -838,13 +961,55 @@ export class EmailPool {
     const cfg = this.account(name)
     const folderName = folder || cfg.inboxFolder
     return this.withImap(name, folderName, async (client) => {
-      const message = await client.fetchOne(uid, { uid: true, source: true, bodyStructure: true }, { uid: true })
-      if (message === false || message.source === undefined) {
+      // 先只要信封与 MIME 结构，正文按 text/* 分段下载：带 20 MiB 附件的邮件
+      // 只为看正文时不再整封拉下来，附件元数据直接复用 bodyStructure。
+      const message = await client.fetchOne(uid, { uid: true, envelope: true, bodyStructure: true }, { uid: true })
+      if (message === false) {
         throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folderName + '"；可用 email_list 重新获取 uid）')
       }
-      const body = await parseRawMessage(message.source, this.settings.maxBodyChars)
       signal?.throwIfAborted()
-      this.rememberRead(name, folderName, this.uidValidityOf(client), uid, { attachments: body.attachments, parts: collectAttachmentParts(message.bodyStructure) })
+      if (message.source === undefined && message.envelope !== undefined && message.bodyStructure !== undefined) {
+        try {
+          const text = await this.bodyTextFromParts(client, uid, message.bodyStructure, this.settings.maxBodyChars * 4 + 4096, signal)
+          if (text !== undefined) {
+            const limited = truncateText(text, this.settings.maxBodyChars)
+            const parts = collectAttachmentParts(message.bodyStructure)
+            const attachments: EmailAttachmentMeta[] = parts.map(part => ({
+              filename: part.filename,
+              contentType: part.contentType,
+              size: part.size,
+              part: part.part,
+            }))
+            this.rememberRead(name, folderName, this.uidValidityOf(client), uid, { attachments, parts })
+            const envelopeDate = message.envelope.date
+            return {
+              account: name,
+              uid,
+              folder: folderName,
+              date: envelopeDate instanceof Date ? envelopeDate.toISOString() : '',
+              from: flattenAddresses(message.envelope.from),
+              to: flattenAddresses(message.envelope.to),
+              cc: flattenAddresses(message.envelope.cc),
+              subject: message.envelope.subject ?? '',
+              text: limited.text,
+              attachments,
+              truncated: limited.truncated,
+            }
+          }
+        } catch (error) {
+          signal?.throwIfAborted()
+          // 分段读取失败（服务器拒绝该分段或结构异常）：这一封退回整封解析。
+        }
+      }
+      const full = message.source !== undefined
+        ? message
+        : await client.fetchOne(uid, { uid: true, source: true, bodyStructure: true }, { uid: true })
+      if (full === false || full.source === undefined) {
+        throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folderName + '"；可用 email_list 重新获取 uid）')
+      }
+      const body = await parseRawMessage(full.source, this.settings.maxBodyChars)
+      signal?.throwIfAborted()
+      this.rememberRead(name, folderName, this.uidValidityOf(client), uid, { attachments: body.attachments, parts: collectAttachmentParts(full.bodyStructure) })
       return { account: name, uid, folder: folderName, ...body }
     }, true, signal)
   }

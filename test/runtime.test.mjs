@@ -40,6 +40,18 @@ function fixture(t, row = account) {
         state.operations.push({ method: 'list', args: [name, folder, ...args] })
         return { account: name || settings.defaultAccount, folder: folder || 'INBOX', count: state.rows.length, uidValidity: state.uidValidity ?? 0, messages: state.rows }
       },
+      async unseenUids(name, folder, ...args) {
+        args.at(-1)?.throwIfAborted()
+        state.operations.push({ method: 'unseenUids', args: [name, folder, ...args] })
+        const uids = state.rows.map(row => row.uid).sort((a, b) => b - a)
+        return { account: name || settings.defaultAccount, folder: folder || 'INBOX', count: uids.length, uidValidity: state.uidValidity ?? 0, uids }
+      },
+      async fetchByUids(name, folder, uids, ...args) {
+        args.at(-1)?.throwIfAborted()
+        state.operations.push({ method: 'fetchByUids', args: [name, folder, uids, ...args] })
+        const byUid = new Map(state.rows.map(row => [row.uid, row]))
+        return uids.map(uid => byUid.get(uid)).filter(Boolean)
+      },
     }
     for (const method of ['read', 'mark', 'search', 'send', 'reply', 'folders', 'downloadAttachment']) {
       pool[method] = async (...args) => {

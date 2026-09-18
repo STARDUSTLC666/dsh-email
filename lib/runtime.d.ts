@@ -3,7 +3,7 @@ import { type EmailConfig, type ResolvedEmailSettings } from './config.js';
 import { EmailPool } from './mail-client.js';
 import { type EmailSettingsValue } from './settings.js';
 import type { EmailWatchResult } from './types.js';
-export type EmailClient = Pick<EmailPool, 'list' | 'read' | 'mark' | 'search' | 'send' | 'reply' | 'folders' | 'downloadAttachment' | 'startIdleSweep' | 'dispose'>;
+export type EmailClient = Pick<EmailPool, 'list' | 'read' | 'mark' | 'search' | 'send' | 'reply' | 'folders' | 'downloadAttachment' | 'unseenUids' | 'fetchByUids' | 'startIdleSweep' | 'dispose'>;
 export interface EmailSettingsScope {
     get(): unknown;
 }

@@ -232,7 +232,13 @@ export function renderRead(value: EmailReadResult): TextBlock[] {
 }
 
 export function renderSearch(value: EmailSearchResult): TextBlock[] {
+  const scanned = value.countKind === 'scanned'
+  // 回退扫描只看了最近 scannedLimit 封，不知道全文件夹匹配数：不能把本页条数说成「共 N 条」。
+  const scannedNote = '仅扫描最近 ' + (value.scannedLimit ?? 0) + ' 封，未统计全文件夹匹配数'
   if (value.messages.length === 0) {
+    if (scanned) {
+      return oneText('账号 ' + value.account + '，在文件夹 "' + value.folder + '" 中搜索 "' + value.query + '"：本页没有匹配（' + scannedNote + '）。')
+    }
     return oneText('账号 ' + value.account + '，在文件夹 "' + value.folder + '" 中搜索 "' + value.query + '"：共 ' + value.count + ' 条匹配，本次没有列出。')
   }
   const lines = value.messages.map((m, i) => '#' + (i + 1) + ' ' + describeMessage(m))
@@ -240,7 +246,10 @@ export function renderSearch(value: EmailSearchResult): TextBlock[] {
   const window = offset > 0
     ? '跳过最新 ' + offset + ' 条后展示 ' + value.messages.length + ' 条'
     : '展示最新 ' + value.messages.length + ' 条'
-  return oneText('账号 ' + value.account + '，在文件夹 "' + value.folder + '" 中搜索 "' + value.query + '"：共 ' + value.count + ' 条匹配，' + window + '：\n\n' + lines.join('\n'))
+  const summary = scanned
+    ? '本页 ' + value.messages.length + ' 条（' + scannedNote + '）' + (offset > 0 ? '，已被 offset 跳过最新 ' + offset + ' 条' : '')
+    : '共 ' + value.count + ' 条匹配，' + window
+  return oneText('账号 ' + value.account + '，在文件夹 "' + value.folder + '" 中搜索 "' + value.query + '"：' + summary + '：\n\n' + lines.join('\n'))
 }
 
 export function renderSend(value: EmailSendResult): TextBlock[] {

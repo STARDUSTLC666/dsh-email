@@ -241,3 +241,17 @@ test('no approval channel denies with the headless hint', async () => {
   assert.equal(decision.kind, 'deny')
   assert.match(decision.reason, /headless|审批通道/)
 })
+
+
+test('README 工具一览里的 10 个工具都声明有限的 timeoutMs（查询 60s，search/watch 120s）', () => {
+  const ctx = fakeCtx()
+  apply(ctx, {})
+  // README「工具一览」的 10 个工具，逐项核对，防止漏加。
+  const readmeTools = ['email_list', 'email_read', 'email_search', 'email_send', 'email_folders', 'email_attachment', 'email_health', 'email_watch', 'email_mark', 'email_reply']
+  assert.deepEqual(ctx.tools.defs.map(def => def.name).sort(), [...readmeTools].sort())
+  const slow = new Set(['email_search', 'email_watch'])
+  for (const def of ctx.tools.defs) {
+    assert.ok(Number.isFinite(def.timeoutMs) && def.timeoutMs > 0, def.name + ' 必须声明有限正数 timeoutMs')
+    assert.equal(def.timeoutMs, slow.has(def.name) ? 120000 : 60000, def.name + ' 的 timeoutMs 与工具预算一致')
+  }
+})

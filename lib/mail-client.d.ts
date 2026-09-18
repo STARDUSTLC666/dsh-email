@@ -1,6 +1,6 @@
 import { ImapFlow } from 'imapflow';
 import type { ResolvedEmailConfig, ResolvedEmailSettings } from './config.js';
-import type { AddressEntry, EmailAttachmentMeta, EmailAttachmentResult, EmailFoldersResult, EmailListResult, EmailMarkAction, EmailMarkResult, EmailReadResult, EmailReplyMode, EmailReplyResult, EmailSearchResult, EmailSendResult } from './types.js';
+import type { AddressEntry, EmailAttachmentMeta, EmailAttachmentResult, EmailFoldersResult, EmailListResult, EmailMarkAction, EmailMarkResult, EmailReadResult, EmailReplyMode, EmailReplyResult, EmailSearchResult, EmailSendResult, ListedMessage } from './types.js';
 export declare class MailError extends Error {
     constructor(message: string);
 }
@@ -170,7 +170,31 @@ export declare class EmailPool {
      * single attempt they always had.
      */
     private sendMail;
+    /**
+     * Download one MIME part through imapflow's decode pipeline: transfer
+     * encoding and charset are handled there, maxBytes caps what is fetched.
+     */
+    private downloadPartText;
+    /**
+     * The message body without its attachments. undefined when the structure has
+     * no usable text part or the server refuses the part fetch, so the caller can
+     * fall back to the full-source path for that one message.
+     */
+    private bodyTextFromParts;
     list(accountName: string | undefined, folder: string, limit: number, offset: number, unreadOnly: boolean, since?: Date, until?: Date, signal?: AbortSignal): Promise<EmailListResult>;
+    /**
+     * The uid index behind email_watch: SEARCH UNSEEN only, no envelopes and no
+     * bodies. The caller decides which uids it actually needs to report.
+     */
+    unseenUids(accountName: string | undefined, folder: string, signal?: AbortSignal): Promise<{
+        account: string;
+        folder: string;
+        uidValidity: number;
+        count: number;
+        uids: number[];
+    }>;
+    /** Fetch the envelopes for one uid batch: the rows email_watch will report. */
+    fetchByUids(accountName: string | undefined, folder: string, uids: number[], signal?: AbortSignal): Promise<ListedMessage[]>;
     search(accountName: string | undefined, query: string, folder: string, limit: number, offset: number, since?: Date, until?: Date, signal?: AbortSignal): Promise<EmailSearchResult>;
     /**
      * Confirm server-side hits against the mailbox itself: fetch the envelopes

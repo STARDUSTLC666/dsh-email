@@ -7,7 +7,11 @@ test('apply shares watch behavior with the web route and releases owned resource
   let disposedPools = 0
   t.mock.method(EmailPool.prototype, 'startIdleSweep', () => {})
   t.mock.method(EmailPool.prototype, 'dispose', () => { disposedPools++ })
-  t.mock.method(EmailPool.prototype, 'list', async () => ({ account: 'default', folder: 'INBOX', count: rows.length, messages: rows }))
+  t.mock.method(EmailPool.prototype, 'unseenUids', async () => ({ account: 'default', folder: 'INBOX', uidValidity: 0, count: rows.length, uids: rows.map(row => row.uid).sort((a, b) => b - a) }))
+  t.mock.method(EmailPool.prototype, 'fetchByUids', async (_account, _folder, uids) => {
+    const byUid = new Map(rows.map(row => [row.uid, row]))
+    return uids.map(uid => byUid.get(uid)).filter(Boolean)
+  })
   const definitions = []
   const routes = []
   const removedRoutes = []

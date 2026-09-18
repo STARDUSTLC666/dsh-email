@@ -32,6 +32,10 @@ import type {
   EmailWatchResult,
 } from './types.js'
 
+/** 单次工具调用的 deadline：普通查询 60s，正文扫描/watch 这类整批操作 120s。 */
+const QUERY_TIMEOUT_MS = 60000
+const BATCH_TIMEOUT_MS = 120000
+
 export interface EmailToolDefinition {
   name: string
   description: string
@@ -41,6 +45,7 @@ export interface EmailToolDefinition {
     render(args: unknown, value: unknown): TextBlock[]
   }
   execute(args: unknown, exec?: unknown): Promise<unknown>
+  timeoutMs?: number
 }
 
 export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffectiveSettings' | 'watch'>): EmailToolDefinition[] {
@@ -55,6 +60,7 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
         schema: listSchema,
         render: (_args: unknown, value: unknown) => renderList(value as EmailListResult),
       },
+      timeoutMs: QUERY_TIMEOUT_MS,
       async execute(rawArgs: unknown, exec: unknown) {
         const args = rawArgs as EmailListArgs
         const limit = clampInt(args.limit, 20, 1, MAX_LIMIT)
@@ -72,6 +78,7 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
         schema: readSchema,
         render: (_args: unknown, value: unknown) => renderRead(value as EmailReadResult),
       },
+      timeoutMs: QUERY_TIMEOUT_MS,
       async execute(rawArgs: unknown, exec: unknown) {
         const args = rawArgs as EmailReadArgs
         if (typeof args.uid !== 'number' || !Number.isInteger(args.uid) || args.uid <= 0) {
@@ -88,6 +95,7 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
         schema: markSchema,
         render: (_args: unknown, value: unknown) => renderMark(value as EmailMarkResult),
       },
+      timeoutMs: QUERY_TIMEOUT_MS,
       async execute(rawArgs: unknown, exec: unknown) {
         const args = rawArgs as EmailMarkArgs
         if (typeof args.uid !== 'number' || !Number.isInteger(args.uid) || args.uid <= 0) {
@@ -111,6 +119,7 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
         schema: listSchema,
         render: (_args: unknown, value: unknown) => renderSearch(value as EmailSearchResult),
       },
+      timeoutMs: BATCH_TIMEOUT_MS,
       async execute(rawArgs: unknown, exec: unknown) {
         const args = rawArgs as EmailSearchArgs
         if (typeof args.query !== 'string' || args.query.trim() === '') throw new Error('query 不能为空')
@@ -129,6 +138,7 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
         schema: sendSchema,
         render: (_args: unknown, value: unknown) => renderSend(value as EmailSendResult),
       },
+      timeoutMs: QUERY_TIMEOUT_MS,
       async execute(rawArgs: unknown, exec: unknown) {
         const args = rawArgs as EmailSendArgs
         if (typeof args.to !== 'string' || args.to.trim() === '') throw new Error('to 不能为空')
@@ -149,6 +159,7 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
       description: descriptions.email_reply,
       parameters: parameters.email_reply,
       output: { schema: replySchema, render: (_args: unknown, value: unknown) => renderReply(value as EmailReplyResult) },
+      timeoutMs: QUERY_TIMEOUT_MS,
       async execute(rawArgs: unknown, exec: unknown) {
         const args = rawArgs as EmailReplyArgs
         if (typeof args.uid !== 'number' || !Number.isInteger(args.uid) || args.uid <= 0) {
@@ -174,6 +185,7 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
         schema: foldersSchema,
         render: (_args: unknown, value: unknown) => renderFolders(value as EmailFoldersResult),
       },
+      timeoutMs: QUERY_TIMEOUT_MS,
       async execute(rawArgs: unknown, exec: unknown) {
         const args = rawArgs as EmailFoldersArgs
         return await getPool().folders(args.account, args.subscribedOnly === true, executionSignal(exec))
@@ -184,6 +196,7 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
       description: descriptions.email_health,
       parameters: parameters.email_health,
       output: { schema: { type: 'object', additionalProperties: true }, render: renderHealth },
+      timeoutMs: QUERY_TIMEOUT_MS,
       async execute(_rawArgs: unknown, exec: unknown) {
         executionSignal(exec)?.throwIfAborted()
         const checks: Array<Record<string, unknown>> = []
@@ -229,6 +242,7 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
         schema: attachmentSchema,
         render: (_args: unknown, value: unknown) => renderAttachment(value as EmailAttachmentResult),
       },
+      timeoutMs: QUERY_TIMEOUT_MS,
       async execute(rawArgs: unknown, exec: any) {
         const args = rawArgs as EmailAttachmentArgs
         if (typeof args.uid !== 'number' || !Number.isInteger(args.uid) || args.uid <= 0) {
@@ -244,6 +258,7 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
       description: descriptions.email_watch,
       parameters: parameters.email_watch,
       output: { schema: watchSchema, render: (_args: unknown, value: unknown) => renderWatch(value as EmailWatchResult) },
+      timeoutMs: BATCH_TIMEOUT_MS,
       async execute(rawArgs: unknown, exec: unknown) {
         const args = rawArgs as EmailWatchArgs
         const limit = clampInt(args.limit, 20, 1, MAX_LIMIT)

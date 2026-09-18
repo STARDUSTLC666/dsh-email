@@ -9,5 +9,6 @@ export interface EmailToolDefinition {
         render(args: unknown, value: unknown): TextBlock[];
     };
     execute(args: unknown, exec?: unknown): Promise<unknown>;
+    timeoutMs?: number;
 }
 export declare function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffectiveSettings' | 'watch'>): EmailToolDefinition[];
