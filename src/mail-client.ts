@@ -10,6 +10,7 @@ import type {
   AddressEntry,
   EmailAttachmentMeta,
   EmailAttachmentResult,
+  EmailFolderRow,
   EmailFoldersResult,
   EmailListResult,
   EmailMarkAction,
@@ -320,6 +321,9 @@ interface ImapEntry {
 const READ_CACHE_MAX = 16
 const READ_CACHE_TTL_MS = 10 * 60 * 1000
 
+/** Folder names change rarely; a short TTL keeps email_folders off the wire. */
+const FOLDER_CACHE_TTL_MS = 60 * 1000
+
 interface CachedAttachmentIndex {
   attachments: Array<{ filename: string; contentType: string; size: number; part: string }>
   parts: AttachmentPart[]
@@ -363,6 +367,7 @@ export class EmailPool {
   }
 
   private readonly readCache = new Map<string, CachedAttachmentIndex>()
+  private readonly folderCache = new Map<string, { at: number; folders: EmailFolderRow[] }>()
 
   /** Remember a parsed attachment index so email_attachment can skip the refetch. */
   private rememberRead(account: string, folder: string, uid: number, parsed: Omit<CachedAttachmentIndex, 'at'>): void {
@@ -883,17 +888,22 @@ export class EmailPool {
   async folders(accountName: string | undefined, subscribedOnly: boolean, signal?: AbortSignal): Promise<EmailFoldersResult> {
     const name = this.resolveName(accountName)
     return this.withImap(name, null, async (client) => {
-      const list = await client.list()
-      signal?.throwIfAborted()
-      const folders = list
-        .filter(row => !subscribedOnly || row.subscribed !== false)
-        .map(row => ({
+      const cached = this.folderCache.get(name)
+      let rows: EmailFolderRow[]
+      if (cached !== undefined && Date.now() - cached.at < FOLDER_CACHE_TTL_MS) {
+        rows = cached.folders
+      } else {
+        const list = await client.list()
+        signal?.throwIfAborted()
+        rows = list.map(row => ({
           name: row.name ?? row.path,
           path: row.path,
           specialUse: row.specialUse ?? '',
           subscribed: row.subscribed !== false,
         }))
-      return { account: name, folders }
+        this.folderCache.set(name, { at: Date.now(), folders: rows })
+      }
+      return { account: name, folders: rows.filter(row => !subscribedOnly || row.subscribed !== false) }
     }, true, signal)
   }
 

@@ -123,6 +123,7 @@ export declare class EmailPool {
     /** Serialize operations per account: one IMAP connection serves one op at a time. */
     private enqueue;
     private readonly readCache;
+    private readonly folderCache;
     /** Remember a parsed attachment index so email_attachment can skip the refetch. */
     private rememberRead;
     /**

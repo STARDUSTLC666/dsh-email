@@ -124,3 +124,12 @@ test('mark on a missing uid reports the actionable hint', async () => {
     err => err instanceof MailError && /找不到 uid=5/.test(err.message),
   )
 })
+
+test('email_folders 在 TTL 内复用上一次的 LIST 结果', async () => {
+  const { pool, state } = poolWithFakeImap()
+  const all = await pool.folders(undefined, false)
+  const subscribed = await pool.folders(undefined, true)
+  assert.equal(state.calls.filter(call => call[0] === 'list').length, 1, '第二次调用不应再 LIST')
+  assert.equal(all.folders.length, subscribed.folders.length)
+  assert.equal(all.folders[0].path, 'INBOX')
+})

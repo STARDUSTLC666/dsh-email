@@ -233,6 +233,7 @@ dsh plugin --profile web remove dsh-email
 ## 已知限制
 
 - **OAuth2 仅覆盖 Outlook / Exchange Online，且需自带应用 ID**：设备码登录已支持 IMAP 与 SMTP 双端，但插件**不内置任何第三方应用注册**，OAuth2 账号必须填自己的 `clientId`（免费注册，见上文「Outlook OAuth2」）。Google Workspace 等其它强制 OAuth 的环境仍不可用，只能用服务商的应用专用密码 / 授权码。
+- **搜索的匹配数**：服务器命中会先用信封复核（见上文 `email_search`）；复核通过时「共 N 条匹配」沿用服务器给出的条数，而列出的每一行都保证真的带关键词。
 - **正文搜索**：服务器端只搜 subject / from / to / cc；多数服务器（如 QQ）的 IMAP `TEXT` / `HEADER` 搜索不可靠，无结果时回退到最近 `bodySearchLimit` 封的正文扫描（较慢，可用 `bodySearchFallback` 关闭）。
 - **附件**：内嵌图片暂不支持单独下载；附件定位失败会直接报错而不是下载错误文件（安全默认）。
 - **密码落盘**：设置页保存的授权码以明文写在本机 `settings.yaml`（secret 标记只保证它不进日志 / 导出 / 诊断，不做磁盘加密）。请勿把 `settings.yaml` 交给不信任的人。
