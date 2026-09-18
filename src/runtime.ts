@@ -97,23 +97,30 @@ export function createEmailRuntime(
 
   // Tool and browser watches share the implementation but never consume each
   // other's cursor. The first call per scope/account/folder seeds a baseline.
-  const watchCursors = new Map<string, number>()
+  const watchCursors = new Map<string, { uid: number; uidValidity: number }>()
   const watch = async (account: string, folder: string, limit: number, scope: string, signal?: AbortSignal): Promise<EmailWatchResult> => {
     const capped = clampInt(limit, 20, 1, 100)
     const result = await getPool().list(account, folder, 100, 0, true, undefined, undefined, signal)
     const key = scope + '\u0000' + result.account + '\u0000' + result.folder
-    const isFirst = !watchCursors.has(key)
-    const cursor = watchCursors.get(key) ?? 0
+    const stored = watchCursors.get(key)
+    const uidValidity = typeof result.uidValidity === 'number' ? result.uidValidity : 0
+    // A UIDVALIDITY change renumbers every message in the mailbox: keeping the
+    // old cursor would either report the whole folder as new or miss everything
+    // that renumbered below it. Re-seed the baseline instead and say so.
+    const reset = stored !== undefined && stored.uidValidity !== 0 && uidValidity !== 0 && stored.uidValidity !== uidValidity
+    const isFirst = stored === undefined || reset
+    const cursor = stored === undefined || reset ? 0 : stored.uid
     const fresh = result.messages.filter(message => message.uid > cursor)
     if (result.messages.length > 0) {
-      watchCursors.set(key, Math.max(cursor, ...result.messages.map(message => message.uid)))
+      watchCursors.set(key, { uid: Math.max(cursor, ...result.messages.map(message => message.uid)), uidValidity })
     } else if (isFirst) {
-      watchCursors.set(key, 0)
+      watchCursors.set(key, { uid: 0, uidValidity })
     }
     return {
       account: result.account,
       folder: result.folder,
-      firstRun: isFirst,
+      firstRun: stored === undefined,
+      ...(reset ? { reset: true } : {}),
       newCount: isFirst ? 0 : fresh.length,
       messages: (isFirst ? [] : fresh).slice(0, capped),
       totalUnread: result.count,

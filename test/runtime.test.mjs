@@ -38,7 +38,7 @@ function fixture(t, row = account) {
       async list(name, folder, ...args) {
         args.at(-1)?.throwIfAborted()
         state.operations.push({ method: 'list', args: [name, folder, ...args] })
-        return { account: name || settings.defaultAccount, folder: folder || 'INBOX', count: state.rows.length, messages: state.rows }
+        return { account: name || settings.defaultAccount, folder: folder || 'INBOX', count: state.rows.length, uidValidity: state.uidValidity ?? 0, messages: state.rows }
       },
     }
     for (const method of ['read', 'mark', 'search', 'send', 'reply', 'folders', 'downloadAttachment']) {
@@ -222,4 +222,30 @@ test('validateSettingsValue accepts the custom preset names in effect', async (t
   assert.doesNotThrow(() => validateSettingsValue(value, ['corp']))
   // The message still names everything that would be accepted.
   assert.throws(() => validateSettingsValue({ ...account, provider: 'nope' }, ['corp']), /corp/)
+})
+
+test('UIDVALIDITY 变化时重建基线，而不是把重编号的 uid 当成新邮件', async (t) => {
+  const { runtime, state } = fixture(t)
+  state.uidValidity = 111
+  state.rows = [{ uid: 10 }]
+  assert.equal((await runtime.watch('', '', 20, 'tool')).firstRun, true)
+
+  state.rows = [{ uid: 12 }, { uid: 11 }, { uid: 10 }]
+  assert.equal((await runtime.watch('', '', 20, 'tool')).newCount, 2)
+
+  // The server renumbered the mailbox: uids restart below the stored cursor.
+  state.uidValidity = 222
+  state.rows = [{ uid: 3 }, { uid: 2 }]
+  const reset = await runtime.watch('', '', 20, 'tool')
+  assert.equal(reset.reset, true)
+  assert.equal(reset.firstRun, false)
+  assert.equal(reset.newCount, 0)
+  assert.deepEqual(reset.messages, [])
+
+  // The reseeded baseline still spots the next arrival.
+  state.rows = [{ uid: 4 }, { uid: 3 }, { uid: 2 }]
+  const after = await runtime.watch('', '', 20, 'tool')
+  assert.equal(after.reset, undefined)
+  assert.equal(after.newCount, 1)
+  assert.deepEqual(after.messages.map((m) => m.uid), [4])
 })

@@ -274,6 +274,9 @@ export function renderReply(value: EmailReplyResult): TextBlock[] {
 }
 
 export function renderWatch(value: EmailWatchResult): TextBlock[] {
+  if (value.reset === true) {
+    return oneText('账号 ' + value.account + '：文件夹 "' + value.folder + '" 的 UIDVALIDITY 已变化（服务器重新编号了邮件），已重新建立基线（当前未读 ' + value.totalUnread + ' 封）。这次不报告新邮件，之后照常。')
+  }
   if (value.firstRun) {
     return oneText('账号 ' + value.account + '：已建立新邮件监视基线（当前未读 ' + value.totalUnread + ' 封）。之后调用 email_watch 只会报告新到的邮件。')
   }
@@ -317,6 +320,7 @@ export const watchSchema = {
     account: { type: 'string' },
     folder: { type: 'string' },
     firstRun: { type: 'boolean' },
+    reset: { type: 'boolean' },
     newCount: { type: 'integer' },
     totalUnread: { type: 'integer' },
     messages: { type: 'array', items: { type: 'object', properties: messageShape, additionalProperties: true } },

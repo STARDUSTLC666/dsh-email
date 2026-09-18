@@ -39,6 +39,8 @@ export interface EmailListResult {
     account: string;
     count: number;
     folder: string;
+    /** The mailbox's UIDVALIDITY; 0 when the server did not report one. */
+    uidValidity: number;
     messages: ListedMessage[];
 }
 export interface EmailReadResult extends ReadMessageBody {
@@ -178,6 +180,8 @@ export interface EmailWatchResult {
     /** Unread messages never reported before (empty on firstRun). */
     newCount: number;
     messages: ListedMessage[];
+    /** True when a server-side UIDVALIDITY change forced a fresh baseline. */
+    reset?: boolean;
     /** Total unread in the folder right now. */
     totalUnread: number;
 }

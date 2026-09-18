@@ -350,6 +350,9 @@ export declare const watchSchema: {
         firstRun: {
             type: string;
         };
+        reset: {
+            type: string;
+        };
         newCount: {
             type: string;
         };
