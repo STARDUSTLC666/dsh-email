@@ -78,6 +78,12 @@ export interface AccountCardData {
    * exactly the state that has to be fixed before login can start.
    */
   clientId?: string
+  /** Display name for the From header, when the account sets one. */
+  senderName?: string
+  /** Login user when it differs from the visible address (`user`). */
+  authUser?: string
+  /** Whether a login password separate from `password` is stored. */
+  hasAuthPassword?: boolean
   /** Login state of an OAuth2 account: none / a device code in flight / logged in. */
   oauthState: OAuth2State
   /** The mailbox address the stored token belongs to (OAuth2 accounts only). */
@@ -126,6 +132,23 @@ export interface AccountCardInput {
    * 第三方应用注册，所以这是 OAuth2 账号的必填项，而设置面板是用户唯一的常规入口。
    */
   clientId?: string
+  /**
+   * 发件显示名，三态契约同 clientId：undefined = 本卡片没提供（保留已存的
+   * senderName 键），'' = 明确清除，非空 = 写入。只改收件人看到的名称，发件地址
+   * 始终是 user。
+   */
+  senderName?: string
+  /**
+   * 登录账号（IMAP/SMTP 认证用），三态契约同上：undefined = 保留，'' = 清除（回到
+   * 用 user 登录），非空 = 写入。别名/中继场景下 user 是发件地址，它才是登录名。
+   */
+  authUser?: string
+  /**
+   * 登录账号自己的密码，三态契约与 password 完全相同（undefined = 保留已存的值，
+   * '' = 明确清除，非空 = 写入）。只有 authUser 与 user 不同、且密码也不一样时
+   * 才需要。
+   */
+  authPassword?: string
   /**
    * 认证方式覆盖，三态契约同上：undefined = 本卡片没提供（保留已存的 authKind 键），
    * '' = 明确恢复「自动」（删掉该键，回到按 provider/主机派生），非空 = 钉住。
@@ -219,6 +242,11 @@ function buildAccountCards(
     // back for the editor to prefill: an OAuth2 account without one cannot
     // start a device-code login, and the card is where that gets fixed.
     const clientId = typeof account.clientId === 'string' ? account.clientId.trim() : ''
+    // The display name and the login user are not secrets, so — like clientId —
+    // the card hands them back for the editor to prefill. A separate login
+    // password is a secret and only ever reported as a boolean.
+    const senderName = typeof account.senderName === 'string' ? account.senderName.trim() : ''
+    const authUser = typeof account.authUser === 'string' ? account.authUser.trim() : ''
     const oauth = authKind === 'oauth2' ? tokens(name, user) : { state: 'none' as OAuth2State }
     list.push({
       name,
@@ -229,6 +257,9 @@ function buildAccountCards(
       authKind,
       ...(pinned === 'oauth2' || pinned === 'password' ? { authKindDeclared: pinned } : {}),
       ...(clientId !== '' ? { clientId } : {}),
+      ...(senderName !== '' ? { senderName } : {}),
+      ...(authUser !== '' ? { authUser } : {}),
+      ...(typeof account.authPassword === 'string' && account.authPassword !== '' ? { hasAuthPassword: true } : {}),
       oauthState: oauth.state,
       ...(oauth.user !== undefined ? { oauthUser: oauth.user } : {}),
       imap,
@@ -470,6 +501,7 @@ function normalizeCardForYaml(
   card: AccountCardInput,
   customNames: ReadonlySet<string>,
   inheritedPassword?: unknown,
+  inheritedAuthPassword?: unknown,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   const provider = persistedProvider(card.provider, customNames)
@@ -499,15 +531,37 @@ function normalizeCardForYaml(
     if (authKind !== '') out.authKind = authKind
   }
   if (card.inboxFolder !== undefined) out.inboxFolder = card.inboxFolder
+  if (card.senderName !== undefined) {
+    const senderName = String(card.senderName).trim()
+    if (senderName !== '') out.senderName = senderName
+  }
+  if (card.authUser !== undefined) {
+    const authUser = String(card.authUser).trim()
+    if (authUser !== '') out.authUser = authUser
+  }
+  if (card.authPassword === undefined) {
+    // Same contract as password: a card that says nothing must not delete it.
+    if (inheritedAuthPassword !== undefined) out.authPassword = inheritedAuthPassword
+  } else if (card.authPassword !== '') {
+    out.authPassword = String(card.authPassword)
+  }
   return out
 }
 
-/** The `password` stored in the source YAML for one account, if the key is there. */
-function storedPasswordOf(raw: Record<string, unknown>, name: string): { present: boolean; value: unknown } {
+/** One secret key stored in the source YAML for one account, if it is there. */
+function storedSecretOf(raw: Record<string, unknown>, name: string, key: string): { present: boolean; value: unknown } {
   const account = raw[name]
   if (account === null || typeof account !== 'object' || Array.isArray(account)) return { present: false, value: undefined }
-  if (!Object.prototype.hasOwnProperty.call(account, 'password')) return { present: false, value: undefined }
-  return { present: true, value: (account as Record<string, unknown>).password }
+  if (!Object.prototype.hasOwnProperty.call(account, key)) return { present: false, value: undefined }
+  return { present: true, value: (account as Record<string, unknown>)[key] }
+}
+
+function storedPasswordOf(raw: Record<string, unknown>, name: string): { present: boolean; value: unknown } {
+  return storedSecretOf(raw, name, 'password')
+}
+
+function storedAuthPasswordOf(raw: Record<string, unknown>, name: string): { present: boolean; value: unknown } {
+  return storedSecretOf(raw, name, 'authPassword')
 }
 
 /**
@@ -538,14 +592,17 @@ function fallbackSerialize(
   for (const card of cards) {
     const name = card.name as string
     let inherited: unknown
+    let inheritedAuthPassword: unknown
     if (stored === undefined) {
       // Nothing could be read back: a silent card may be losing a real secret.
       if (card.password === undefined) passwordsDropped = true
     } else {
       const { present, value } = storedPasswordOf(stored, name)
       if (present) inherited = value
+      const auth = storedAuthPasswordOf(stored, name)
+      if (auth.present) inheritedAuthPassword = auth.value
     }
-    raw[name] = normalizeCardForYaml(card, customNames, inherited)
+    raw[name] = normalizeCardForYaml(card, customNames, inherited, inheritedAuthPassword)
   }
   return {
     accountsYaml: serializeAccountsYaml(raw, defaultAccount),
@@ -630,6 +687,22 @@ function serializeAccountsDraft(
     const nextProvider = persistedProvider(card.provider, customNames)
     writeField(account, 'provider', nextProvider)
     writeField(account, 'user', card.user)
+    // senderName / authUser are plain three-state fields (undefined = 保持原样,
+    // '' = 清除, 非空 = 写入) — writeField already implements exactly that.
+    // An undefined field means "this card says nothing" — writeField would read
+    // that as「delete」, so the guard has to live here, not inside it.
+    if (card.senderName !== undefined) writeField(account, 'senderName', String(card.senderName).trim())
+    if (card.authUser !== undefined) writeField(account, 'authUser', String(card.authUser).trim())
+    // authPassword is a secret and follows the password contract verbatim: the
+    // card never carries the plaintext, so an omitted field must leave the
+    // stored key — value, position and comment — untouched.
+    if (card.authPassword === undefined) {
+      // 未提供 = 保持原样：什么都不写。
+    } else if (card.authPassword === '') {
+      account.delete('authPassword')
+    } else {
+      account.set('authPassword', String(card.authPassword))
+    }
     // Password is three-state, unlike every other field: the card is never given
     // the plaintext (snapshot exposes hasPassword only), so an omitted password
     // means "the editor has nothing to say" and the stored key must survive

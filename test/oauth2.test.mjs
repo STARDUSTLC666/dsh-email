@@ -141,8 +141,8 @@ test('clientId defaults to the built-in public client and is overridable per acc
 // --- auth shapes handed to the libraries -------------------------------------
 
 test('imapflow and nodemailer receive the OAuth2 auth shape, password accounts unchanged', () => {
-  const oauth = { user: 'me@outlook.com', password: '', authKind: 'oauth2' }
-  const password = { user: 'me@qq.com', password: 'secret', authKind: 'password' }
+  const oauth = { authUser: 'me@outlook.com', authPassword: '', authKind: 'oauth2' }
+  const password = { authUser: 'me@qq.com', authPassword: 'secret', authKind: 'password' }
 
   assert.deepEqual(imapAuthOf(oauth, 'access-token'), { user: 'me@outlook.com', accessToken: 'access-token' })
   assert.equal('pass' in imapAuthOf(oauth, 'access-token'), false, 'a password key would make imapflow try LOGIN')

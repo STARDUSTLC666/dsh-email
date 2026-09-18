@@ -62,7 +62,7 @@ test('OAuth SMTP delivers a fixture over the actual Nodemailer XOAUTH2 transport
   await once(server, 'listening')
   const transport = nodemailer.createTransport({
     pool: true, host: '127.0.0.1', port: server.address().port, secure: false,
-    auth: smtpAuthOf({ user: 'fixture@outlook.com', password: '', authKind: 'oauth2' }, 'fixture-access-token'),
+    auth: smtpAuthOf({ authUser: 'fixture@outlook.com', authPassword: '', authKind: 'oauth2' }, 'fixture-access-token'),
     connectionTimeout: 3000, socketTimeout: 3000,
   })
   t.after(async () => { transport.close(); for (const socket of sockets) socket.destroy(); await new Promise(resolve => server.close(resolve)) })

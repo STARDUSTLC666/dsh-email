@@ -1904,3 +1904,39 @@ test('an OAuth2 account round-trips through the card editor without a password',
   assert.equal(resolved.accounts.get('work').authKind, 'oauth2')
   assert.equal(resolved.accounts.get('work').user, 'w@outlook.com')
 })
+
+test('serializeAccounts: 别名三件套（senderName/authUser/authPassword）遵循三态契约', async t => {
+  const { post } = mount(t)
+  const source = 'work: { provider: qq, user: alias@qq.com, password: pw, senderName: 别名, authUser: login@qq.com, authPassword: realpw }\ndefaultAccount: work\n'
+
+  // 卡片什么都没说 = 原样保留（包括没被提及的 password）
+  const kept = await post({ action: 'serializeAccounts', accountsYaml: source, defaultAccount: 'work', accounts: [{ name: 'work', provider: 'qq', user: 'alias@qq.com' }] })
+  assert.equal(kept.body.ok, true)
+  const keptWork = parseAccountsYaml(kept.body.value.accountsYaml).map.work
+  assert.equal(keptWork.senderName, '别名')
+  assert.equal(keptWork.authUser, 'login@qq.com')
+  assert.equal(keptWork.authPassword, 'realpw')
+  assert.equal(keptWork.password, 'pw')
+
+  // '' = 明确清除
+  const cleared = await post({ action: 'serializeAccounts', accountsYaml: source, defaultAccount: 'work', accounts: [{ name: 'work', provider: 'qq', user: 'alias@qq.com', senderName: '', authUser: '', authPassword: '' }] })
+  const clearedWork = parseAccountsYaml(cleared.body.value.accountsYaml).map.work
+  assert.equal('senderName' in clearedWork, false)
+  assert.equal('authUser' in clearedWork, false)
+  assert.equal('authPassword' in clearedWork, false)
+
+  // 非空 = 写入
+  const written = await post({ action: 'serializeAccounts', accountsYaml: source, defaultAccount: 'work', accounts: [{ name: 'work', provider: 'qq', user: 'alias@qq.com', senderName: '新别名', authUser: 'other@qq.com', authPassword: 'newpw' }] })
+  const writtenWork = parseAccountsYaml(written.body.value.accountsYaml).map.work
+  assert.equal(writtenWork.senderName, '新别名')
+  assert.equal(writtenWork.authUser, 'other@qq.com')
+  assert.equal(writtenWork.authPassword, 'newpw')
+
+  // 卡片投影：显示名/登录名回给编辑器，登录密码只给布尔
+  const snapshot = await post({ action: 'parseAccounts', value: { accountsYaml: source } })
+  const card = snapshot.body.value.list.find(entry => entry.name === 'work')
+  assert.equal(card.senderName, '别名')
+  assert.equal(card.authUser, 'login@qq.com')
+  assert.equal(card.hasAuthPassword, true)
+  assert.equal('authPassword' in card, false)
+})

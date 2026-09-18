@@ -77,20 +77,20 @@ export type SmtpAuth =
  * `accessToken` (imapflow then runs AUTHENTICATE XOAUTH2) and a password
  * account with `pass`, exactly as before.
  */
-export function imapAuthOf(cfg: Pick<ResolvedEmailConfig, 'user' | 'password' | 'authKind'>, accessToken?: string): ImapAuth {
+export function imapAuthOf(cfg: Pick<ResolvedEmailConfig, 'authUser' | 'authPassword' | 'authKind'>, accessToken?: string): ImapAuth {
   return cfg.authKind === 'oauth2'
-    ? { user: cfg.user, accessToken: accessToken ?? '' }
-    : { user: cfg.user, pass: cfg.password }
+    ? { user: cfg.authUser, accessToken: accessToken ?? '' }
+    : { user: cfg.authUser, pass: cfg.authPassword }
 }
 
 /**
  * Nodemailer consumes an OAuth2 token through accessToken, not pass.
  * Refresh remains owned by this plugin; no refresh credentials leave here.
  */
-export function smtpAuthOf(cfg: Pick<ResolvedEmailConfig, 'user' | 'password' | 'authKind'>, accessToken?: string): SmtpAuth {
+export function smtpAuthOf(cfg: Pick<ResolvedEmailConfig, 'authUser' | 'authPassword' | 'authKind'>, accessToken?: string): SmtpAuth {
   return cfg.authKind === 'oauth2'
-    ? { type: 'OAuth2', user: cfg.user, accessToken: accessToken ?? '' }
-    : { user: cfg.user, pass: cfg.password }
+    ? { type: 'OAuth2', user: cfg.authUser, accessToken: accessToken ?? '' }
+    : { user: cfg.authUser, pass: cfg.authPassword }
 }
 
 /** The message an OAuth2 account gets when the mailbox has to be logged into again. */
@@ -168,6 +168,11 @@ export function selectAttachmentPart(
   return byTypeAndSize
 }
 
+/** The From header: `user` is the visible address, `senderName` only labels it. */
+function senderOf(cfg: Pick<ResolvedEmailConfig, 'user' | 'senderName'>): string | { name: string; address: string } {
+  return cfg.senderName === '' ? cfg.user : { name: cfg.senderName, address: cfg.user }
+}
+
 /** Case-insensitive match of a query against subject/from/body text. */
 export function messageMatchesQuery(subject: string, fromText: string, body: string, query: string): boolean {
   const q = query.toLowerCase()
@@ -214,12 +219,13 @@ function formatAddress(entry: AddressEntry): string {
   return entry.name !== undefined && entry.name !== '' ? entry.name + ' <' + entry.address + '>' : entry.address
 }
 
-function dedupeAddresses(entries: AddressEntry[], exclude: string): AddressEntry[] {
+function dedupeAddresses(entries: AddressEntry[], exclude: string | readonly string[]): AddressEntry[] {
   const seen = new Set<string>()
+  const excluded = new Set((Array.isArray(exclude) ? exclude : [exclude]).map(a => a.trim().toLowerCase()).filter(a => a !== ''))
   const out: AddressEntry[] = []
   for (const entry of entries) {
     const addr = (entry.address ?? '').toLowerCase()
-    if (addr === '' || addr === exclude || seen.has(addr)) continue
+    if (addr === '' || excluded.has(addr) || seen.has(addr)) continue
     seen.add(addr)
     out.push(entry)
   }
@@ -238,9 +244,9 @@ const FORWARD_MAX_CHARS = 4000
  * be tested without a connection: recipients exclude the sending account,
  * subject prefixes never stack, the original text is quoted underneath.
  */
-export function buildReplyMessage(original: OriginalDigest, mode: EmailReplyMode, selfAddress: string, text: string, forwardTo = ''): BuiltReply {
+export function buildReplyMessage(original: OriginalDigest, mode: EmailReplyMode, selfAddress: string | readonly string[], text: string, forwardTo = ''): BuiltReply {
   const fromText = original.from.map(a => a.name ?? a.address).filter(Boolean).join(', ') || '(未知发件人)'
-  const self = selfAddress.toLowerCase()
+  const self = (Array.isArray(selfAddress) ? selfAddress : [selfAddress]).filter(a => a.trim() !== '')
   if (mode === 'forward') {
     const to = forwardTo.trim()
     if (to === '') throw new MailError('forward 模式需要 to 参数指定转发收件人')
@@ -953,7 +959,7 @@ export class EmailPool {
     const cfg = this.account(name)
     const attachments = await validateAttachmentPaths(attachmentPaths ?? [], this.settings.maxAttachmentBytes, signal)
     const info = await this.sendMail(name, cfg, {
-      from: cfg.user,
+      from: senderOf(cfg),
       to,
       cc,
       subject,
@@ -986,13 +992,15 @@ export class EmailPool {
       return buildReplyMessage(
         { from: body.from, to: body.to, cc: body.cc, subject: body.subject, date: body.date, text: body.text, messageId: ids.messageId, references: ids.references },
         mode,
-        cfg.user,
+        // Both the visible address and the login are "me": a reply-all that
+        // keeps either of them would mail the sender his own message.
+        cfg.authUser === cfg.user ? cfg.user : [cfg.user, cfg.authUser],
         text,
         forwardTo,
       )
     }, true, signal)
     const info = await this.sendMail(name, cfg, {
-      from: cfg.user,
+      from: senderOf(cfg),
       to: built.to,
       cc,
       subject: built.subject,

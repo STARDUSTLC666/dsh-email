@@ -71,6 +71,20 @@ export interface AccountConfig {
   user?: string
   password?: string
   /**
+   * Display name for the From header. The address stays `user` — recipients
+   * must see the mailbox that owns the mail, not the login.
+   */
+  senderName?: string
+  /**
+   * Login handed to IMAP/SMTP when it differs from `user`: the alias case,
+   * where `user` is the address mail is sent *from* and the server only
+   * authenticates the real account, or a relay whose login is not a mailbox
+   * at all. Defaults to `user`.
+   */
+  authUser?: string
+  /** Password that goes with `authUser`. Defaults to `password`. */
+  authPassword?: string
+  /**
    * Public-client id used by the OAuth2 device-code flow. Only read for an
    * OAuth2 account, where it overrides OUTLOOK_OAUTH2_CLIENT_ID.
    */
@@ -156,6 +170,12 @@ const DEFAULT_IDLE_TIMEOUT_MS = 60000
 /** Fully resolved, validated configuration for one account. */
 export interface ResolvedEmailConfig {
   user: string
+  /** Display name for the From header, '' when the account does not set one. */
+  senderName: string
+  /** Login actually handed to IMAP/SMTP (== user unless authUser is set). */
+  authUser: string
+  /** Password for authUser (== password unless authPassword is set). */
+  authPassword: string
   /**
    * The app password / 授权码. Empty for an OAuth2 account — that is the point:
    * nothing is stored, the token store holds the credential instead.
@@ -466,6 +486,12 @@ function resolveAccount(
   // The settings form uses '' for an empty password. In single-account mode
   // that explicitly selects the environment fallback; named accounts stay isolated.
   const password = (acc.password ?? common.password) || (allowEnvPassword ? process.env[EMAIL_PASSWORD_ENV] ?? '' : '')
+  // An alias account sends from `user` but authenticates as somebody else, and a
+  // relay may use a different password than the mailbox it delivers for. Both
+  // default to the single-account pair so nothing changes for existing setups.
+  const authUser = (acc.authUser ?? common.authUser ?? '').trim() || user
+  const authPassword = (acc.authPassword ?? common.authPassword) || password
+  const senderName = (acc.senderName ?? common.senderName ?? '').trim()
   const imap = {
     host: acc.imap?.host ?? common.imap?.host ?? preset?.imap.host,
     port: acc.imap?.port ?? common.imap?.port ?? preset?.imap.port,
@@ -493,7 +519,9 @@ function resolveAccount(
   // An OAuth2 account has no password on purpose: its credential is the token
   // in the OAuth2 store, and requiring a password would demand a secret
   // Microsoft no longer accepts for Exchange Online.
-  if (!oauth2 && password === '') problems.push(`账号 "${name}" 的 password 未填写（单账号可用环境变量 ${EMAIL_PASSWORD_ENV}）`)
+  if (!oauth2 && authPassword === '') {
+    problems.push(`账号 "${name}" 的 ${authUser === user ? 'password' : 'authPassword'} 未填写（单账号可用环境变量 ${EMAIL_PASSWORD_ENV}）`)
+  }
   if (imap.host === undefined || imap.host === '') problems.push(`账号 "${name}" 的 imap.host 未填写（可填 provider 预设：${known.join('/')}）`)
   if (smtp.host === undefined || smtp.host === '') problems.push(`账号 "${name}" 的 smtp.host 未填写（同上）`)
   if (problems.length > 0) {
@@ -502,8 +530,13 @@ function resolveAccount(
   const clientId = (acc.clientId ?? common.clientId ?? '').trim()
   return {
     user,
-    // An OAuth2 account never carries a password: a stale one left in the YAML
-    // from before the provider changed must not travel into the pool.
+    senderName,
+    // OAuth2 logs in with the token's own account, so the alias login pair only
+    // exists for password accounts; and an OAuth2 account never carries a
+    // password at all — a stale one left in the YAML from before the provider
+    // changed must not travel into the pool.
+    authUser: oauth2 ? user : authUser,
+    authPassword: oauth2 ? '' : authPassword,
     password: oauth2 ? '' : password,
     authKind: oauth2 ? 'oauth2' : 'password',
     ...(clientId !== '' ? { clientId } : {}),

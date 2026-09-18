@@ -59,6 +59,20 @@ export interface AccountConfig {
     user?: string;
     password?: string;
     /**
+     * Display name for the From header. The address stays `user` — recipients
+     * must see the mailbox that owns the mail, not the login.
+     */
+    senderName?: string;
+    /**
+     * Login handed to IMAP/SMTP when it differs from `user`: the alias case,
+     * where `user` is the address mail is sent *from* and the server only
+     * authenticates the real account, or a relay whose login is not a mailbox
+     * at all. Defaults to `user`.
+     */
+    authUser?: string;
+    /** Password that goes with `authUser`. Defaults to `password`. */
+    authPassword?: string;
+    /**
      * Public-client id used by the OAuth2 device-code flow. Only read for an
      * OAuth2 account, where it overrides OUTLOOK_OAUTH2_CLIENT_ID.
      */
@@ -141,6 +155,12 @@ export declare const EMAIL_PASSWORD_ENV = "DSH_EMAIL_PASSWORD";
 /** Fully resolved, validated configuration for one account. */
 export interface ResolvedEmailConfig {
     user: string;
+    /** Display name for the From header, '' when the account does not set one. */
+    senderName: string;
+    /** Login actually handed to IMAP/SMTP (== user unless authUser is set). */
+    authUser: string;
+    /** Password for authUser (== password unless authPassword is set). */
+    authPassword: string;
     /**
      * The app password / 授权码. Empty for an OAuth2 account — that is the point:
      * nothing is stored, the token store holds the credential instead.

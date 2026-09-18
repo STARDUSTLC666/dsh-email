@@ -40,6 +40,12 @@ export interface AccountCardData {
      * exactly the state that has to be fixed before login can start.
      */
     clientId?: string;
+    /** Display name for the From header, when the account sets one. */
+    senderName?: string;
+    /** Login user when it differs from the visible address (`user`). */
+    authUser?: string;
+    /** Whether a login password separate from `password` is stored. */
+    hasAuthPassword?: boolean;
     /** Login state of an OAuth2 account: none / a device code in flight / logged in. */
     oauthState: OAuth2State;
     /** The mailbox address the stored token belongs to (OAuth2 accounts only). */
@@ -77,6 +83,23 @@ export interface AccountCardInput {
      * 第三方应用注册，所以这是 OAuth2 账号的必填项，而设置面板是用户唯一的常规入口。
      */
     clientId?: string;
+    /**
+     * 发件显示名，三态契约同 clientId：undefined = 本卡片没提供（保留已存的
+     * senderName 键），'' = 明确清除，非空 = 写入。只改收件人看到的名称，发件地址
+     * 始终是 user。
+     */
+    senderName?: string;
+    /**
+     * 登录账号（IMAP/SMTP 认证用），三态契约同上：undefined = 保留，'' = 清除（回到
+     * 用 user 登录），非空 = 写入。别名/中继场景下 user 是发件地址，它才是登录名。
+     */
+    authUser?: string;
+    /**
+     * 登录账号自己的密码，三态契约与 password 完全相同（undefined = 保留已存的值，
+     * '' = 明确清除，非空 = 写入）。只有 authUser 与 user 不同、且密码也不一样时
+     * 才需要。
+     */
+    authPassword?: string;
     /**
      * 认证方式覆盖，三态契约同上：undefined = 本卡片没提供（保留已存的 authKind 键），
      * '' = 明确恢复「自动」（删掉该键，回到按 provider/主机派生），非空 = 钉住。
