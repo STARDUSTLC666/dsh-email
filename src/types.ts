@@ -57,6 +57,8 @@ export interface EmailSearchResult {
   query: string
   count: number
   folder: string
+  /** How many newest matches the caller skipped (0 on the first page). */
+  offset: number
   messages: ListedMessage[]
 }
 
@@ -113,6 +115,7 @@ export interface EmailSearchArgs extends AccountArg {
   query: string
   folder?: string
   limit?: number
+  offset?: number
   since?: string
   until?: string
 }

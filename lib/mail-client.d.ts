@@ -159,7 +159,7 @@ export declare class EmailPool {
      */
     private sendMail;
     list(accountName: string | undefined, folder: string, limit: number, offset: number, unreadOnly: boolean, since?: Date, until?: Date, signal?: AbortSignal): Promise<EmailListResult>;
-    search(accountName: string | undefined, query: string, folder: string, limit: number, since?: Date, until?: Date, signal?: AbortSignal): Promise<EmailSearchResult>;
+    search(accountName: string | undefined, query: string, folder: string, limit: number, offset: number, since?: Date, until?: Date, signal?: AbortSignal): Promise<EmailSearchResult>;
     /**
      * Confirm server-side hits against the mailbox itself: fetch the envelopes
      * of the newest candidates — the same window the body-scan fallback looks at

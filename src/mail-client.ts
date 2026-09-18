@@ -641,7 +641,7 @@ export class EmailPool {
     }, true, signal)
   }
 
-  async search(accountName: string | undefined, query: string, folder: string, limit: number, since?: Date, until?: Date, signal?: AbortSignal): Promise<EmailSearchResult> {
+  async search(accountName: string | undefined, query: string, folder: string, limit: number, offset: number, since?: Date, until?: Date, signal?: AbortSignal): Promise<EmailSearchResult> {
     const name = this.resolveName(accountName)
     const cfg = this.account(name)
     const folderName = folder || cfg.inboxFolder
@@ -665,20 +665,23 @@ export class EmailPool {
       signal?.throwIfAborted()
       const uids = [...new Set(found.flatMap(result => result === false ? [] : result))].sort((a, b) => b - a)
       if (uids.length > 0) {
-        const confirmed = await this.searchHits(client, uids, query, limit, signal)
+        // The sample has to cover the requested page (offset + limit) — the same
+        // window the fallback scan looks at — so one FETCH serves both the
+        // verification and the rows that are handed out.
+        const confirmed = await this.searchHits(client, uids, query, offset + limit, signal)
         if (confirmed.length > 0) {
           // The server's list holds up, so its size is reported as the match
           // count; only rows that were confirmed are ever handed out.
-          return { account: name, query, count: uids.length, folder: folderName, messages: confirmed.slice(0, limit) }
+          return { account: name, query, count: uids.length, folder: folderName, offset, messages: confirmed.slice(offset, offset + limit) }
         }
       }
       // Nothing believable came back (empty answer, or hits that did not
       // survive verification): scan the newest messages locally instead.
       if (this.settings.bodySearchFallback) {
-        const messages = await this.searchBodies(client, query, folderName, limit, since, until, signal)
-        return { account: name, query, count: messages.length, folder: folderName, messages }
+        const messages = await this.searchBodies(client, query, folderName, limit, offset, since, until, signal)
+        return { account: name, query, count: messages.length, folder: folderName, offset, messages }
       }
-      return { account: name, query, count: 0, folder: folderName, messages: [] }
+      return { account: name, query, count: 0, folder: folderName, offset, messages: [] }
     }, true, signal)
   }
 
@@ -689,8 +692,8 @@ export class EmailPool {
    * the four fields the server was asked about. No body is downloaded here,
    * and uids the server made up simply return nothing.
    */
-  private async searchHits(client: ImapFlow, uids: number[], query: string, limit: number, signal?: AbortSignal): Promise<ListedMessage[]> {
-    const sample = uids.slice(0, Math.min(uids.length, Math.max(this.settings.bodySearchLimit, limit)))
+  private async searchHits(client: ImapFlow, uids: number[], query: string, need: number, signal?: AbortSignal): Promise<ListedMessage[]> {
+    const sample = uids.slice(0, Math.min(uids.length, Math.max(this.settings.bodySearchLimit, need)))
     signal?.throwIfAborted()
     const fetched = await client.fetchAll(sample, { uid: true, envelope: true, flags: true, size: true, bodyStructure: true }, { uid: true })
     signal?.throwIfAborted()
@@ -705,7 +708,7 @@ export class EmailPool {
   }
 
   /** Client-side scan of the tail of the mailbox, newest first. */
-  private async searchBodies(client: ImapFlow, query: string, folder: string, limit: number, since?: Date, until?: Date, signal?: AbortSignal): Promise<ListedMessage[]> {
+  private async searchBodies(client: ImapFlow, query: string, folder: string, limit: number, offset: number, since?: Date, until?: Date, signal?: AbortSignal): Promise<ListedMessage[]> {
     signal?.throwIfAborted()
     const mailbox = client.mailbox
     const total = mailbox === false ? 0 : mailbox.exists
@@ -718,7 +721,7 @@ export class EmailPool {
     const out: ListedMessage[] = []
     for (const message of [...fetched].reverse()) {
       signal?.throwIfAborted()
-      if (out.length >= limit) break
+      if (out.length >= offset + limit) break
       const receivedAt = message.internalDate ?? message.envelope?.date
       if (since !== undefined && (receivedAt === undefined || receivedAt < since)) continue
       if (until !== undefined && (receivedAt === undefined || receivedAt >= until)) continue
@@ -740,7 +743,7 @@ export class EmailPool {
         out.push(listedFrom(message, message.size, structureHasAttachment(message.bodyStructure)))
       }
     }
-    return out
+    return out.slice(offset, offset + limit)
   }
 
   private async fetchListed(client: ImapFlow, uids: number[], signal?: AbortSignal): Promise<ListedMessage[]> {
