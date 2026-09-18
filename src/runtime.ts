@@ -111,18 +111,25 @@ export function createEmailRuntime(
     const isFirst = stored === undefined || reset
     const cursor = stored === undefined || reset ? 0 : stored.uid
     const fresh = result.messages.filter(message => message.uid > cursor)
-    if (result.messages.length > 0) {
-      watchCursors.set(key, { uid: Math.max(cursor, ...result.messages.map(message => message.uid)), uidValidity })
-    } else if (isFirst) {
-      watchCursors.set(key, { uid: 0, uidValidity })
+    // 后续每次只返回 fresh 中最旧的 limit 条，游标也只推进到这批的最大 uid：
+    // 窗口里更旧的新邮件留给下一轮，不能因为本次只返回 limit 条就被永久跳过。
+    const batch = isFirst ? [] : fresh.slice(Math.max(0, fresh.length - capped))
+    if (isFirst) {
+      // 首次调用（或 UIDVALIDITY 重建）只落基线：游标取窗口最新一封，旧邮件不算新邮件。
+      watchCursors.set(key, {
+        uid: result.messages.length > 0 ? Math.max(...result.messages.map(message => message.uid)) : 0,
+        uidValidity,
+      })
+    } else if (batch.length > 0) {
+      watchCursors.set(key, { uid: Math.max(...batch.map(message => message.uid)), uidValidity })
     }
     return {
       account: result.account,
       folder: result.folder,
       firstRun: stored === undefined,
       ...(reset ? { reset: true } : {}),
-      newCount: isFirst ? 0 : fresh.length,
-      messages: (isFirst ? [] : fresh).slice(0, capped),
+      newCount: batch.length,
+      messages: batch,
       totalUnread: result.count,
     }
   }

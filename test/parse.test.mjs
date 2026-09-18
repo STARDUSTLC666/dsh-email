@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { stripHtml, truncateText, flattenAddresses, sanitizeFilename, parseRawMessage } from '../lib/index.js'
+import { EmailPool, resolveEmailSettings, stripHtml, truncateText, flattenAddresses, sanitizeFilename, parseRawMessage } from '../lib/index.js'
 
 test('stripHtml drops tags, keeps text, turns block tags into newlines', () => {
   const html = '<html><head><style>x{}</style></head><body><p>第一段</p><p>第二<br>行</p><script>bad()</script>尾</body></html>'
@@ -17,13 +17,36 @@ test('stripHtml decodes common entities', () => {
   assert.equal(stripHtml('<p>A&nbsp;&amp;&nbsp;B &lt;tag&gt; &quot;q&quot;</p>'), 'A & B <tag> "q"')
 })
 
-test('truncateText keeps short text and marks long text', () => {
+test('truncateText keeps short text and hard-cuts long text without a break', () => {
   assert.deepEqual(truncateText('short', 100), { text: 'short', truncated: false })
   const long = 'x'.repeat(500)
   const out = truncateText(long, 100)
   assert.equal(out.truncated, true)
-  assert.ok(out.text.length < 120)
+  assert.equal(out.text.slice(0, 100), 'x'.repeat(100))
   assert.ok(out.text.includes('已截断'))
+})
+
+test('email_read 对无空格超长中文正文硬截断，正文可读且非空', async () => {
+  const bodyText = '中'.repeat(21000)
+  const source = Buffer.from([
+    'From: Alice <alice@example.com>',
+    'To: me@example.com',
+    'Subject: 超长中文正文',
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset=utf-8',
+    '',
+    bodyText,
+  ].join('\r\n'))
+  const pool = new EmailPool(resolveEmailSettings({ provider: 'qq', user: 'a@b.c', password: 'p' }))
+  pool.withImap = async (_account, _folder, run) => run({
+    mailbox: { exists: 1, uidValidity: 1 },
+    async fetchOne(uid) { return { uid, source, bodyStructure: { childNodes: [] } } },
+  })
+  const read = await pool.read(undefined, 42, '')
+  assert.equal(read.truncated, true)
+  assert.ok(read.text.startsWith('中'.repeat(20000)), '截断处必须保留正文，不能只剩截断提示')
+  assert.ok(read.text.length > 20000)
+  assert.ok(read.text.includes('已截断'))
 })
 
 test('flattenAddresses accepts both array and {value} shapes', () => {

@@ -124,6 +124,8 @@ export declare class EmailPool {
     private enqueue;
     private readonly readCache;
     private readonly folderCache;
+    /** UIDVALIDITY 变了以后同一 uid 可能指向另一封邮件，缓存键必须带上它。 */
+    private uidValidityOf;
     /** Remember a parsed attachment index so email_attachment can skip the refetch. */
     private rememberRead;
     /**

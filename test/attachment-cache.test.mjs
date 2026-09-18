@@ -85,6 +85,39 @@ test('没有 email_read 打底时（缓存未命中）自己解析一次，行�
   assert.equal(calls.filter(([kind]) => kind === 'fetchOne').length, 1)
 })
 
+test('UIDVALIDITY 变化后同一 uid 不再复用旧附件索引', async (t) => {
+  const ws = workspace(t)
+  const pool = new EmailPool(resolveEmailSettings({ provider: 'qq', user: 'a@b.c', password: 'p' }))
+  const calls = []
+  const server = fakeServer(calls)
+  server.mailbox = { exists: 1, uidValidity: 111 }
+  pool.withImap = async (_account, _folder, run) => run(server)
+
+  const read = await pool.read(undefined, 7, '')
+  assert.equal(read.attachments.length, 1)
+
+  // 服务器重编号：同一个 uid=7 现在是另一封没有附件的纯文本邮件，
+  // 旧索引（a.pdf -> IMAP part 2）绝不能拿来下载。
+  const plain = [
+    'From: other@example.com',
+    'To: me@example.com',
+    'Subject: renumbered',
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset=utf-8',
+    '',
+    'plain text mail',
+  ].join('\r\n')
+  server.mailbox = { exists: 1, uidValidity: 222 }
+  server.fetchOne = async (uid, query) => {
+    calls.push(['fetchOne', JSON.stringify(query)])
+    return { uid, source: Buffer.from(plain, 'utf8'), bodyStructure: { childNodes: [{ part: '1', type: 'text/plain', size: 15 }] } }
+  }
+
+  await assert.rejects(pool.downloadAttachment(undefined, '', 7, 0, ws), /该邮件没有附件/)
+  assert.equal(calls.filter(([kind]) => kind === 'fetchOne').length, 2, 'UIDVALIDITY 变了必须重新解析')
+  assert.equal(calls.filter(([kind]) => kind === 'download').length, 0, '不能拿旧索引去下载')
+})
+
 test('缓存按账号+文件夹+uid 命中，换 uid 会重新解析', async (t) => {
   const ws = workspace(t)
   const pool = new EmailPool(resolveEmailSettings({ provider: 'qq', user: 'a@b.c', password: 'p' }))

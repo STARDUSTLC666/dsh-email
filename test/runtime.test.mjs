@@ -112,12 +112,33 @@ test('tool and web watches maintain independent baselines for each folder', asyn
   state.rows = [{ uid: 12 }, { uid: 11 }, { uid: 10 }]
   const tool = await runtime.watch('', '', 1, 'tool')
   const web = await runtime.watch('', '', 20, 'web')
-  assert.equal(tool.newCount, 2)
-  assert.deepEqual(tool.messages.map(message => message.uid), [12])
+  assert.equal(tool.newCount, 1)
+  assert.deepEqual(tool.messages.map(message => message.uid), [11]) // fresh 中最旧的 limit 条
+  const toolNext = await runtime.watch('', '', 1, 'tool')
+  assert.equal(toolNext.newCount, 1)
+  assert.deepEqual(toolNext.messages.map(message => message.uid), [12])
   assert.equal(web.newCount, 2)
   assert.deepEqual(web.messages.map(message => message.uid), [12, 11])
   assert.equal((await runtime.watch('', '', 20, 'tool')).newCount, 0)
   assert.equal((await runtime.watch('', 'Archive', 20, 'tool')).firstRun, true)
+})
+
+test('limit 小于新邮件数时按最旧优先分批补齐，连续调用一封不漏', async (t) => {
+  const { runtime, state } = fixture(t)
+  state.rows = [{ uid: 9 }]
+  assert.equal((await runtime.watch('', '', 20, 'tool')).firstRun, true)
+
+  state.rows = [{ uid: 12 }, { uid: 11 }, { uid: 10 }]
+  const seen = []
+  for (let i = 0; i < 3; i++) {
+    const batch = await runtime.watch('', '', 1, 'tool')
+    assert.ok(batch.messages.length <= 1, 'limit=1 时每次最多返回一条')
+    seen.push(...batch.messages.map(message => message.uid))
+  }
+  assert.deepEqual(seen, [10, 11, 12], '三封新邮件必须连续调用全部返回')
+  const idle = await runtime.watch('', '', 1, 'tool')
+  assert.equal(idle.newCount, 0)
+  assert.deepEqual(idle.messages, [])
 })
 
 test('cancelled watch reads do not advance the next successful baseline', async (t) => {

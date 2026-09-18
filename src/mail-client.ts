@@ -375,9 +375,15 @@ export class EmailPool {
   private readonly readCache = new Map<string, CachedAttachmentIndex>()
   private readonly folderCache = new Map<string, { at: number; folders: EmailFolderRow[] }>()
 
+  /** UIDVALIDITY 变了以后同一 uid 可能指向另一封邮件，缓存键必须带上它。 */
+  private uidValidityOf(client: ImapFlow): number {
+    const mailbox = client.mailbox
+    return mailbox === false ? 0 : Number(mailbox.uidValidity ?? 0)
+  }
+
   /** Remember a parsed attachment index so email_attachment can skip the refetch. */
-  private rememberRead(account: string, folder: string, uid: number, parsed: Omit<CachedAttachmentIndex, 'at'>): void {
-    const key = account + '\u0000' + folder + '\u0000' + uid
+  private rememberRead(account: string, folder: string, uidValidity: number, uid: number, parsed: Omit<CachedAttachmentIndex, 'at'>): void {
+    const key = account + '\u0000' + folder + '\u0000' + uidValidity + '\u0000' + uid
     this.readCache.delete(key)
     this.readCache.set(key, { ...parsed, at: Date.now() })
     while (this.readCache.size > READ_CACHE_MAX) {
@@ -392,7 +398,8 @@ export class EmailPool {
    * produced it, otherwise a fresh parse of the full source plus its bodyStructure.
    */
   private async attachmentIndexOf(client: ImapFlow, account: string, folder: string, uid: number, signal?: AbortSignal): Promise<Omit<CachedAttachmentIndex, 'at'>> {
-    const cached = this.recallRead(account, folder, uid)
+    const uidValidity = this.uidValidityOf(client)
+    const cached = this.recallRead(account, folder, uidValidity, uid)
     if (cached !== undefined) return cached
     const message = await client.fetchOne(uid, { uid: true, bodyStructure: true, source: true }, { uid: true })
     if (message === false || message.source === undefined) {
@@ -401,12 +408,12 @@ export class EmailPool {
     const body = await parseRawMessage(message.source, this.settings.maxBodyChars)
     signal?.throwIfAborted()
     const parsed = { attachments: body.attachments, parts: collectAttachmentParts(message.bodyStructure) }
-    this.rememberRead(account, folder, uid, parsed)
+    this.rememberRead(account, folder, uidValidity, uid, parsed)
     return parsed
   }
 
-  private recallRead(account: string, folder: string, uid: number): CachedAttachmentIndex | undefined {
-    const key = account + '\u0000' + folder + '\u0000' + uid
+  private recallRead(account: string, folder: string, uidValidity: number, uid: number): CachedAttachmentIndex | undefined {
+    const key = account + '\u0000' + folder + '\u0000' + uidValidity + '\u0000' + uid
     const hit = this.readCache.get(key)
     if (hit === undefined) return undefined
     if (Date.now() - hit.at > READ_CACHE_TTL_MS) {
@@ -837,7 +844,7 @@ export class EmailPool {
       }
       const body = await parseRawMessage(message.source, this.settings.maxBodyChars)
       signal?.throwIfAborted()
-      this.rememberRead(name, folderName, uid, { attachments: body.attachments, parts: collectAttachmentParts(message.bodyStructure) })
+      this.rememberRead(name, folderName, this.uidValidityOf(client), uid, { attachments: body.attachments, parts: collectAttachmentParts(message.bodyStructure) })
       return { account: name, uid, folder: folderName, ...body }
     }, true, signal)
   }
