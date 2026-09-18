@@ -19,7 +19,8 @@
     "assets/whale-fallback.png",
     "cordis.patch.yml",
     "README.md",
-    "README.en.md"
+    "README.en.md",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsc",
