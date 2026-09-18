@@ -160,6 +160,14 @@ export declare class EmailPool {
     private sendMail;
     list(accountName: string | undefined, folder: string, limit: number, offset: number, unreadOnly: boolean, since?: Date, until?: Date, signal?: AbortSignal): Promise<EmailListResult>;
     search(accountName: string | undefined, query: string, folder: string, limit: number, since?: Date, until?: Date, signal?: AbortSignal): Promise<EmailSearchResult>;
+    /**
+     * Confirm server-side hits against the mailbox itself: fetch the envelopes
+     * of the newest candidates — the same window the body-scan fallback looks at
+     * — and keep only those that really carry the query in subject/from/to/cc,
+     * the four fields the server was asked about. No body is downloaded here,
+     * and uids the server made up simply return nothing.
+     */
+    private searchHits;
     /** Client-side scan of the tail of the mailbox, newest first. */
     private searchBodies;
     private fetchListed;

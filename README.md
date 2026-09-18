@@ -24,7 +24,7 @@ IMAP/SMTP email tools for DeepSeek Harness, with replies, forwarding, mailbox or
 |---|---|
 | `email_list` | 列出文件夹里最新的邮件（未读过滤、分页、只看摘要不带正文） |
 | `email_read` | 按 uid 读取一封邮件的全文（HTML 邮件自动转纯文本，超长截断） |
-| `email_search` | 按关键词搜索主题/发件人/收件人/抄送（服务器端 subject/from/to/cc）；无结果时默认回退到最近 30 封的正文扫描（含 to/cc） |
+| `email_search` | 按关键词搜索主题/发件人/收件人/抄送（服务器端 subject/from/to/cc；命中会先用信封复核，QQ 这种"什么都匹配"的响应会被判无效）；复核或服务器都没给出可信结果时，默认回退到最近 30 封的正文扫描（含 to/cc） |
 | `email_send` | 代发邮件（支持带附件）。**默认发信前会弹确认**，显示收件人、主题和附件数，由你批准后才发出 |
 | `email_folders` | 列出邮箱的文件夹（INBOX/已发送/垃圾邮件/自定义…），拿 path 喂给其他工具 |
 | `email_attachment` | 按序号下载邮件附件（默认存到会话工作区，模型可直接读取；大小受 maxAttachmentBytes 限制） |

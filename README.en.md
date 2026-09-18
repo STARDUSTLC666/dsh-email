@@ -16,7 +16,7 @@ Pure Node, **cross-platform** (one codebase for Windows / macOS / Linux), no she
 |---|---|
 | `email_list` | List the newest mail in a folder (unread filter, pagination, summaries only, no body) |
 | `email_read` | Read one message's full text by uid (HTML auto-converted to plain text, oversized bodies truncated) |
-| `email_search` | Search subject/sender/recipient/CC by keyword (server-side subject/from/to/cc); with no results, falls back to a body scan of the most recent 30 messages by default (including to/cc) |
+| `email_search` | Search subject/sender/recipient/CC by keyword (server-side subject/from/to/cc; hits are re-checked against the envelopes, so "match-everything" servers such as QQ are rejected); when nothing believable is returned, it falls back to a body scan of the most recent 30 messages by default (including to/cc) |
 | `email_send` | Send mail on your behalf (attachments supported). **Prompts for confirmation before sending by default**, showing recipients, subject and attachment count; only sends after you approve |
 | `email_folders` | List the mailbox folders (INBOX/Sent/Junk/custom…); feed the `path` to other tools |
 | `email_attachment` | Download an attachment by index (saved to the session workspace by default so the model can read it directly; size capped by `maxAttachmentBytes`) |

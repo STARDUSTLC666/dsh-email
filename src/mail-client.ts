@@ -647,8 +647,12 @@ export class EmailPool {
     const folderName = folder || cfg.inboxFolder
     return this.withImap(name, folderName, async (client) => {
       // No nested OR and no TEXT search: several servers (QQ among them)
-      // silently answer those with empty or match-everything results.
-      // subject/from/to/cc searches unioned client-side behave well everywhere.
+      // silently answer those with empty results, and some answer with a
+      // non-empty list that has nothing to do with the query at all (QQ again:
+      // an impossible keyword still「matches」every uid in the folder). The
+      // server's hit list is therefore a hint, not an answer: confirm it
+      // against the envelopes before reporting anything, otherwise scan
+      // locally.
       const dateRange: Record<string, unknown> = {}
       if (since !== undefined) dateRange.since = since
       if (until !== undefined) dateRange.before = until
@@ -659,17 +663,45 @@ export class EmailPool {
         client.search({ cc: query, ...dateRange }, { uid: true }),
       ])
       signal?.throwIfAborted()
-      const uids = [...new Set(found.flatMap(result => result === false ? [] : result))].sort((a, b) => a - b)
-      uids.reverse()
-      if (uids.length === 0 && this.settings.bodySearchFallback) {
-        // Server-side search found nothing: fall back to a client-side scan of
-        // the most recent messages (subject/from/body), capped for time.
+      const uids = [...new Set(found.flatMap(result => result === false ? [] : result))].sort((a, b) => b - a)
+      if (uids.length > 0) {
+        const confirmed = await this.searchHits(client, uids, query, limit, signal)
+        if (confirmed.length > 0) {
+          // The server's list holds up, so its size is reported as the match
+          // count; only rows that were confirmed are ever handed out.
+          return { account: name, query, count: uids.length, folder: folderName, messages: confirmed.slice(0, limit) }
+        }
+      }
+      // Nothing believable came back (empty answer, or hits that did not
+      // survive verification): scan the newest messages locally instead.
+      if (this.settings.bodySearchFallback) {
         const messages = await this.searchBodies(client, query, folderName, limit, since, until, signal)
         return { account: name, query, count: messages.length, folder: folderName, messages }
       }
-      const messages = await this.fetchListed(client, uids.slice(0, limit), signal)
-      return { account: name, query, count: uids.length, folder: folderName, messages }
+      return { account: name, query, count: 0, folder: folderName, messages: [] }
     }, true, signal)
+  }
+
+  /**
+   * Confirm server-side hits against the mailbox itself: fetch the envelopes
+   * of the newest candidates — the same window the body-scan fallback looks at
+   * — and keep only those that really carry the query in subject/from/to/cc,
+   * the four fields the server was asked about. No body is downloaded here,
+   * and uids the server made up simply return nothing.
+   */
+  private async searchHits(client: ImapFlow, uids: number[], query: string, limit: number, signal?: AbortSignal): Promise<ListedMessage[]> {
+    const sample = uids.slice(0, Math.min(uids.length, Math.max(this.settings.bodySearchLimit, limit)))
+    signal?.throwIfAborted()
+    const fetched = await client.fetchAll(sample, { uid: true, envelope: true, flags: true, size: true, bodyStructure: true }, { uid: true })
+    signal?.throwIfAborted()
+    return fetched
+      .filter(message => {
+        const envelope = message.envelope
+        const addressText = [envelope?.from, envelope?.to, envelope?.cc].map(flattenAddressText).join(' ')
+        return messageMatchesQuery(envelope?.subject ?? '', addressText, '', query)
+      })
+      .map(message => listedFrom(message, message.size, structureHasAttachment(message.bodyStructure)))
+      .sort((a, b) => b.uid - a.uid)
   }
 
   /** Client-side scan of the tail of the mailbox, newest first. */
