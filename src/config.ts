@@ -26,23 +26,27 @@ export const OUTLOOK_PROVIDER = 'outlook'
 export const OUTLOOK_IMAP_HOST = 'outlook.office365.com'
 
 /**
- * The built-in default client id for the device-code flow: deliberately empty.
+ * The built-in client id for the device-code flow: a community registration.
  *
- * An earlier revision shipped a registration belonging to a contributor. That
- * cannot be right for a package thousands of strangers install: the Microsoft
- * consent screen would name someone else's application (which enterprise
- * security teams refuse), the sign-in logs and telemetry would land in their
- * tenant along with the user's UPN, and their deleting the app would break
- * every login at once — with an error that only says the client id「可能填错了」,
- * so no user could diagnose it.
+ * Requiring every Outlook user to register an application of their own puts a
+ * setup wall in front of the one provider where OAuth2 cannot be avoided, so
+ * the plugin ships one. The id below is the public-client registration
+ * contributed by gurio-wine (PR #13) and used with their permission; the README
+ * credits them and states the two things that follow from using somebody
+ * else's application: the consent screen names *their* app, and the sign-in
+ * logs land in *their* tenant along with the user's UPN.
  *
- * Nothing third-party is baked in, so an account supplies its own `clientId`
- * (a free Entra public-client registration; the README walks through it) and
- * `startDeviceFlow` refuses with an actionable message until one is set. A
- * maintainer who registers an application for this project restores the
- * out-of-box experience by filling in this one constant.
+ * An account that wants neither — an enterprise that refuses third-party apps,
+ * or a day when this registration is gone — sets its own `clientId` (a free
+ * Entra public-client registration) and that value wins over this constant.
+ * The settings card shows which application is in effect either way, so nobody
+ * consents to an app they were not told about.
+ *
+ * Replacing this constant is the whole change a maintainer makes to ship the
+ * project's own application instead. Tokens are bound to the id that issued
+ * them, so such a release asks every built-in account to log in one more time.
  */
-export const OUTLOOK_OAUTH2_CLIENT_ID = ''
+export const OUTLOOK_OAUTH2_CLIENT_ID = '15dcd5aa-00dd-487f-82d7-1d2b2c299e14'
 
 /**
  * How an account proves who it is. `password` covers every existing provider

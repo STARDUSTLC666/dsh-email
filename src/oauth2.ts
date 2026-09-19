@@ -51,11 +51,12 @@ export const OAUTH2_REQUEST_TIMEOUT_MS = 15000
 export const NOT_LOGGED_IN_MESSAGE = '尚未登录：请先在设置页完成设备码登录'
 
 /**
- * Reported when an OAuth2 account has no application to log in through. The
- * plugin ships no third-party registration, so this is a setup step, not a
- * failure — and it says where to go and what to type.
+ * Reported when an OAuth2 account has nothing to log in through. The packaged
+ * build carries a community registration (OUTLOOK_OAUTH2_CLIENT_ID), so this
+ * only surfaces in a build that blanks it, or on an account whose own id was
+ * cleared while the built-in one is gone — it still says what to type.
  */
-export const NO_CLIENT_ID_MESSAGE = '尚未配置 OAuth2 应用：请在设置页该账号的「应用（客户端）ID」里填入你自己注册的 Azure 公共客户端 ID（免费，注册步骤见 README 的「Outlook OAuth2」一节）。本插件不内置任何第三方应用注册，因此没有它就无法开始设备码登录'
+export const NO_CLIENT_ID_MESSAGE = '尚未配置 OAuth2 应用：当前构建没有内置公共客户端 ID，请在设置页该账号的「应用（客户端）ID」里填入一个（免费注册，步骤见 README 的「Outlook OAuth2」一节），否则无法开始设备码登录'
 
 /** Where the refresh/access tokens live. Kept out of the settings namespace on purpose. */
 export function oauth2TokenFile(): string {

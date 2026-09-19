@@ -45,6 +45,7 @@ IMAP/SMTP email tools for DeepSeek Harness, with replies, forwarding, mailbox or
 
 ### 版本记录
 
+- **0.13.1（2026-09-19）**：内置一份社区公共客户端注册（感谢 [gurio-wine](https://github.com/gurio-wine)），Outlook / Exchange Online 的 OAuth2 登录开箱即用；想用自己的应用仍可填 `clientId` 覆盖，设置页会显示当前生效的是哪个应用。测试 264 项。
 - **0.13.0（2026-09-18）**：修复长正文截断成空、`email_watch` 永久漏报新邮件、附件缓存跨 UIDVALIDITY 失效；10 个工具声明超时；读信/搜索只下正文分段；搜索回退标明扫描口径。测试 262 项。
 - **0.12.0（2026-09-18）**：新增发送别名（`senderName` / `authUser` / `authPassword`）与 `email_search` 的 `offset` 翻页；修复 QQ 搜索假命中；弹窗轮询按页面可见性节流。
 - **0.11.0（2026-09-18）**：合入 gurio-wine 的设置页四连（卡片编辑器 / OAuth2 设备码登录 / 双语面板 / `authKind` 钉住），并修掉评审发现的 SMTP OAuth2、设置路由同源校验等问题。
@@ -171,7 +172,7 @@ dsh plugin --profile web remove dsh-email
 | `maxBodyChars` | `20000` | email_read 正文截断上限（1000–200000） |
 | `accounts` | 无 | 具名账号表；账号级字段覆盖顶层简写 |
 | `accountsYaml` | 无 | 账号映射的 YAML 文本，由设置页的卡片编辑器写入；非空时覆盖 accounts |
-| `clientId` | 无 | OAuth2 账号的应用（客户端）ID；账号级可覆盖顶层简写。插件不内置任何第三方注册，Outlook / Exchange Online 走 OAuth2 时必填（见「Outlook OAuth2」） |
+| `clientId` | 内置社区应用（见下） | OAuth2 账号的应用（客户端）ID：留空即用插件内置的公共客户端，填了则覆盖内置值（账号级也可覆盖顶层简写） |
 | `authKind` | 按 provider 派生 | 认证方式覆盖，取值 `oauth2` / `password`。缺省时按 provider 与 IMAP 主机派生；仍能用应用密码连 Exchange Online 的混合或本地租户可钉 `password`。设置页卡片的「认证方式」选择器即写此键 |
 | `serverPresets` | 无 | 自定义服务商预设的 YAML 文本（键=预设名，值含 `label?`/`imap`/`smtp`）；只存端点、不含凭证，设置页下拉会列出预设名并把端点预填进账号卡片，改预设不会重连已建立的连接 |
 | `defaultAccount` | 单账号时自动 | 工具省略 account 参数时使用的账号（多账号必填） |
@@ -201,9 +202,9 @@ dsh plugin --profile web remove dsh-email
 
 微软已经对 Exchange Online 关闭了用户名+密码的 basic auth：个人 outlook.com 与绝大多数租户现在只能用 OAuth2。本插件支持设备码（device code）流程，IMAP 与 SMTP 双端共用同一份 token，过期自动刷新。
 
-**为什么不内置一个应用 ID**：客户端 ID 是"某个人的应用注册"。如果插件自带一个，微软同意屏上显示的会是别人的应用名（企业安全团队通常直接拒授权），登录日志与 telemetry 会归到对方租户（含你的 UPN），而对方哪天删掉这个应用，所有用户的登录会同时失败——报出来的还只是一句"clientId 可能填错了"。所以本插件**不携带任何第三方注册**，请用自己的（免费，约 10 分钟）。
+**内置的应用 ID 是哪来的**：设备码登录必须先有一个"应用注册"，而让每个用户自己注册一次实在太麻烦——所以插件内置了一份：`15dcd5aa-00dd-487f-82d7-1d2b2c299e14`，由贡献者 [gurio-wine](https://github.com/gurio-wine) 在 [PR #13](https://github.com/STARDUSTLC666/dsh-email/pull/13) 注册，并授权本项目内置使用，在此致谢。代价也要说清楚：微软同意屏上显示的是**他的应用名**（企业安全团队可能因此拒绝授权），登录日志与 telemetry 会归到**他的租户**（含你的 UPN）；哪天他删掉这个应用，所有没填自己 ID 的账号会同时登不上，报错还只是一句"clientId 可能填错了"。**想完全自主就注册一个自己的（免费，约 10 分钟）填进卡片覆盖内置值；留空则一直用内置的。**
 
-**注册一个公共客户端**：
+**换成自己的应用（可选，免费，约 10 分钟）**：
 
 1. 打开 [Entra 管理中心](https://entra.microsoft.com/) → **应用注册（App registrations）** → **新注册**。
 2. **受支持的账户类型**选「任何组织目录中的账户 **以及** 个人 Microsoft 账户」——这一项决定了个人 outlook.com 能不能登录，选错会报 `AADSTS700016` 或 `AADSTS50020`。
@@ -212,19 +213,19 @@ dsh plugin --profile web remove dsh-email
 5. 左侧 **身份验证** → 页面最下方 **允许公共客户端流** 设为 **是** 并保存。不开这一项，登录会报 `AADSTS700028` 之类的"未开启设备码流"错误。
 6. 左侧 **API 权限** → 添加权限 → Microsoft Graph → **委托的权限**，勾上 `IMAP.AccessAsUser.All`、`SMTP.Send`、`offline_access`（最后这个是拿到 refresh token 的关键，少了它每次过期都要重新登录）。个人租户一般无需管理员同意；企业租户可能需要管理员点一次「授予同意」。
 
-**填进插件**：设置页 → 邮件 (dsh-email) → 该账号卡片的「应用（客户端）ID」栏；或者写在 YAML 里（账号级 `clientId`，也可写在顶层作为所有账号的默认）。
+**填进插件（覆盖内置值）**：设置页 → 邮件 (dsh-email) → 该账号卡片的「应用（客户端）ID」栏（卡片会显示当前生效的是哪个应用；留空即继续用内置的社区应用）；或者写在 YAML 里（账号级 `clientId`，也可写在顶层作为所有账号的默认）。
 
 **登录**：卡片上点「登录 Microsoft 账号」→ 面板给出一个 `microsoft.com/devicelogin` 链接和一段代码 → 在浏览器打开链接、输入代码、完成授权 → 面板轮询到成功后即显示「已登录：你的地址」。之后收信与发信都用这份 token。
 
 **注意事项**：
 
 - 企业租户可能还需要管理员在 Exchange 管理中心开启该邮箱的 **IMAP** 与 **SMTP AUTH**。没开 SMTP AUTH 时的典型症状是：收信一切正常，发信被拒。
-- token 与签发它的应用 ID 绑定：换了 `clientId` 会被判为"换了应用"，需要重新登录（这是有意的，避免拿旧应用的凭据去撞新应用）。
+- token 与签发它的应用 ID 绑定：换了 `clientId` 会被判为"换了应用"，需要重新登录（这是有意的，避免拿旧应用的凭据去撞新应用）。内置应用是所有没填 `clientId` 的账号共用的一份：将来某个版本把它换成项目自己的注册时，这些账号也会需要重新登录一次。
 - 如果你的租户是混合或本地部署、SMTP AUTH 仍然开着，用应用密码也能连：在卡片的「认证方式」里选「密码 / 授权码」即可，不必走 OAuth2。
 
 ## 已知限制
 
-- **OAuth2 仅覆盖 Outlook / Exchange Online，且需自带应用 ID**：设备码登录已支持 IMAP 与 SMTP 双端，但插件**不内置任何第三方应用注册**，OAuth2 账号必须填自己的 `clientId`（免费注册，见上文「Outlook OAuth2」）。Google Workspace 等其它强制 OAuth 的环境仍不可用，只能用服务商的应用专用密码 / 授权码。
+- **OAuth2 仅覆盖 Outlook / Exchange Online（开箱即用，也可自带应用 ID）**：设备码登录已支持 IMAP 与 SMTP 双端，默认使用插件内置的社区应用（见上文「Outlook OAuth2」），无需自己注册即可登录；企业策略不接受第三方应用时，在卡片里填自己的 `clientId` 覆盖。Google Workspace 等其它强制 OAuth 的环境仍不可用，只能用服务商的应用专用密码 / 授权码。
 - **搜索的匹配数**：服务器命中会先用信封复核（见上文 `email_search`）；复核通过时「共 N 条匹配」沿用服务器给出的条数，而列出的每一行都保证真的带关键词。正文回退扫描只看了最近 `bodySearchLimit` 封，不知道全文件夹匹配数，因此渲染为「本页 N 条（仅扫描最近 N 封）」而不是「共 N 条」。
 - **正文搜索**：服务器端只搜 subject / from / to / cc；多数服务器（如 QQ）的 IMAP `TEXT` / `HEADER` 搜索不可靠，无结果时回退到最近 `bodySearchLimit` 封的正文扫描（较慢，可用 `bodySearchFallback` 关闭）。
 - **附件**：内嵌图片暂不支持单独下载；附件定位失败会直接报错而不是下载错误文件（安全默认）。

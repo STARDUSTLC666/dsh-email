@@ -17,11 +17,12 @@ export declare const OAUTH2_REQUEST_TIMEOUT_MS = 15000;
 /** The one message every「no token yet」path reports, so the fix is always the same. */
 export declare const NOT_LOGGED_IN_MESSAGE = "\u5C1A\u672A\u767B\u5F55\uFF1A\u8BF7\u5148\u5728\u8BBE\u7F6E\u9875\u5B8C\u6210\u8BBE\u5907\u7801\u767B\u5F55";
 /**
- * Reported when an OAuth2 account has no application to log in through. The
- * plugin ships no third-party registration, so this is a setup step, not a
- * failure — and it says where to go and what to type.
+ * Reported when an OAuth2 account has nothing to log in through. The packaged
+ * build carries a community registration (OUTLOOK_OAUTH2_CLIENT_ID), so this
+ * only surfaces in a build that blanks it, or on an account whose own id was
+ * cleared while the built-in one is gone — it still says what to type.
  */
-export declare const NO_CLIENT_ID_MESSAGE = "\u5C1A\u672A\u914D\u7F6E OAuth2 \u5E94\u7528\uFF1A\u8BF7\u5728\u8BBE\u7F6E\u9875\u8BE5\u8D26\u53F7\u7684\u300C\u5E94\u7528\uFF08\u5BA2\u6237\u7AEF\uFF09ID\u300D\u91CC\u586B\u5165\u4F60\u81EA\u5DF1\u6CE8\u518C\u7684 Azure \u516C\u5171\u5BA2\u6237\u7AEF ID\uFF08\u514D\u8D39\uFF0C\u6CE8\u518C\u6B65\u9AA4\u89C1 README \u7684\u300COutlook OAuth2\u300D\u4E00\u8282\uFF09\u3002\u672C\u63D2\u4EF6\u4E0D\u5185\u7F6E\u4EFB\u4F55\u7B2C\u4E09\u65B9\u5E94\u7528\u6CE8\u518C\uFF0C\u56E0\u6B64\u6CA1\u6709\u5B83\u5C31\u65E0\u6CD5\u5F00\u59CB\u8BBE\u5907\u7801\u767B\u5F55";
+export declare const NO_CLIENT_ID_MESSAGE = "\u5C1A\u672A\u914D\u7F6E OAuth2 \u5E94\u7528\uFF1A\u5F53\u524D\u6784\u5EFA\u6CA1\u6709\u5185\u7F6E\u516C\u5171\u5BA2\u6237\u7AEF ID\uFF0C\u8BF7\u5728\u8BBE\u7F6E\u9875\u8BE5\u8D26\u53F7\u7684\u300C\u5E94\u7528\uFF08\u5BA2\u6237\u7AEF\uFF09ID\u300D\u91CC\u586B\u5165\u4E00\u4E2A\uFF08\u514D\u8D39\u6CE8\u518C\uFF0C\u6B65\u9AA4\u89C1 README \u7684\u300COutlook OAuth2\u300D\u4E00\u8282\uFF09\uFF0C\u5426\u5219\u65E0\u6CD5\u5F00\u59CB\u8BBE\u5907\u7801\u767B\u5F55";
 /** Where the refresh/access tokens live. Kept out of the settings namespace on purpose. */
 export declare function oauth2TokenFile(): string;
 export interface OAuth2TokenEntry {

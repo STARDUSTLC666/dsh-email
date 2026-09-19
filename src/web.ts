@@ -5,6 +5,7 @@ import { isMap, parseDocument, type Document, type YAMLMap } from 'yaml'
 import { SETTINGS_NAMESPACE, toEmailConfig, validateSettingsValue, type EmailSettingsValue } from './settings.js'
 import {
   isOAuth2Account,
+  OUTLOOK_OAUTH2_CLIENT_ID,
   parseAccountsYaml,
   parseServerPresets,
   presetNamesIn,
@@ -74,10 +75,18 @@ export interface AccountCardData {
    * The application (client) id this account logs in through. Unlike a password
    * this is not a secret — a public-client id travels in every device-code
    * request — so the card carries the value itself and the editor can prefill
-   * it. Omitted when the account has none, which for an OAuth2 account is
-   * exactly the state that has to be fixed before login can start.
+   * it. Omitted when the account names none, which means the built-in
+   * registration below is the application that will be used.
    */
   clientId?: string
+  /**
+   * The application the login falls back to when the account names none: the
+   * community registration the plugin ships. Carried on the card so the editor
+   * can show which app the consent screen is about to name, instead of leaving
+   * the user to guess — and so「no id of its own」stops looking like an error
+   * that has to be fixed before a login can even start.
+   */
+  oauthDefaultClientId?: string
   /** Display name for the From header, when the account sets one. */
   senderName?: string
   /** Login user when it differs from the visible address (`user`). */
@@ -128,8 +137,8 @@ export interface AccountCardInput {
   password?: string | number | boolean
   /**
    * OAuth2 应用（客户端）ID，三态契约与 password 相同：undefined = 本卡片没提供
-   * （保留 YAML 里已存的 clientId 键），'' = 明确清除，非空 = 写入。插件不内置任何
-   * 第三方应用注册，所以这是 OAuth2 账号的必填项，而设置面板是用户唯一的常规入口。
+   * （保留 YAML 里已存的 clientId 键），'' = 明确清除（回到内置的社区应用），非空 =
+   * 写入。留空不等于不能用：内置注册就是默认值，这一栏是把默认值换成自己的应用。
    */
   clientId?: string
   /**
@@ -239,9 +248,10 @@ function buildAccountCards(
       : isOAuth2Account(providerName, imap.host) ? 'oauth2' : 'password'
     const user = typeof account.user === 'string' ? account.user : ''
     // A public-client id is not a secret, so unlike the password it is handed
-    // back for the editor to prefill: an OAuth2 account without one cannot
-    // start a device-code login, and the card is where that gets fixed.
+    // back for the editor to prefill: an account that names no application logs
+    // in with the built-in one, and the card has to say which that is.
     const clientId = typeof account.clientId === 'string' ? account.clientId.trim() : ''
+    const oauthDefaultClientId = authKind === 'oauth2' && clientId === '' ? OUTLOOK_OAUTH2_CLIENT_ID : ''
     // The display name and the login user are not secrets, so — like clientId —
     // the card hands them back for the editor to prefill. A separate login
     // password is a secret and only ever reported as a boolean.
@@ -257,6 +267,7 @@ function buildAccountCards(
       authKind,
       ...(pinned === 'oauth2' || pinned === 'password' ? { authKindDeclared: pinned } : {}),
       ...(clientId !== '' ? { clientId } : {}),
+      ...(oauthDefaultClientId !== '' ? { oauthDefaultClientId } : {}),
       ...(senderName !== '' ? { senderName } : {}),
       ...(authUser !== '' ? { authUser } : {}),
       ...(typeof account.authPassword === 'string' && account.authPassword !== '' ? { hasAuthPassword: true } : {}),

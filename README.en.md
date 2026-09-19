@@ -37,6 +37,7 @@ Example:
 
 ### Changelog
 
+- **0.13.1 (2026-09-19)**: ships a community public-client registration (thanks [gurio-wine](https://github.com/gurio-wine)), so Outlook / Exchange Online works out of the box; supply your own `clientId` to override it — the card shows which application is in effect. 264 tests.
 - **0.13.0 (2026-09-18)**: fixes for bodies truncated to nothing, `email_watch` skipping new mail, and the attachment cache ignoring UIDVALIDITY; all ten tools declare a timeout; reads and body search download text parts only; the scan fallback labels its own semantics. 262 tests.
 - **0.12.0 (2026-09-18)**: send-as alias (`senderName` / `authUser` / `authPassword`) and `offset` paging for `email_search`; QQ match-everything searches no longer trusted; popup polling pauses while the tab is hidden.
 - **0.11.0 (2026-09-18)**: gurio-wine’s four settings-page PRs (card editor / OAuth2 device-code login / bilingual panel / pinned `authKind`) plus the review fixes for SMTP OAuth2 and same-origin settings routes.
@@ -163,7 +164,7 @@ The settings page's "Server presets" fold-out edits these presets visually, and 
 | `maxBodyChars` | `20000` | Body truncation limit for `email_read` (1000–200000) |
 | `accounts` | — | Named account map; account-level fields override top-level shorthand |
 | `accountsYaml` | — | YAML text of the account map, written by the settings-page card editor; overrides `accounts` when non-empty |
-| `clientId` | — | Application (client) ID for OAuth2 accounts; account-level overrides top-level shorthand. The plugin bundles no third-party registration — required for Outlook / Exchange Online OAuth2 (see "Outlook OAuth2" below) |
+| `clientId` | built-in community app (below) | Application (client) ID for OAuth2 accounts: empty uses the plugin's built-in public client, a value overrides it (account-level also overrides the top-level shorthand) |
 | `authKind` | derived from provider | Authentication method override: `oauth2` / `password`. When omitted, derived from provider and IMAP host; hybrid or on-premises tenants that still accept app passwords for Exchange Online can pin `password`. The card's "Authentication method" selector writes this key |
 | `serverPresets` | — | YAML text of custom provider presets (key = preset name, value has optional `label` + `imap`/`smtp`); endpoints only, no credentials. The settings-page dropdown lists preset names and pre-fills endpoints into account cards; editing a preset does not reconnect established connections |
 | `defaultAccount` | auto (single account) | Account used when the `account` argument is omitted (required for multi-account) |
@@ -193,9 +194,9 @@ Every provider requires an authorization code / app-specific password instead of
 
 Microsoft has disabled username+password basic auth for Exchange Online: personal outlook.com accounts and most tenants now require OAuth2. This plugin supports the device-code flow — IMAP and SMTP share a single token with automatic refresh.
 
-**Why no bundled application ID**: a client ID is "someone's app registration." If the plugin shipped one, the Microsoft consent screen would show another party's app name (enterprise security teams typically deny it outright), sign-in logs and telemetry would land in that party's tenant (including your UPN), and if they ever deleted the app every user's login would break simultaneously — with only a cryptic "clientId may be wrong" error. Therefore this plugin **carries no third-party registration**; please register your own (free, ~10 minutes).
+**Where the bundled application ID comes from**: the device-code flow needs an app registration, and making every user register one is a wall nobody should have to climb — so the plugin ships one: `15dcd5aa-00dd-487f-82d7-1d2b2c299e14`, registered by contributor [gurio-wine](https://github.com/gurio-wine) in [PR #13](https://github.com/STARDUSTLC666/dsh-email/pull/13) and used here with their permission — thank you. The cost is stated plainly: the Microsoft consent screen names **their** application (enterprise security teams may refuse it), and the sign-in logs and telemetry land in **their** tenant, including your UPN. If they ever delete the app, every account that did not bring its own id stops signing in at once, with no better error than "clientId may be wrong". **Registering your own (free, ~10 minutes) keeps you independent — paste it into the card to override the built-in value; leaving the field empty keeps using the bundled one.**
 
-**Registering a public client**:
+**Using your own application instead (optional, free, ~10 minutes)**:
 
 1. Open the [Entra admin center](https://entra.microsoft.com/) → **App registrations** → **New registration**.
 2. Under **Supported account types**, select "Accounts in any organizational directory and personal Microsoft accounts" — this determines whether personal outlook.com accounts can sign in. Choosing incorrectly yields `AADSTS700016` or `AADSTS50020`.
@@ -204,19 +205,19 @@ Microsoft has disabled username+password basic auth for Exchange Online: persona
 5. In the left sidebar, go to **Authentication** → scroll to the bottom → set **Allow public client flows** to **Yes** and save. Without this, login fails with an `AADSTS700028`-style "device-code flow not enabled" error.
 6. In the left sidebar, go to **API permissions** → Add a permission → Microsoft Graph → **Delegated permissions** → check `IMAP.AccessAsUser.All`, `SMTP.Send`, and `offline_access` (the last one is essential for obtaining a refresh token — without it, every expiry forces a fresh login). Personal tenants generally need no admin consent; enterprise tenants may require an admin to click "Grant admin consent" once.
 
-**Filling it into the plugin**: Settings → Mail (dsh-email) → the account card's "Application (client) ID" field; or in YAML (account-level `clientId`, which can also be set at the top level as a default for all accounts).
+**Filling it into the plugin (overrides the built-in value)**: Settings → Mail (dsh-email) → the account card's "Application (client) ID" field (the card shows which application is in effect; empty keeps the bundled community app); or in YAML (account-level `clientId`, which can also be set at the top level as a default for all accounts).
 
 **Login flow**: click "Sign in to Microsoft account" on the card → the panel shows a `microsoft.com/devicelogin` link and a code → open the link in a browser, enter the code, and complete authorization → the panel polls until it shows "Signed in: your@email". Both receiving and sending then use this token.
 
 **Caveats**:
 
 - Enterprise tenants may additionally require an admin to enable **IMAP** and **SMTP AUTH** for the mailbox in the Exchange admin center. The typical symptom of SMTP AUTH being off: receiving works fine, sending is rejected.
-- The token is bound to the application ID that issued it: changing `clientId` is treated as "switched apps" and requires re-login (this is intentional — it prevents using the old app's credentials against the new one).
+- The token is bound to the application ID that issued it: changing `clientId` is treated as "switched apps" and requires re-login (this is intentional — it prevents using the old app's credentials against the new one). The bundled app is shared by every account that names none: a future release that replaces it with the project's own registration will ask those accounts to sign in once more.
 - If your tenant is hybrid or on-premises and SMTP AUTH is still enabled, app passwords work: select "Password / authorization code" in the card's "Authentication method" selector — no OAuth2 needed.
 
 ## Known limitations
 
-- **OAuth2 covers Outlook / Exchange Online only, and requires your own app ID**: device-code login supports both IMAP and SMTP, but the plugin **bundles no third-party app registration** — OAuth2 accounts must supply their own `clientId` (free to register; see "Outlook OAuth2" above). Other environments that mandate OAuth (e.g. Google Workspace) remain unusable; use the provider's app-specific password / authorization code instead.
+- **OAuth2 covers Outlook / Exchange Online only, and works out of the box (your own app ID optional)**: device-code login supports both IMAP and SMTP and defaults to the bundled community application (see "Outlook OAuth2" above), so no registration is needed to sign in; if your organisation refuses third-party apps, paste your own `clientId` into the card to override it. Other environments that mandate OAuth (e.g. Google Workspace) remain unusable; use the provider's app-specific password / authorization code instead.
 - **Search match counts**: server hits are re-checked against the envelopes (see `email_search` above); when they hold up, "N matches" is the count the server reported while every listed row really carries the keyword. The local body-scan fallback only looked at the newest `bodySearchLimit` messages, so it renders "N rows on this page (only the newest N scanned)" instead of "N matches".
 - **Body search**: the server side only searches subject / from / to / cc. Most servers (e.g. QQ) have unreliable IMAP `TEXT` / `HEADER` search, so with no results it falls back to a body scan of the most recent `bodySearchLimit` messages (slower; disable with `bodySearchFallback`).
 - **Attachments**: inline images aren't downloadable separately yet; a failed attachment match errors instead of downloading the wrong file (safe default).

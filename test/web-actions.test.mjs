@@ -1,10 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { apply, EmailPool, SETTINGS_ROUTE } from '../lib/index.js'
-import { parseAccountsYaml, parseServerPresets, PROVIDER_NAMES, PROVIDER_PRESETS, resolveEmailSettings, serializeAccountsYaml } from '../lib/config.js'
+import { OUTLOOK_OAUTH2_CLIENT_ID, parseAccountsYaml, parseServerPresets, PROVIDER_NAMES, PROVIDER_PRESETS, resolveEmailSettings, serializeAccountsYaml } from '../lib/config.js'
 import { oauth2TokenFile, readTokenStore, writeTokenStore } from '../lib/oauth2.js'
 import { hostVerdict, postVerdict } from '../lib/web.js'
 
@@ -1939,4 +1939,41 @@ test('serializeAccounts: 别名三件套（senderName/authUser/authPassword）�
   assert.equal(card.authUser, 'login@qq.com')
   assert.equal(card.hasAuthPassword, true)
   assert.equal('authPassword' in card, false)
+})
+
+test('an OAuth2 card with no clientId of its own reports the built-in application', async t => {
+  clearTokens()
+  const yaml = [
+    'work: { provider: outlook, user: w@outlook.com }',
+    'mail: { provider: qq, user: m@qq.com, password: pw }',
+    'defaultAccount: work',
+    '',
+  ].join('\n')
+  const { get } = mount(t, { value: { accountsYaml: yaml } })
+  const list = (await get()).body.value.accountsDetail.list
+  const work = list.find(card => card.name === 'work')
+  const mail = list.find(card => card.name === 'mail')
+  assert.equal(work.clientId, undefined, 'the account names no application of its own')
+  assert.equal(work.oauthDefaultClientId, OUTLOOK_OAUTH2_CLIENT_ID,
+    'so the card reports the application that will be used: the consent screen names it')
+  assert.equal(mail.oauthDefaultClientId, undefined, 'a password account has no application to report')
+
+  // An id of its own is the application that gets used, so the built-in
+  // fallback drops out instead of being offered as an alternative.
+  const own = mount(t, { value: { accountsYaml: 'work: { provider: outlook, user: w@outlook.com, clientId: own-app }\n' } })
+  const card = (await own.get()).body.value.accountsDetail.list[0]
+  assert.equal(card.clientId, 'own-app')
+  assert.equal(card.oauthDefaultClientId, undefined)
+})
+
+test('the settings editor names the application an empty clientId falls back to', () => {
+  const source = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
+  // Leave-empty must not read as「cannot log in」: the editor previews the app
+  // that will actually be used, and keeps the「register one」warning for builds
+  // that carry no built-in application at all.
+  assert.match(source, /card\.oauthDefaultClientId/, 'the built-in id comes from the card')
+  assert.equal((source.match(/"oauth\.clientIdBuiltIn":/g) ?? []).length, 2, 'zh + en both state which app is used')
+  assert.match(source, /builtInClientId !== "" \? builtInClientId/, 'the field previews the app in effect')
+  assert.match(source, /builtInClientId === ""\s*\n\s*\? h\("div", \{ className: "dshe-alert warn" \}/,
+    'the「no application」warning is only for builds without a built-in app')
 })

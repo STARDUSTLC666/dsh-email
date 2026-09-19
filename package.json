@@ -1,7 +1,7 @@
 {
   "name": "dsh-email",
-  "version": "0.13.0",
-  "description": "DSH 邮件插件：IMAP/SMTP 收发搜索、回复转发、附件与整理，多账号卡片设置页 + Outlook OAuth2 + 发信审批。",
+  "version": "0.13.1",
+  "description": "DSH 邮件插件：IMAP/SMTP 收发搜索、回复转发、附件与整理，多账号卡片设置页 + Outlook OAuth2 开箱即用 + 发信审批。",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",

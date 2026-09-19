@@ -21,7 +21,7 @@ export function apply(ctx: any, config: Config = {}): void {
 export { clampInt, defaultDownloadDir, EMAIL_PASSWORD_ENV, isOAuth2Account, OUTLOOK_OAUTH2_CLIENT_ID, OUTLOOK_PROVIDER, parseAccountsYaml, parseServerPresets, presetNamesIn, providerNames, PROVIDER_NAMES, resolveEmailConfig, resolveEmailSettings, serializeAccountsYaml } from './config.js'
 export type { AuthKind, ResolvedEmailConfig } from './config.js'
 export {
-  ACCESS_TOKEN_MARGIN_MS, classifyOAuthFailure, clearTokenFor, DEVICE_CODE_URL, getFreshAccessToken,
+  ACCESS_TOKEN_MARGIN_MS, classifyOAuthFailure, clearTokenFor, clientIdOf, DEVICE_CODE_URL, getFreshAccessToken,
   mapAadstsMessage, NO_CLIENT_ID_MESSAGE, NOT_LOGGED_IN_MESSAGE, oauth2StateOf, oauth2TokenFile, OAUTH2_SCOPES,
   OAuth2Error, pollDeviceFlow, readTokenStore, startDeviceFlow,
   TOKEN_URL, writeTokenStore,

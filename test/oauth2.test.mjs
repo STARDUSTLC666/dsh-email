@@ -18,7 +18,7 @@ const HOME = mkdtempSync(join(tmpdir(), 'dsh-email-oauth2-'))
 process.env.DSH_HOME = HOME
 
 const {
-  EmailPool, classifyOAuthFailure, clearTokenFor, getFreshAccessToken, imapAuthOf, isOAuth2Account,
+  EmailPool, classifyOAuthFailure, clearTokenFor, clientIdOf, getFreshAccessToken, imapAuthOf, isOAuth2Account,
   looksLikeAuthFailure, mapAadstsMessage, NOT_LOGGED_IN_MESSAGE, oauth2StateOf, oauth2TokenFile,
   OAUTH2_SCOPES, pollDeviceFlow, readTokenStore, resolveEmailSettings, smtpAuthOf, startDeviceFlow,
   writeTokenStore, ACCESS_TOKEN_MARGIN_MS, OUTLOOK_OAUTH2_CLIENT_ID, OAUTH2_RELOGIN_MESSAGE,
@@ -131,6 +131,7 @@ test('an outlook account resolves without a password, a password account still r
 test('clientId defaults to the built-in public client and is overridable per account', () => {
   const plain = resolveEmailSettings({ accountsYaml: 'work: { provider: outlook, user: w@outlook.com }\n' })
   assert.equal(plain.accounts.get('work').clientId, undefined, 'the default lives in oauth2.ts, not in every account')
+  assert.equal(clientIdOf({ user: 'w@outlook.com' }), OUTLOOK_OAUTH2_CLIENT_ID, 'so login falls back to the app the plugin ships')
 
   const custom = resolveEmailSettings({
     accountsYaml: 'work: { provider: outlook, user: w@outlook.com, clientId: my-own-app }\n',
@@ -693,22 +694,27 @@ test('the re-login message is the one the tools surface, and it says not to look
   assert.match(NOT_LOGGED_IN_MESSAGE, /设置页/)
 })
 
-test('no application registration is built in, and login says what to fill in', async t => {
-  // A client id is somebody's application. Shipping one would put the consent
-  // screen, the sign-in logs and the telemetry in a stranger's tenant, and their
-  // deleting it would break every login at once — with an error that only says
-  // the id「可能填错了」. So nothing is baked in and an account brings its own.
-  assert.equal(OUTLOOK_OAUTH2_CLIENT_ID, '')
+test('the built-in community application is the default, and an account can override it', async t => {
+  // Registering an application is a wall in front of the one provider where
+  // OAuth2 cannot be avoided, so the plugin ships the registration contributed
+  // by gurio-wine (used with permission, credited in the README). Pinned here
+  // because the value decides whose consent screen and whose tenant a user ends
+  // up in — a silent swap must not ride along in a release.
+  assert.equal(OUTLOOK_OAUTH2_CLIENT_ID, '15dcd5aa-00dd-487f-82d7-1d2b2c299e14')
+  assert.equal(clientIdOf({ user: 'fixture@outlook.com' }), OUTLOOK_OAUTH2_CLIENT_ID,
+    'an account that names no application logs in through the built-in one')
 
   writeTokens({})
   const calls = mockFetch(t, () => jsonResponse(DEVICE_OK))
-  await assert.rejects(startDeviceFlow('work', { user: 'fixture@outlook.com' }), /应用（客户端）ID/)
-  assert.equal(calls.length, 0, 'refused locally: the authority would only answer AADSTS700011')
-
-  // The same account with an id of its own starts the flow normally.
-  const ready = mockFetch(t, () => jsonResponse(DEVICE_OK))
-  const start = await startDeviceFlow('work', { user: 'fixture@outlook.com', clientId: 'own-app' })
+  const start = await startDeviceFlow('work', { user: 'fixture@outlook.com' })
   assert.equal(start.code, 'ABCD-EFGH')
-  assert.equal(ready.length, 1)
-  assert.equal(ready[0].params.client_id, 'own-app')
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].params.client_id, OUTLOOK_OAUTH2_CLIENT_ID, 'the built-in app is what the authority is asked for')
+
+  // The same account with an id of its own starts the flow through that one.
+  const own = mockFetch(t, () => jsonResponse(DEVICE_OK))
+  const custom = await startDeviceFlow('work', { user: 'fixture@outlook.com', clientId: 'own-app' })
+  assert.equal(custom.code, 'ABCD-EFGH')
+  assert.equal(own.length, 1)
+  assert.equal(own[0].params.client_id, 'own-app', 'an account that names one overrides the built-in app')
 })
