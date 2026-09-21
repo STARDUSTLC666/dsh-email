@@ -45,12 +45,15 @@ IMAP/SMTP email tools for DeepSeek Harness, with replies, forwarding, mailbox or
 
 ### 版本记录
 
+- **0.13.2（2026-09-21）**：同名附件优先按真实 MIME 分段编号下载；旧解析元数据按一对一匹配，避免多个序号都取到第一个同名文件。保留正文分段下载和附件索引缓存，新增文件字节级回归，268 项测试通过。
 - **0.13.1（2026-09-19）**：内置一份社区公共客户端注册（感谢 [gurio-wine](https://github.com/gurio-wine)），Outlook / Exchange Online 的 OAuth2 登录开箱即用；想用自己的应用仍可填 `clientId` 覆盖，设置页会显示当前生效的是哪个应用。测试 264 项。
 - **0.13.0（2026-09-18）**：修复长正文截断成空、`email_watch` 永久漏报新邮件、附件缓存跨 UIDVALIDITY 失效；10 个工具声明超时；读信/搜索只下正文分段；搜索回退标明扫描口径。测试 262 项。
 - **0.12.0（2026-09-18）**：新增发送别名（`senderName` / `authUser` / `authPassword`）与 `email_search` 的 `offset` 翻页；修复 QQ 搜索假命中；弹窗轮询按页面可见性节流。
 - **0.11.0（2026-09-18）**：合入 gurio-wine 的设置页四连（卡片编辑器 / OAuth2 设备码登录 / 双语面板 / `authKind` 钉住），并修掉评审发现的 SMTP OAuth2、设置路由同源校验等问题。
 - **0.10.8 及更早**：见 [CHANGELOG.md](CHANGELOG.md)。
 ## 兼容性
+
+2026-09-21：当前发布包经官方 CLI 安装到隔离 profile，在源码构建的 Harness `0.1.6-alpha.2` 上与另外两个下载量前三插件共同加载，18 个插件工具注册正常；日历/邮件配置自检、PPT 主题查询和 17 行表格生成通过。测试本体基于官方 alpha.2 发布提交，另含工具调度器 `Symbol.for` 修复（`93badd88`）。本轮未连接真实邮箱或日历服务。
 
 2026-09-16 曾在官方源码构建的 Harness `0.1.5-rc.2` 和 `0.1.6-alpha.1` 上完成同载验证：18 个组件与 ModLens 同载，工具 schema、技能注册及离线只读调用检查通过。
 
@@ -66,7 +69,7 @@ IMAP/SMTP email tools for DeepSeek Harness, with replies, forwarding, mailbox or
 dsh plugin --profile web add dsh-email
 ```
 
-（或从 GitHub 安装：`dsh plugin --profile web add github:你的账号/dsh-email#<commit>`，随后按提示在 profile 的 `pnpm-workspace.yaml` 里授权 `prepare` 构建。）
+（或从 GitHub 安装指定提交：`dsh plugin --profile web add github:STARDUSTLC666/dsh-email#<commit>`。仓库已包含 `lib/` 构建产物，无需 `prepare` 构建。）
 
 装好后重启 `dsh web`。插件自带空配置，**不会弄崩启动**；配置前调用任何 email 工具都会返回明确的配置提示。
 

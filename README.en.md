@@ -37,12 +37,15 @@ Example:
 
 ### Changelog
 
+- **0.13.2 (2026-09-21)**: download attachments by their real MIME section IDs, fixing duplicate filenames selecting the first file. Legacy parsed metadata matches sections one-to-one. Body-only reads and attachment-index caching remain intact; 268 tests pass, including downloaded-file byte checks.
 - **0.13.1 (2026-09-19)**: ships a community public-client registration (thanks [gurio-wine](https://github.com/gurio-wine)), so Outlook / Exchange Online works out of the box; supply your own `clientId` to override it — the card shows which application is in effect. 264 tests.
 - **0.13.0 (2026-09-18)**: fixes for bodies truncated to nothing, `email_watch` skipping new mail, and the attachment cache ignoring UIDVALIDITY; all ten tools declare a timeout; reads and body search download text parts only; the scan fallback labels its own semantics. 262 tests.
 - **0.12.0 (2026-09-18)**: send-as alias (`senderName` / `authUser` / `authPassword`) and `offset` paging for `email_search`; QQ match-everything searches no longer trusted; popup polling pauses while the tab is hidden.
 - **0.11.0 (2026-09-18)**: gurio-wine’s four settings-page PRs (card editor / OAuth2 device-code login / bilingual panel / pinned `authKind`) plus the review fixes for SMTP OAuth2 and same-origin settings routes.
 - **0.10.8 and earlier**: see [CHANGELOG.md](CHANGELOG.md).
 ## Compatibility
+
+2026-09-21: the current release package was installed through the official CLI in an isolated profile and co-loaded with the other two most-downloaded plugins on source-built Harness `0.1.6-alpha.2`. All 18 plugin tools registered; calendar/email configuration checks, PPT theme listing and 17-row table generation passed. The host is based on the official alpha.2 release plus the tool-scheduler `Symbol.for` fix (`93badd88`). This run did not connect to live mail or calendar services.
 
 Co-load verification was performed on 2026-09-16 with official source builds of Harness `0.1.5-rc.2` and `0.1.6-alpha.1`: all 18 components load alongside ModLens, with passing tool schemas, skill registration and offline read-only calls.
 
@@ -58,7 +61,7 @@ Follows the official [plugin packaging and installation requirements](https://gi
 dsh plugin --profile web add dsh-email
 ```
 
-(Or install from GitHub: `dsh plugin --profile web add github:your-account/dsh-email#<commit>`, then follow the prompt to authorize the `prepare` build in the profile's `pnpm-workspace.yaml`.)
+(Or install a specific GitHub commit: `dsh plugin --profile web add github:STARDUSTLC666/dsh-email#<commit>`. The repository includes prebuilt `lib/` artifacts; no `prepare` build is required.)
 
 After installing, restart `dsh web`. The plugin ships with an empty config and **won't crash startup**; calling any email tool before configuration returns a clear configuration hint.
 

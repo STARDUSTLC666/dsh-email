@@ -69,9 +69,9 @@ interface AttachmentPart {
 }
 /**
  * Map the index in the mailparser attachment list (what email_read showed the
- * model) onto a bodyStructure part. Name first, then type + tolerant size;
- * an inline image that our walk excludes simply fails instead of downloading
- * the wrong part.
+ * model) onto a bodyStructure part. Real IMAP section ids are authoritative.
+ * Legacy mailparser indexes need one-to-one name/type/size matching so duplicate
+ * filenames cannot repeatedly select the first attachment.
  */
 export declare function selectAttachmentPart(readAttachments: EmailAttachmentMeta[], parts: AttachmentPart[], index: number): AttachmentPart | undefined;
 /** Case-insensitive match of a query against subject/from/body text. */
