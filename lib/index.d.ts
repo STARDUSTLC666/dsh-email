@@ -1,4 +1,5 @@
 import type { EmailConfig } from './config.js';
+export declare const Config: import("@deepseek-ai/schemastery").default;
 export declare const name = "tool-email";
 export declare const inject: string[];
 export type Config = EmailConfig;

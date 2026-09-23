@@ -1,6 +1,6 @@
 {
   "name": "dsh-email",
-  "version": "0.13.2",
+  "version": "0.14.0",
   "description": "DSH 邮件插件：IMAP/SMTP 收发搜索、回复转发、附件与整理，多账号卡片设置页、Outlook OAuth2 登录与发信审批。",
   "type": "module",
   "main": "lib/index.js",
@@ -65,7 +65,8 @@
     "mailparser": "^3.9.22",
     "nodemailer": "^9.0.5",
     "schemastery": "^3.18.0",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.0",
+    "@deepseek-ai/schemastery": "^3.18.3"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

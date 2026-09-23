@@ -1,25 +1,29 @@
 /** Live settings, account-pool ownership, and independent tool/web watch cursors. */
-import { clampInt, presetNamesIn, resolveEmailSettings, type EmailConfig, type ResolvedEmailSettings } from './config.js'
+import { clampInt, presetNamesIn, resolveEmailSettings, serializeAccountsYaml, type EmailConfig, type ResolvedEmailSettings } from './config.js'
 import { EmailPool, messageOf } from './mail-client.js'
 import { EmailSettingsSchema, SETTINGS_NAMESPACE, toEmailConfig, toSettingsBase, validateSettingsValue, type EmailSettingsValue } from './settings.js'
 import type { EmailWatchResult } from './types.js'
+import { liveConfig } from './host-config.js'
 
 export type EmailClient = Pick<EmailPool,
   'list' | 'read' | 'mark' | 'search' | 'send' | 'reply' | 'folders' | 'downloadAttachment' | 'unseenUids' | 'fetchByUids' | 'startIdleSweep' | 'dispose'>
 
 export interface EmailSettingsScope {
   get(): unknown
+  namespace?: string
+  config?: EmailConfig
 }
 
 export interface EmailRuntimeContext {
   settings: {
-    register(namespace: string, schema: unknown, options: {
+    register?(namespace: string, schema: unknown, options: {
       base: Partial<EmailSettingsValue>
       applies: 'live'
       validate(value: unknown): void
     }): EmailSettingsScope
     describe?(): Array<{ ns: string; user?: Partial<EmailSettingsValue> }>
   }
+  fiber?: { entry?: { options: { id: string } } }
   effect(effect: () => () => void): unknown
   logger?: { warn?(message: string): void }
 }
@@ -54,17 +58,41 @@ export function createEmailRuntime(
   config: EmailConfig,
   createPool: (settings: ResolvedEmailSettings) => EmailClient = settings => new EmailPool(settings),
 ): EmailRuntime {
-  const settingsScope = ctx.settings.register(SETTINGS_NAMESPACE, EmailSettingsSchema, {
+  config = liveConfig(config)
+  const legacy = typeof ctx.settings.register === 'function'
+  const namespace = legacy ? SETTINGS_NAMESPACE : ctx.fiber?.entry?.options.id ?? 'tool-email'
+  const settingsScope: EmailSettingsScope = legacy ? ctx.settings.register!(SETTINGS_NAMESPACE, EmailSettingsSchema, {
     base: toSettingsBase(config),
     applies: 'live',
     // The provider dropdown offers the custom preset names beside the built-ins,
     // so validation must accept whatever the table in effect defines.
     validate: value => validateSettingsValue(value as EmailSettingsValue, presetNamesIn((value as EmailSettingsValue | undefined)?.serverPresets ?? config.serverPresets)),
-  })
+  }) : {
+    namespace,
+    config,
+    get: () => {
+      let endpointDefaults = {}
+      try {
+        const settings = resolveEmailSettings({ ...config })
+        const account = settings.accounts.get(settings.defaultAccount)
+        if (account) endpointDefaults = { imap: account.imap, smtp: account.smtp }
+      } catch { /* A fresh installation remains editable before credentials exist. */ }
+      const shared = Object.fromEntries(['provider', 'user', 'password', 'senderName', 'authUser', 'authPassword', 'clientId', 'authKind', 'imap', 'smtp', 'inboxFolder']
+        .filter(key => (config as any)[key] !== undefined).map(key => [key, (config as any)[key]]))
+      const cards = config.accounts && Object.keys(config.accounts).length > 0
+        ? Object.fromEntries(Object.entries(config.accounts).map(([key, account]) => [key, { ...shared, ...account }]))
+        : typeof config.user === 'string' && config.user !== '' ? { default: shared } : {}
+      return EmailSettingsSchema({ ...toSettingsBase(config), ...endpointDefaults,
+        accountsYaml: config.accountsYaml ?? serializeAccountsYaml(cards, config.defaultAccount),
+        serverPresets: config.serverPresets ?? '',
+      })
+    },
+  }
   const getSettingsValue = (): EmailSettingsValue => settingsScope.get() as EmailSettingsValue
   const getEffectiveSettings = (): ResolvedEmailSettings => {
     // Form defaults must not overwrite row settings or provider presets.
-    const descriptor = (ctx.settings.describe?.() ?? []).find(row => row.ns === SETTINGS_NAMESPACE)
+    if (!legacy) return resolveEmailSettings({ ...config })
+    const descriptor = (ctx.settings.describe?.() ?? []).find(row => row.ns === namespace)
     const value = getSettingsValue()
     // serverPresets is a *lookup source* for provider ids, not part of the
     // resolved config: it is handed to resolution here and never stored on the

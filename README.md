@@ -45,6 +45,8 @@ IMAP/SMTP email tools for DeepSeek Harness, with replies, forwarding, mailbox or
 
 ### 版本记录
 
+- **0.14.0（2026-09-23）**：适配 Harness 0.1.7 设置接口；自动导入旧版邮箱设置，旧账号直接显示为可编辑卡片。编辑即时保存，刷新后保留；保留高级参数与已有密码，清空账号后不再重新出现。
+
 - **0.13.2（2026-09-21）**：同名附件优先按真实 MIME 分段编号下载；旧解析元数据按一对一匹配，避免多个序号都取到第一个同名文件。保留正文分段下载和附件索引缓存，新增文件字节级回归，268 项测试通过。
 - **0.13.1（2026-09-19）**：内置一份社区公共客户端注册（感谢 [gurio-wine](https://github.com/gurio-wine)），Outlook / Exchange Online 的 OAuth2 登录开箱即用；想用自己的应用仍可填 `clientId` 覆盖，设置页会显示当前生效的是哪个应用。测试 264 项。
 - **0.13.0（2026-09-18）**：修复长正文截断成空、`email_watch` 永久漏报新邮件、附件缓存跨 UIDVALIDITY 失效；10 个工具声明超时；读信/搜索只下正文分段；搜索回退标明扫描口径。测试 262 项。
@@ -52,6 +54,8 @@ IMAP/SMTP email tools for DeepSeek Harness, with replies, forwarding, mailbox or
 - **0.11.0（2026-09-18）**：合入 gurio-wine 的设置页四连（卡片编辑器 / OAuth2 设备码登录 / 双语面板 / `authKind` 钉住），并修掉评审发现的 SMTP OAuth2、设置路由同源校验等问题。
 - **0.10.8 及更早**：见 [CHANGELOG.md](CHANGELOG.md)。
 ## 兼容性
+
+当前验证基线为官方源码构建的 Harness **0.1.7-alpha.2**（2026-09-23，含本地工具调度器 `Symbol.for` 修复）。18 个插件共同加载；邮件设置已通过旧配置迁移、真实网页编辑与自动保存、刷新恢复、修订冲突和重启持久化检查。本轮使用隔离测试账号，未连接真实邮箱或发送邮件。
 
 2026-09-21：当前发布包经官方 CLI 安装到隔离 profile，在源码构建的 Harness `0.1.6-alpha.2` 上与另外两个下载量前三插件共同加载，18 个插件工具注册正常；日历/邮件配置自检、PPT 主题查询和 17 行表格生成通过。测试本体基于官方 alpha.2 发布提交，另含工具调度器 `Symbol.for` 修复（`93badd88`）。本轮未连接真实邮箱或日历服务。
 
@@ -61,7 +65,7 @@ IMAP/SMTP email tools for DeepSeek Harness, with replies, forwarding, mailbox or
 
 2026-09-10，npm `dsh-email@0.10.6` 曾通过真实 QQ 邮箱目录、列表、读取和搜索，以及设置页“测试连接”“保存并应用”检查；授权码留空时能继续使用 `DSH_EMAIL_PASSWORD`。独立 SMTP 登录认证也已通过。此次复验未连接真实邮箱，未发送、修改或删除邮件。
 
-遵循官方[插件打包与安装要求](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.md)：ESM 入口、预构建 `lib/`、`dsh.bundle.patch` 和 `cordis.patch.yml` 配置层；显式注入所需服务，提供 JSON Schema 参数、规范化输出和渲染函数，运行时不 import `@deepseek-ai/*` 内部模块。使用 Node 22.19 及以上的 22.x 或 Node 24 及以上版本；Harness 仍在快速迭代，上述版本是实测基线。
+遵循官方[插件打包与安装要求](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.md)：ESM 入口、预构建 `lib/`、`dsh.bundle.patch` 和 `cordis.patch.yml` 配置层；显式注入所需服务，提供 JSON Schema 参数、规范化输出和渲染函数，运行时不导入宿主内部服务；配置声明使用官方 `@deepseek-ai/schemastery` 公共包。使用 Node 22.19 及以上的 22.x 或 Node 24 及以上版本；Harness 仍在快速迭代，上述版本是实测基线。
 
 ## 安装
 
@@ -82,7 +86,7 @@ dsh plugin --profile web add dsh-email
 
 多账号可以在设置页可视化编辑：账号卡片支持增删改账号、改名、设默认、按账号名单独「测试连接」；没填完的账号不阻断保存，只标一个「未完成」。卡片改动即时防抖落盘，不再有"先写 YAML 文本、再点一次保存"这一步；版本冲突（别处也改了设置）会自动重基后重存一次，而不是拿旧版本号反复失败。保存卡片时，已存的授权码默认保持（密码栏留空 = 不变，填内容 = 覆盖）；YAML 里的注释尽量原地保留，实在保不住时会明确提示。改名走的是原地改键，授权码与高级键一并保留，且不允许改成已有账号名（那会顶掉另一个账号）。账号自己手写的 imap/smtp 端点只在**服务商真的换了**时才清洗——运行时以账号自己的 host 优先，普通保存不会悄悄改动连接目标。
 
-设置页保存的值存在 `settings.yaml` 的 `dsh-email` 命名空间里，覆盖 YAML 的默认账号配置。授权码字段标记为 secret，但填写后保存仍会写入本机配置文件。单账号如需避免保存授权码，可设置 `DSH_EMAIL_PASSWORD` 并将授权码栏留空；环境变量不会被复制进设置文件。
+Harness 0.1.7 中，设置页直接保存到当前 profile 的 `tool-email` 配置行，修改立即生效。使用默认插件行的旧安装会自动导入 `settings.yaml` 或 `settings.yaml.imported` 中的 `dsh-email` 设置；已有 profile 配置优先，原文件保留且只迁移一次，无需重新输入账号。旧版宿主仍使用原 settings 存储。授权码字段标记为 secret，但填写后保存仍会写入本机配置文件。单账号如需避免保存授权码，可设置 `DSH_EMAIL_PASSWORD` 并将授权码栏留空；环境变量不会被复制进设置文件。
 
 ## 卸载
 

@@ -6,10 +6,12 @@ import type { EmailWatchResult } from './types.js';
 export type EmailClient = Pick<EmailPool, 'list' | 'read' | 'mark' | 'search' | 'send' | 'reply' | 'folders' | 'downloadAttachment' | 'unseenUids' | 'fetchByUids' | 'startIdleSweep' | 'dispose'>;
 export interface EmailSettingsScope {
     get(): unknown;
+    namespace?: string;
+    config?: EmailConfig;
 }
 export interface EmailRuntimeContext {
     settings: {
-        register(namespace: string, schema: unknown, options: {
+        register?(namespace: string, schema: unknown, options: {
             base: Partial<EmailSettingsValue>;
             applies: 'live';
             validate(value: unknown): void;
@@ -18,6 +20,13 @@ export interface EmailRuntimeContext {
             ns: string;
             user?: Partial<EmailSettingsValue>;
         }>;
+    };
+    fiber?: {
+        entry?: {
+            options: {
+                id: string;
+            };
+        };
     };
     effect(effect: () => () => void): unknown;
     logger?: {

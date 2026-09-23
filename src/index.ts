@@ -3,6 +3,10 @@ import type { EmailConfig } from './config.js'
 import { createEmailRuntime } from './runtime.js'
 import { buildEmailTools } from './tools.js'
 import { EmailSettingsBackend, installEmailSettingsWeb } from './web.js'
+import { liveConfig, Config as ConfigSchema } from './host-config.js'
+import { installLegacySettingsImport } from './legacy-settings.js'
+import { EmailSettingsSchema, SETTINGS_NAMESPACE } from './settings.js'
+export const Config = ConfigSchema
 
 export const name = 'tool-email'
 export const inject = ['settings', 'tools']
@@ -10,6 +14,13 @@ export type Config = EmailConfig
 
 /** Compose settings/pool lifecycle, tools, browser routes and the outgoing-mail gate. */
 export function apply(ctx: any, config: Config = {}): void {
+  config = liveConfig(config)
+  installLegacySettingsImport(ctx, config, SETTINGS_NAMESPACE, 'tool-email', Object.keys(EmailSettingsSchema.dict!))
+  if (typeof ctx.settings.configure === 'function' && typeof ctx.inject === 'function') {
+    ctx.inject(['settings'], (settingsCtx: any) => {
+      settingsCtx.effect(() => settingsCtx.settings.configure({ auto: false }, ctx.fiber))
+    })
+  }
   const runtime = createEmailRuntime(ctx, config)
   const backend = new EmailSettingsBackend(ctx, runtime.settingsScope, config)
   backend.watchImpl = runtime.watch

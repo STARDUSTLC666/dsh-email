@@ -37,6 +37,8 @@ Example:
 
 ### Changelog
 
+- **0.14.0 (2026-09-23)**: supports Harness 0.1.7 settings. Existing mailbox settings migrate automatically and appear as editable cards; edits auto-save and survive refresh and restart. Advanced options and saved passwords are preserved; removing all cards no longer resurrects a hidden legacy account.
+
 - **0.13.2 (2026-09-21)**: download attachments by their real MIME section IDs, fixing duplicate filenames selecting the first file. Legacy parsed metadata matches sections one-to-one. Body-only reads and attachment-index caching remain intact; 268 tests pass, including downloaded-file byte checks.
 - **0.13.1 (2026-09-19)**: ships a community public-client registration (thanks [gurio-wine](https://github.com/gurio-wine)), so Outlook / Exchange Online works out of the box; supply your own `clientId` to override it — the card shows which application is in effect. 264 tests.
 - **0.13.0 (2026-09-18)**: fixes for bodies truncated to nothing, `email_watch` skipping new mail, and the attachment cache ignoring UIDVALIDITY; all ten tools declare a timeout; reads and body search download text parts only; the scan fallback labels its own semantics. 262 tests.
@@ -44,6 +46,8 @@ Example:
 - **0.11.0 (2026-09-18)**: gurio-wine’s four settings-page PRs (card editor / OAuth2 device-code login / bilingual panel / pinned `authKind`) plus the review fixes for SMTP OAuth2 and same-origin settings routes.
 - **0.10.8 and earlier**: see [CHANGELOG.md](CHANGELOG.md).
 ## Compatibility
+
+The current baseline is official-source Harness **0.1.7-alpha.2** (2026-09-23, with a local `Symbol.for` tool-scheduler fix). All 18 plugins load together. Legacy migration, editing and automatic saving in the real Web UI, refresh, revision conflicts and restart persistence have been checked with isolated fixture accounts. No live mailbox connection or sending was exercised in this round.
 
 2026-09-21: the current release package was installed through the official CLI in an isolated profile and co-loaded with the other two most-downloaded plugins on source-built Harness `0.1.6-alpha.2`. All 18 plugin tools registered; calendar/email configuration checks, PPT theme listing and 17-row table generation passed. The host is based on the official alpha.2 release plus the tool-scheduler `Symbol.for` fix (`93badd88`). This run did not connect to live mail or calendar services.
 
@@ -53,7 +57,7 @@ Co-load verification was performed on 2026-09-16 with official source builds of 
 
 On 2026-09-10, npm `dsh-email@0.10.6` passed real QQ mailbox folder/list/read/search calls, the settings page's connection test and Save & Apply, and separate SMTP authentication. An empty authorization-code field correctly used `DSH_EMAIL_PASSWORD`. This recheck did not connect to a real mailbox or send, modify or delete mail.
 
-Follows the official [plugin packaging and installation requirements](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.md): an ESM entry point, prebuilt `lib/`, `dsh.bundle.patch` and a `cordis.patch.yml` layer. The plugin explicitly injects its required services and supplies JSON Schema parameters, canonical output and rendering, with no runtime imports of `@deepseek-ai/*` internals. Use Node 22.19 or later within 22.x, or Node 24 or later. Harness is evolving rapidly; the version above is the tested baseline.
+Follows the official [plugin packaging and installation requirements](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.md): an ESM entry point, prebuilt `lib/`, `dsh.bundle.patch` and a `cordis.patch.yml` layer. The plugin explicitly injects its required services and supplies JSON Schema parameters, canonical output and rendering, without importing host-internal services; configuration uses the public `@deepseek-ai/schemastery` package. Use Node 22.19 or later within 22.x, or Node 24 or later. Harness is evolving rapidly; the version above is the tested baseline.
 
 ## Installation
 
@@ -74,7 +78,7 @@ The whole settings page follows DSH's light and dark themes: every panel style r
 
 Multiple accounts can be edited visually in the settings page: account cards add, edit and delete accounts, rename them, pick the default, and run "Test connection" per account name; a half-filled account never blocks saving — it just gets an "incomplete" badge. Card edits are debounced and auto-saved; there is no longer a "write to YAML text, then click save" step. Version conflicts (settings changed elsewhere) are automatically rebased and re-saved once, rather than repeatedly failing with a stale revision. When a card is saved, an already-stored authorization code is kept by default (leave the password field empty to keep it, type into it to overwrite); comments in the YAML are preserved in place where possible — with an explicit notice when they cannot be. Rename re-keys in place, preserving auth codes and advanced keys, and refuses to overwrite an existing account name. Account-level hand-written imap/smtp endpoints are only cleaned when the **provider actually changes** — runtime resolution prefers the account's own host, so a routine save never silently re-points the connection target.
 
-Values saved in the settings page live in the `dsh-email` namespace of `settings.yaml` and override the YAML default-account config. Authorization-code fields are marked secret, but saving a filled field still writes its value to the local settings file. For a single account, set `DSH_EMAIL_PASSWORD` and leave the authorization-code field empty to avoid saving it; the environment value is not copied into settings.
+On Harness 0.1.7, the page saves directly to the current profile’s `tool-email` entry and applies changes live. Installations using the default entry automatically import the retired `dsh-email` section from `settings.yaml` or `settings.yaml.imported` once. Existing profile values win, and the original file is preserved. Older hosts retain their original settings storage. Authorization-code fields are marked secret, but saving a filled field still writes its value to the local settings file. For a single account, set `DSH_EMAIL_PASSWORD` and leave the authorization-code field empty to avoid saving it; the environment value is not copied into settings.
 
 ## Uninstall
 

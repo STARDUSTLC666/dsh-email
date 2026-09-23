@@ -1,4 +1,3 @@
-import z from 'schemastery';
 import { type EmailConfig } from './config.js';
 /** Settings-document namespace this plugin owns (editable from the Web settings page). */
 export declare const SETTINGS_NAMESPACE = "dsh-email";
@@ -7,63 +6,63 @@ export declare const SETTINGS_NAMESPACE = "dsh-email";
  * The form edits the default/shorthand account; its advanced YAML area
  * edits named accounts through accountsYaml.
  */
-export declare const EmailSettingsSchema: z<Schemastery.ObjectS<{
-    provider: z<string, string>;
-    user: z<string, string>;
-    password: z<string, string>;
-    inboxFolder: z<string, string>;
-    sendApproval: z<boolean, boolean>;
-    maxBodyChars: z<number, number>;
-    downloadDir: z<string, string>;
-    accountsYaml: z<string, string>;
-    serverPresets: z<string, string>;
-    imap: z<Schemastery.ObjectS<{
-        host: z<string, string>;
-        port: z<number, number>;
-        secure: z<boolean, boolean>;
-    }>, Schemastery.ObjectT<{
-        host: z<string, string>;
-        port: z<number, number>;
-        secure: z<boolean, boolean>;
-    }>>;
-    smtp: z<Schemastery.ObjectS<{
-        host: z<string, string>;
-        port: z<number, number>;
-        secure: z<boolean, boolean>;
-    }>, Schemastery.ObjectT<{
-        host: z<string, string>;
-        port: z<number, number>;
-        secure: z<boolean, boolean>;
-    }>>;
-}>, Schemastery.ObjectT<{
-    provider: z<string, string>;
-    user: z<string, string>;
-    password: z<string, string>;
-    inboxFolder: z<string, string>;
-    sendApproval: z<boolean, boolean>;
-    maxBodyChars: z<number, number>;
-    downloadDir: z<string, string>;
-    accountsYaml: z<string, string>;
-    serverPresets: z<string, string>;
-    imap: z<Schemastery.ObjectS<{
-        host: z<string, string>;
-        port: z<number, number>;
-        secure: z<boolean, boolean>;
-    }>, Schemastery.ObjectT<{
-        host: z<string, string>;
-        port: z<number, number>;
-        secure: z<boolean, boolean>;
-    }>>;
-    smtp: z<Schemastery.ObjectS<{
-        host: z<string, string>;
-        port: z<number, number>;
-        secure: z<boolean, boolean>;
-    }>, Schemastery.ObjectT<{
-        host: z<string, string>;
-        port: z<number, number>;
-        secure: z<boolean, boolean>;
-    }>>;
-}>>;
+export declare const EmailSettingsSchema: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+    provider: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    user: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    password: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    inboxFolder: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    sendApproval: import("@deepseek-ai/schemastery").default<boolean, boolean, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    maxBodyChars: import("@deepseek-ai/schemastery").default<number, number, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    downloadDir: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    accountsYaml: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    serverPresets: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    imap: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+        host: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+        port: import("@deepseek-ai/schemastery").default<number, number, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+        secure: import("@deepseek-ai/schemastery").default<boolean, boolean, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    }>>, Schemastery.ObjectT<NoInfer<{
+        host: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+        port: import("@deepseek-ai/schemastery").default<number, number, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+        secure: import("@deepseek-ai/schemastery").default<boolean, boolean, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    }>>, "plain">;
+    smtp: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+        host: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+        port: import("@deepseek-ai/schemastery").default<number, number, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+        secure: import("@deepseek-ai/schemastery").default<boolean, boolean, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    }>>, Schemastery.ObjectT<NoInfer<{
+        host: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+        port: import("@deepseek-ai/schemastery").default<number, number, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+        secure: import("@deepseek-ai/schemastery").default<boolean, boolean, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    }>>, "plain">;
+}>>, Schemastery.ObjectT<NoInfer<{
+    provider: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    user: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    password: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    inboxFolder: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    sendApproval: import("@deepseek-ai/schemastery").default<boolean, boolean, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    maxBodyChars: import("@deepseek-ai/schemastery").default<number, number, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    downloadDir: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    accountsYaml: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    serverPresets: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    imap: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+        host: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+        port: import("@deepseek-ai/schemastery").default<number, number, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+        secure: import("@deepseek-ai/schemastery").default<boolean, boolean, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    }>>, Schemastery.ObjectT<NoInfer<{
+        host: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+        port: import("@deepseek-ai/schemastery").default<number, number, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+        secure: import("@deepseek-ai/schemastery").default<boolean, boolean, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    }>>, "plain">;
+    smtp: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+        host: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+        port: import("@deepseek-ai/schemastery").default<number, number, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+        secure: import("@deepseek-ai/schemastery").default<boolean, boolean, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    }>>, Schemastery.ObjectT<NoInfer<{
+        host: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+        port: import("@deepseek-ai/schemastery").default<number, number, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+        secure: import("@deepseek-ai/schemastery").default<boolean, boolean, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    }>>, "plain">;
+}>>, "plain">;
 export interface EmailSettingsValue {
     provider: string;
     user: string;
