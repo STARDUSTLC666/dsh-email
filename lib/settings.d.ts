@@ -3,6 +3,21 @@ import { type EmailConfig } from './config.js';
 /** Settings-document namespace this plugin owns (editable from the Web settings page). */
 export declare const SETTINGS_NAMESPACE = "dsh-email";
 /**
+ * The endpoint values the settings form ships as schema defaults. They are the
+ * form's 「自定义服务器」 starting point rather than a user decision, so the live
+ * projection treats an untouched pair as absent (see `toEmailConfig`).
+ */
+export declare const ENDPOINT_DEFAULTS: {
+    readonly imap: {
+        readonly port: 993;
+        readonly secure: true;
+    };
+    readonly smtp: {
+        readonly port: 465;
+        readonly secure: true;
+    };
+};
+/**
  * The settings-page shape: the single default account plus shared policy.
  * The form edits the default/shorthand account; its advanced YAML area
  * edits named accounts through accountsYaml.
