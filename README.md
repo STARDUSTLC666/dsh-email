@@ -2,6 +2,12 @@
 
 # dsh-email
 
+## 0.14.1 更新（2026-09-27）
+
+未补全的账号和服务器预设会显示未保存提示；避免草稿丢失和错误的“已保存”状态。测试连接只校验所选账号，错误直接指向设置页中的对应字段。
+
+验证宿主：官方源码构建的 Harness 0.1.7-rc.2（保留本地工具调度器修复）。构建与自动测试通过；实际操作和外部服务限制见本轮验收记录。
+
 > **让 agent 协助处理邮件**：收发、搜索、回复转发、附件、邮件整理与新邮件提醒，支持八种常见邮箱服务预设。
 
 ![npm version](https://img.shields.io/npm/v/dsh-email?label=npm&color=blue) ![npm downloads](https://img.shields.io/npm/dm/dsh-email) ![license](https://img.shields.io/npm/l/dsh-email) ![stars](https://img.shields.io/github/stars/STARDUSTLC666/dsh-email?style=social)

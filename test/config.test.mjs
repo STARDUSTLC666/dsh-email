@@ -49,8 +49,8 @@ test('unknown provider fails loud with the supported list', () => {
 })
 
 test('missing user / password / hosts each produce an actionable error', () => {
-  assert.throws(() => resolveEmailSettings({}), /user（邮箱地址）未填写/)
-  assert.throws(() => resolveEmailSettings({ provider: 'qq', user: 'a@b.c' }), /password 未填写/)
+  assert.throws(() => resolveEmailSettings({}), /邮箱地址未填写/)
+  assert.throws(() => resolveEmailSettings({ provider: 'qq', user: 'a@b.c' }), /授权码.*未填写/)
   assert.throws(() => resolveEmailSettings({ user: 'a@b.c', password: 'p' }), /imap.host 未填写/)
 })
 
@@ -83,7 +83,7 @@ test('blank settings passwords use the environment in both draft tests and saved
     }
     assert.equal(resolveEmailSettings({ provider: 'qq', user: 'me@qq.com', password: 'explicit-secret' }).accounts.get('default').password, 'explicit-secret')
     delete process.env[EMAIL_PASSWORD_ENV]
-    assert.throws(() => resolveEmailSettings(toEmailConfig(draft, null)), /password 未填写/)
+    assert.throws(() => resolveEmailSettings(toEmailConfig(draft, null)), /授权码.*未填写/)
   } finally {
     if (old === undefined) delete process.env[EMAIL_PASSWORD_ENV]
     else process.env[EMAIL_PASSWORD_ENV] = old
@@ -143,11 +143,11 @@ test('multi-account ignores the password env fallback', () => {
   try {
     assert.throws(
       () => resolveEmailSettings({ provider: 'qq', accounts: { a: { user: 'a@x.y' } } }),
-      /password 未填写/,
+      /授权码.*未填写/,
     )
     assert.throws(
       () => resolveEmailSettings({ provider: 'qq', password: 'shared-secret', accounts: { a: { user: 'a@x.y', password: '' } } }),
-      /password 未填写/,
+      /授权码.*未填写/,
     )
   } finally {
     if (old === undefined) delete process.env[EMAIL_PASSWORD_ENV]
@@ -507,4 +507,3 @@ test('serverPresets: a preset may be bare — its endpoints are copied verbatim'
   assert.equal(bare.imap.port, undefined, 'an omitted port stays omitted — the preset is copied, not guessed')
   assert.equal(bare.smtp.host, 'smtp.bare')
 })
-

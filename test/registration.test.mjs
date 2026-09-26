@@ -66,13 +66,13 @@ test('every tool returns a config hint instead of throwing when unconfigured', a
   const ctx = fakeCtx()
   apply(ctx, {})
   const list = ctx.tools.defs.find(def => def.name === 'email_list')
-  await assert.rejects(() => list.execute({}), /dsh-email 未配置/)
+  await assert.rejects(() => list.execute({}), /邮件账号配置不完整/)
   const folders = ctx.tools.defs.find(def => def.name === 'email_folders')
-  await assert.rejects(() => folders.execute({}), /dsh-email 未配置/)
+  await assert.rejects(() => folders.execute({}), /邮件账号配置不完整/)
   const watch = ctx.tools.defs.find(def => def.name === 'email_watch')
-  await assert.rejects(() => watch.execute({}), /dsh-email 未配置/)
+  await assert.rejects(() => watch.execute({}), /邮件账号配置不完整/)
   const mark = ctx.tools.defs.find(def => def.name === 'email_mark')
-  await assert.rejects(() => mark.execute({ uid: 1, action: 'read' }), /dsh-email 未配置/)
+  await assert.rejects(() => mark.execute({ uid: 1, action: 'read' }), /邮件账号配置不完整/)
 })
 
 test('execute validates args without touching the network', async () => {

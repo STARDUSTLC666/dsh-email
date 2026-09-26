@@ -1019,12 +1019,12 @@ export class EmailSettingsBackend {
     // does for the stored settings (it never enters the resolved fingerprint).
     const draft = toEmailConfig(value, null)
     const presets = value?.serverPresets ?? this.scope.get()?.serverPresets
+    const requested = typeof accountName === 'string' && accountName.trim() !== '' ? accountName.trim() : ''
     const settings = resolveEmailSettings({
       ...this.currentConfig,
       ...draft,
       ...(typeof presets === 'string' ? { serverPresets: presets } : {}),
-    })
-    const requested = typeof accountName === 'string' && accountName.trim() !== '' ? accountName.trim() : ''
+    }, requested || undefined)
     const available = [...settings.accounts.keys()]
     const name = requested !== '' ? requested : settings.defaultAccount
     const cfg = settings.accounts.get(name)

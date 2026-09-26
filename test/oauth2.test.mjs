@@ -114,7 +114,7 @@ test('an outlook account resolves without a password, a password account still r
   // Every other provider is untouched: the password is still mandatory.
   assert.throws(
     () => resolveEmailSettings({ accountsYaml: 'work: { provider: qq, user: w@qq.com }\n' }),
-    /password 未填写/,
+    /授权码.*未填写/,
   )
   const qq = resolveEmailSettings({ accountsYaml: 'work: { provider: qq, user: w@qq.com, password: pw }\n' })
   assert.equal(qq.accounts.get('work').authKind, 'password')

@@ -256,8 +256,10 @@ export declare function serializeAccountsYaml(raw: unknown, defaultAccount?: str
  * Resolve and validate the raw row config. Throws with an actionable message
  * (in Chinese, since it is what the user and the model both read) when the
  * account is not fully specified.
+ * An explicit account resolves only that card for connection tests, without
+ * making named accounts eligible for the single-account environment password.
  */
-export declare function resolveEmailSettings(config: EmailConfig | undefined): ResolvedEmailSettings;
+export declare function resolveEmailSettings(config: EmailConfig | undefined, onlyAccount?: string): ResolvedEmailSettings;
 /** Every name a `provider:` may legally use, built-ins first. */
 export declare function providerNames(custom?: Record<string, ServerPreset>): string[];
 /**

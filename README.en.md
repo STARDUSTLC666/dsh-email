@@ -1,5 +1,11 @@
 # dsh-email
 
+## 0.14.1 update (2026-09-27)
+
+Incomplete account and server-preset drafts display an unsaved status and are protected against accidental navigation. Connection tests validate the selected account independently and identify the relevant settings field.
+
+Validation host: Harness 0.1.7-rc.2 built from official sources, retaining the local tool-scheduler fix. Build and automated checks pass; interactive coverage and external-service limits are recorded in this release round.
+
 ![npm](https://img.shields.io/npm/v/dsh-email) ![downloads](https://img.shields.io/npm/dm/dsh-email) ![license](https://img.shields.io/github/license/STARDUSTLC666/dsh-email) ![stars](https://img.shields.io/github/stars/STARDUSTLC666/dsh-email?style=social)
 
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)

@@ -25,7 +25,7 @@ test('没写 authUser/authPassword 时就还是 user/password（老配置零变�
 test('别名账号漏填 authPassword 时报的是 authPassword', () => {
   // authPassword falls back to password, so only an account with neither is incomplete
   const missing = 'work: { provider: qq, user: alias@qq.com, authUser: login@qq.com }\n'
-  assert.throws(() => resolveEmailSettings({ accountsYaml: missing }), /authPassword 未填写/)
+  assert.throws(() => resolveEmailSettings({ accountsYaml: missing }), /登录账号的密码未填写/)
 })
 
 test('发送时 From 用 user，senderName 只做显示名', async () => {
