@@ -1,10 +1,10 @@
 # dsh-email
 
-## 0.14.1 update (2026-09-27)
+## 0.14.2 update (2026-09-28)
 
-Incomplete account and server-preset drafts display an unsaved status and are protected against accidental navigation. Connection tests validate the selected account independently and identify the relevant settings field.
+Fixes saved blank-host defaults overriding Outlook's 587/STARTTLS preset, including legacy settings migrated to Harness 0.1.7. Explicit custom hosts, ports and TLS choices remain effective. Thanks to [SenkjM for the reproduction and proposed fix in #17 / #18](https://github.com/STARDUSTLC666/dsh-email/pull/18).
 
-Validation host: Harness 0.1.7-rc.2 built from official sources, retaining the local tool-scheduler fix. Build and automated checks pass; interactive coverage and external-service limits are recorded in this release round.
+Validation host: Harness 0.2.0-rc.1 built from official sources, retaining the local tool-scheduler fix. All 282 email tests and the shared 18-plugin host checks pass. Web settings use isolated fixture accounts; no live mailbox connection or email delivery was tested.
 
 ![npm](https://img.shields.io/npm/v/dsh-email) ![downloads](https://img.shields.io/npm/dm/dsh-email) ![license](https://img.shields.io/github/license/STARDUSTLC666/dsh-email) ![stars](https://img.shields.io/github/stars/STARDUSTLC666/dsh-email?style=social)
 
@@ -53,7 +53,7 @@ Example:
 - **0.10.8 and earlier**: see [CHANGELOG.md](CHANGELOG.md).
 ## Compatibility
 
-The current baseline is official-source Harness **0.1.7-alpha.2** (2026-09-23, with a local `Symbol.for` tool-scheduler fix). All 18 plugins load together. Legacy migration, editing and automatic saving in the real Web UI, refresh, revision conflicts and restart persistence have been checked with isolated fixture accounts. No live mailbox connection or sending was exercised in this round.
+The current baseline is official-source Harness **0.2.0-rc.1** (2026-09-28, with a local `Symbol.for` tool-scheduler fix). All 18 plugins load together. Settings coverage includes legacy migration, real Web UI editing and automatic saving, refresh, revision conflicts and restart persistence with isolated fixture accounts. No live mailbox connection or sending was exercised in this round.
 
 2026-09-21: the current release package was installed through the official CLI in an isolated profile and co-loaded with the other two most-downloaded plugins on source-built Harness `0.1.6-alpha.2`. All 18 plugin tools registered; calendar/email configuration checks, PPT theme listing and 17-row table generation passed. The host is based on the official alpha.2 release plus the tool-scheduler `Symbol.for` fix (`93badd88`). This run did not connect to live mail or calendar services.
 

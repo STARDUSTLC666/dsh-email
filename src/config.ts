@@ -68,6 +68,25 @@ export interface SmtpConfig {
   secure?: boolean
 }
 
+/** Legacy form placeholders; an untouched blank-host endpoint delegates to its provider. */
+export const ENDPOINT_DEFAULTS = {
+  imap: { port: 993, secure: true }, smtp: { port: 465, secure: true },
+} as const
+
+export function normalizeSettingsEndpoint<T extends SmtpConfig>(value: T, kind: keyof typeof ENDPOINT_DEFAULTS): Omit<T, 'host' | 'port' | 'secure'> & SmtpConfig {
+  if (typeof value.host !== 'string' || value.host.trim() !== '') return value
+  const normalized = { ...value }
+  delete normalized.host
+  const defaults = ENDPOINT_DEFAULTS[kind]
+  // A changed port or TLS choice is intentional; preserve that whole combination.
+  if ((value.port === undefined || value.port === defaults.port)
+    && (value.secure === undefined || value.secure === defaults.secure)) {
+    delete normalized.port
+    delete normalized.secure
+  }
+  return normalized
+}
+
 /** One mailbox account. Top-level shorthand fields act as shared defaults. */
 export interface AccountConfig {
   /** Built-in provider name, or a custom serverPresets name. */
@@ -505,17 +524,21 @@ function resolveAccount(
   const authUser = (acc.authUser ?? common.authUser ?? '').trim() || user
   const authPassword = (acc.authPassword ?? common.authPassword) || password
   const senderName = (acc.senderName ?? common.senderName ?? '').trim()
+  const accountImap = acc.imap && normalizeSettingsEndpoint(acc.imap, 'imap')
+  const sharedImap = common.imap && normalizeSettingsEndpoint(common.imap, 'imap')
+  const accountSmtp = acc.smtp && normalizeSettingsEndpoint(acc.smtp, 'smtp')
+  const sharedSmtp = common.smtp && normalizeSettingsEndpoint(common.smtp, 'smtp')
   const imap = {
-    host: acc.imap?.host ?? common.imap?.host ?? preset?.imap.host,
-    port: acc.imap?.port ?? common.imap?.port ?? preset?.imap.port,
-    secure: acc.imap?.secure ?? common.imap?.secure ?? preset?.imap.secure,
-    connectionTimeoutMs: acc.imap?.connectionTimeoutMs ?? common.imap?.connectionTimeoutMs,
-    socketTimeoutMs: acc.imap?.socketTimeoutMs ?? common.imap?.socketTimeoutMs,
+    host: accountImap?.host ?? sharedImap?.host ?? preset?.imap.host,
+    port: accountImap?.port ?? sharedImap?.port ?? preset?.imap.port,
+    secure: accountImap?.secure ?? sharedImap?.secure ?? preset?.imap.secure,
+    connectionTimeoutMs: accountImap?.connectionTimeoutMs ?? sharedImap?.connectionTimeoutMs,
+    socketTimeoutMs: accountImap?.socketTimeoutMs ?? sharedImap?.socketTimeoutMs,
   }
   const smtp = {
-    host: acc.smtp?.host ?? common.smtp?.host ?? preset?.smtp.host,
-    port: acc.smtp?.port ?? common.smtp?.port ?? preset?.smtp.port,
-    secure: acc.smtp?.secure ?? common.smtp?.secure ?? preset?.smtp.secure,
+    host: accountSmtp?.host ?? sharedSmtp?.host ?? preset?.smtp.host,
+    port: accountSmtp?.port ?? sharedSmtp?.port ?? preset?.smtp.port,
+    secure: accountSmtp?.secure ?? sharedSmtp?.secure ?? preset?.smtp.secure,
   }
   const problems: string[] = []
   if (user === '') problems.push(`账号 "${name}" 的邮箱地址未填写`)

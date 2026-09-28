@@ -56,6 +56,18 @@ export interface SmtpConfig {
     port?: number;
     secure?: boolean;
 }
+/** Legacy form placeholders; an untouched blank-host endpoint delegates to its provider. */
+export declare const ENDPOINT_DEFAULTS: {
+    readonly imap: {
+        readonly port: 993;
+        readonly secure: true;
+    };
+    readonly smtp: {
+        readonly port: 465;
+        readonly secure: true;
+    };
+};
+export declare function normalizeSettingsEndpoint<T extends SmtpConfig>(value: T, kind: keyof typeof ENDPOINT_DEFAULTS): Omit<T, 'host' | 'port' | 'secure'> & SmtpConfig;
 /** One mailbox account. Top-level shorthand fields act as shared defaults. */
 export interface AccountConfig {
     /** Built-in provider name, or a custom serverPresets name. */
