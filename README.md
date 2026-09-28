@@ -63,13 +63,7 @@ IMAP/SMTP email tools for DeepSeek Harness, with replies, forwarding, mailbox or
 
 当前验证基线为官方源码构建的 Harness **0.2.0-rc.1**（2026-09-28，含本地工具调度器 `Symbol.for` 修复）。18 个插件共同加载；邮件设置覆盖旧配置迁移、真实网页编辑与自动保存、刷新恢复、修订冲突和重启持久化检查。本轮使用隔离测试账号，未连接真实邮箱或发送邮件。
 
-2026-09-21：当前发布包经官方 CLI 安装到隔离 profile，在源码构建的 Harness `0.1.6-alpha.2` 上与另外两个下载量前三插件共同加载，18 个插件工具注册正常；日历/邮件配置自检、PPT 主题查询和 17 行表格生成通过。测试本体基于官方 alpha.2 发布提交，另含工具调度器 `Symbol.for` 修复（`93badd88`）。本轮未连接真实邮箱或日历服务。
-
-2026-09-16 曾在官方源码构建的 Harness `0.1.5-rc.2` 和 `0.1.6-alpha.1` 上完成同载验证：18 个组件与 ModLens 同载，工具 schema、技能注册及离线只读调用检查通过。
-
 **0.11.0 的同载验证（2026-09-18，本地构建的 Harness `0.1.5-rc.2`，`web` profile）**：插件挂载无报错；设置路由 GET 返回 200 且响应中已无 `raw` 字段；用 `text/plain` 发 POST 被 **415** 拒绝（同源守卫在真实宿主下生效）；`application/json` 的 POST 下卡片投影正确，账号钉住 `authKind: password` 后 `authKindDeclared` 与 `authKind` 均为 `password`；设置面板实际渲染出账号卡片、8 个服务商预设的中文下拉、「认证方式」三态选择器、「应用（客户端）ID」输入格与提示、未填 ID 时的警示条（说明 `--dsw-alias-state-warn-primary` 在真实宿主下确有定义）与「登录 Microsoft 账号」按钮；浏览器控制台无报错；save 全链路可用，验证结束后已把 `accountsYaml` 还原为空、原有账号恢复。离线测试 231 项全绿。**仍未做**：真实 Outlook 租户的 OAuth2 端到端（设备码流程要真人在浏览器完成授权）与真实发信未测，`clientId` 相关路径目前只有假 authority 的用例覆盖。采用 `cordis.patch.yml` + `dsh.bundle.patch` 组合包模型。Node 要求为 22.19 及以上的 22.x，或 24 及以上。外部服务的实际业务操作需按各组件配置单独验证。
-
-2026-09-10，npm `dsh-email@0.10.6` 曾通过真实 QQ 邮箱目录、列表、读取和搜索，以及设置页“测试连接”“保存并应用”检查；授权码留空时能继续使用 `DSH_EMAIL_PASSWORD`。独立 SMTP 登录认证也已通过。此次复验未连接真实邮箱，未发送、修改或删除邮件。
 
 遵循官方[插件打包与安装要求](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.md)：ESM 入口、预构建 `lib/`、`dsh.bundle.patch` 和 `cordis.patch.yml` 配置层；显式注入所需服务，提供 JSON Schema 参数、规范化输出和渲染函数，运行时不导入宿主内部服务；配置声明使用官方 `@deepseek-ai/schemastery` 公共包。使用 Node 22.19 及以上的 22.x 或 Node 24 及以上版本；Harness 仍在快速迭代，上述版本是实测基线。
 
