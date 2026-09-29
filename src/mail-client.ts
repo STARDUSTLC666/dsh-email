@@ -1,5 +1,7 @@
 import { ImapFlow } from 'imapflow'
 import nodemailer, { type Transporter } from 'nodemailer'
+import type SMTPTransport from 'nodemailer/lib/smtp-transport/index.js'
+import { createConnection, type Socket } from 'node:net'
 import { mkdir, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Readable } from 'node:stream'
@@ -388,12 +390,11 @@ interface CachedAttachmentIndex {
 }
 
 /**
- * One mailbox pool for the whole plugin: pooled IMAP connections per
- * account plus pooled SMTP transporters, with idle sweep and error eviction.
+ * One mailbox pool for the whole plugin: pooled IMAP connections per account.
  */
 export class EmailPool {
   private readonly imaps = new Map<string, ImapEntry>()
-  private readonly smtps = new Map<string, Transporter>()
+  private readonly smtps = new Map<Transporter, Socket | undefined>()
   private readonly queues = new Map<string, Promise<unknown>>()
   private idleTimer: NodeJS.Timeout | undefined
 
@@ -666,42 +667,61 @@ export class EmailPool {
     if (this.idleTimer !== undefined) clearInterval(this.idleTimer)
     this.idleTimer = undefined
     for (const name of [...this.imaps.keys()]) void this.evictImap(name)
-    for (const transporter of this.smtps.values()) transporter.close()
+    for (const [transporter, socket] of this.smtps) {
+      socket?.destroy()
+      transporter.close()
+    }
     this.smtps.clear()
   }
 
   /**
-   * A pooled transporter for one account. The token is captured when the
-   * transporter is built; an OAuth2 token that turns out to be stale is
-   * re-minted in sendMail, which rebuilds the transporter.
+   * Create an unpooled sender with its own socket. The socket callback exposes
+   * only the public SMTP transport hook to the cancellation owner.
    */
-  private transporter(name: string, cfg: ResolvedEmailConfig, accessToken?: string): Transporter {
-    let t = this.smtps.get(name)
-    if (t === undefined) {
-      t = nodemailer.createTransport({
-        pool: true,
-        host: cfg.smtp.host,
-        port: cfg.smtp.port,
-        secure: cfg.smtp.secure,
-        auth: smtpAuthOf(cfg, accessToken),
-        connectionTimeout: 30000,
-        greetingTimeout: 10000,
-        socketTimeout: 60000,
-        maxConnections: 2,
-        maxMessages: 50,
-      })
-      this.smtps.set(name, t)
-    }
-    return t
-  }
-
-  private dropTransporter(name: string, transporter: Transporter): void {
-    if (this.smtps.get(name) === transporter) this.smtps.delete(name)
-    transporter.close()
+  private transporter(name: string, cfg: ResolvedEmailConfig, accessToken: string | undefined, signal: AbortSignal | undefined, onSocket: (socket: Socket) => void): Transporter {
+    const transporter = nodemailer.createTransport({
+      host: cfg.smtp.host,
+      port: cfg.smtp.port,
+      secure: cfg.smtp.secure,
+      auth: smtpAuthOf(cfg, accessToken),
+      connectionTimeout: 30000,
+      greetingTimeout: 10000,
+      socketTimeout: 60000,
+      getSocket: (options: SMTPTransport.Options, callback: (error: Error | null, socketOptions: any) => void) => {
+        const socket = createConnection({ host: options.host ?? cfg.smtp.host, port: options.port ?? cfg.smtp.port })
+        onSocket(socket)
+        let settled = false
+        const finish = (error: Error | null, socketOptions?: any): void => {
+          if (settled) return
+          settled = true
+          clearTimeout(timer)
+          socket.removeListener('connect', onConnect)
+          socket.removeListener('error', onError)
+          signal?.removeEventListener('abort', onAbort)
+          if (error !== null) socket.destroy()
+          callback(error, socketOptions)
+        }
+        const onConnect = (): void => {
+          if (signal?.aborted === true) {
+            finish(signal.reason instanceof Error ? signal.reason : new Error('SMTP connection aborted'))
+          } else finish(null, { connection: socket })
+        }
+        const onError = (error: Error): void => finish(error)
+        const onAbort = (): void => finish(signal?.reason instanceof Error ? signal.reason : new Error('SMTP connection aborted'))
+        const timer = setTimeout(() => finish(new Error('SMTP connection timeout')), 30000)
+        socket.once('connect', onConnect)
+        socket.once('error', onError)
+        signal?.addEventListener('abort', onAbort, { once: true })
+        if (signal?.aborted === true) onAbort()
+      },
+    })
+    this.smtps.set(transporter, undefined)
+    return transporter
   }
 
   /**
-   * Send through the pooled transporter while making cancellation close it.
+   * Give each send its own SMTP connection so cancellation can close that
+   * operation without closing another send for the same account.
    *
    * An OAuth2 transporter carries a token that was minted when it was built,
    * so a rejection is retried once against a freshly built one (and a fresh
@@ -711,38 +731,66 @@ export class EmailPool {
   private async sendMail(name: string, cfg: ResolvedEmailConfig, message: any, signal?: AbortSignal): Promise<any> {
     signal?.throwIfAborted()
     const attempt = async (forceToken: boolean): Promise<any> => {
-      const token = cfg.authKind === 'oauth2' ? await getFreshAccessToken(name, cfg, { force: forceToken }) : undefined
-      const transporter = this.transporter(name, cfg, token)
-      const onAbort = (): void => {
-        this.dropTransporter(name, transporter)
+      let token: string | undefined
+      if (cfg.authKind === 'oauth2') {
+        const refreshing = getFreshAccessToken(name, cfg, { force: forceToken })
+        if (signal === undefined) token = await refreshing
+        else {
+          let onAbort: (() => void) | undefined
+          const aborted = new Promise<never>((_resolve, reject) => {
+            onAbort = () => reject(signal.reason ?? new DOMException('The operation was aborted', 'AbortError'))
+            signal.addEventListener('abort', onAbort, { once: true })
+            if (signal.aborted) onAbort()
+          })
+          try {
+            token = await Promise.race([refreshing, aborted])
+          } finally {
+            if (onAbort !== undefined) signal.removeEventListener('abort', onAbort)
+          }
+        }
       }
-      signal?.addEventListener('abort', onAbort, { once: true })
+      signal?.throwIfAborted()
+      let smtpSocket: Socket | undefined
+      const transporter = this.transporter(name, cfg, token, signal, socket => {
+        smtpSocket = socket
+        this.smtps.set(transporter, socket)
+      })
+      let onAbort: (() => void) | undefined
+      const aborted = signal === undefined ? undefined : new Promise<never>((_resolve, reject) => {
+        onAbort = () => {
+          smtpSocket?.destroy()
+          transporter.close()
+          reject(new MailError('SMTP发送已取消；服务器是否已接收邮件无法确认，请先检查邮箱再决定是否重发'))
+        }
+        signal.addEventListener('abort', onAbort, { once: true })
+      })
       try {
-        const info = await transporter.sendMail(message)
-        signal?.throwIfAborted()
+        const sending = transporter.sendMail(message)
+        const info = aborted === undefined ? await sending : await Promise.race([sending, aborted])
         return info
       } finally {
-        signal?.removeEventListener('abort', onAbort)
+        if (onAbort !== undefined) signal?.removeEventListener('abort', onAbort)
+        smtpSocket?.destroy()
+        transporter.close()
+        this.smtps.delete(transporter)
       }
     }
     try {
       return await attempt(false)
     } catch (error) {
-      signal?.throwIfAborted()
+      if (signal?.aborted === true) throw error
       if (cfg.authKind !== 'oauth2') throw error
-      // A pooled connection that already authenticated can fail for reasons no
+      // A connection that already authenticated can fail for reasons no
       // token can fix (a rejected recipient, a full mailbox). Only a credential
       // rejection is worth a second, freshly-tokened attempt — and a token
       // store that refused outright is reported as itself.
       if (!looksLikeAuthFailure(error)) throw this.oauth2ErrorOf(error)
-      // The cached transporter holds the old token: it has to go, or the retry
-      // would reuse the very credential that was just refused.
-      const stale = this.smtps.get(name)
-      if (stale !== undefined) this.dropTransporter(name, stale)
+      // A fresh transporter is created for the retry so it cannot reuse the
+      // credential that was just refused.
       try {
         return await attempt(true)
       } catch (retryError) {
-        signal?.throwIfAborted()
+        if (signal !== undefined && Boolean(signal.aborted)) throw retryError
         throw this.oauth2ErrorOf(retryError)
       }
     }

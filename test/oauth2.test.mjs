@@ -653,6 +653,45 @@ test('the SMTP transporter is rebuilt with a fresh token after a rejection', asy
   pool.dispose()
 })
 
+test('cancelling during OAuth refresh settles immediately and never opens SMTP', async t => {
+  const { createServer } = await import('node:net')
+  const server = createServer()
+  await new Promise((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', resolve)
+  })
+  t.after(() => new Promise(resolve => server.close(resolve)))
+  let connectionCount = 0
+  server.on('connection', () => { connectionCount++ })
+
+  writeTokens({ work: {
+    user: 'me@outlook.com', clientId: 'client-1', refreshToken: 'refresh-1',
+    accessToken: 'expiring', expiresAt: Date.now() + 1000,
+  } })
+  const settings = resolveEmailSettings({
+    accountsYaml: `work: { provider: outlook, user: me@outlook.com, clientId: client-1, smtp: { host: 127.0.0.1, port: ${server.address().port}, secure: false } }\n`,
+  })
+  const pool = new EmailPool(settings)
+  t.after(() => pool.dispose())
+
+  let markRefreshStarted
+  const refreshStarted = new Promise(resolve => { markRefreshStarted = resolve })
+  let releaseRefresh
+  mockFetch(t, () => new Promise(resolve => {
+    releaseRefresh = () => resolve(jsonResponse(tokenPayload({ access_token: 'fresh' })))
+    markRefreshStarted()
+  }))
+  const controller = new AbortController()
+  const reason = new Error('cancel while refreshing token')
+  const pending = pool.send('work', 'to@example.com', 'subject', 'body', undefined, [], controller.signal)
+  await refreshStarted
+  controller.abort(reason)
+  await assert.rejects(pending, error => error === reason)
+  releaseRefresh()
+  await new Promise(resolve => setTimeout(resolve, 20))
+  assert.equal(connectionCount, 0, 'token refresh cancellation must not start SMTP')
+})
+
 test('a password account never retries an SMTP rejection', async t => {
   const settings = resolveEmailSettings({ provider: 'qq', user: 'me@qq.com', password: 'pw' })
   const pool = new EmailPool(settings)
