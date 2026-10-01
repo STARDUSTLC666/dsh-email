@@ -986,9 +986,14 @@ export class EmailSettingsBackend {
       // The card editor takes ownership of legacy shorthand/maps. Clear only
       // the superseded account storage, so removing the last card cannot
       // resurrect a hidden old account on the next read.
-      const section = Object.hasOwn(value, 'accountsYaml')
+      const section: Record<string, unknown> = Object.hasOwn(value, 'accountsYaml')
         ? { ...value, accounts: {}, user: '', password: '', authUser: '', authPassword: '' }
-        : value
+        : { ...value }
+      if (Object.hasOwn(value, 'accountsYaml')) {
+        // The form displays the default card's resolved endpoints; those are not shared edits.
+        delete section.imap
+        delete section.smtp
+      }
       await this.ctx.settings.update(this.namespace, section, expectedRevision)
     }
     else await this.ctx.settings.replace(this.namespace, value, expectedRevision)
@@ -1032,13 +1037,14 @@ export class EmailSettingsBackend {
       throw new Error(`未知账号 "${name}"，可用：${available.join('、')}`)
     }
     const target = { account: name, imapHost: cfg.imap.host, imapPort: cfg.imap.port }
+    const targetDescription = '账号 "' + name + '" · IMAP ' + cfg.imap.host + ':' + cfg.imap.port
     // An OAuth2 account has no password to check: without a token there is
     // nothing to dial with, and a failed dial would only say so less clearly.
     if (cfg.authKind === 'oauth2') {
       try {
         await getFreshAccessToken(name, cfg)
       } catch (error) {
-        throw new Error(messageOf(error, '尚未登录：请先在设置页完成设备码登录'))
+        throw new Error(targetDescription + '（OAuth2）：' + redactCredentials(messageOf(error, '尚未登录：请先在设置页完成设备码登录')))
       }
     }
     const pool = new EmailPool(settings)
@@ -1051,14 +1057,17 @@ export class EmailSettingsBackend {
       // actionable hint instead of the opaque message. The server's own text is
       // redacted first: a refused authentication string is echoed verbatim by
       // many servers, and for XOAUTH2 that blob carries the access token.
-      const raw = redactCredentials(messageOf(error, 'unknown error'))
+      let raw = redactCredentials(messageOf(error, 'unknown error'))
+      for (const secret of [cfg.password, cfg.authPassword]) {
+        if (secret && secret.length >= 4) raw = raw.split(secret).join('[redacted]')
+      }
       const lower = raw.toLowerCase()
       if (lower.includes('command failed') || lower.includes('authentication') || lower.includes('login')) {
         throw new Error(cfg.authKind === 'oauth2'
-          ? '邮箱登录失败：请在设置页重新完成设备码登录（' + raw + '）'
-          : '邮箱登录失败：请检查邮箱地址与授权码（' + raw + '）')
+          ? targetDescription + '（OAuth2）：邮箱登录失败：请在设置页重新完成设备码登录（' + raw + '）'
+          : targetDescription + '：邮箱登录失败：请检查邮箱地址与授权码（' + raw + '）')
       }
-      throw error
+      throw new Error(targetDescription + '：' + raw)
     } finally {
       pool.dispose()
     }

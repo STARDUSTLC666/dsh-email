@@ -46,13 +46,12 @@ export function messageOf(error: unknown, fallback: string): string {
  * messages are rendered in the settings panel, returned by the mail tools, and
  * pasted into bug reports.
  *
- * Two shapes are masked: a JWT (three base64url segments, which is what every
- * OAuth2 access token looks like) and a long base64 run (the quoted XOAUTH2
- * blob). The replacement keeps the length so a report still says how big the
- * thing was, without saying what it was.
+ * Mask JWTs, long base64 authentication blobs and credential assignments.
+ * Token replacements retain their length for diagnostics.
  */
 export function redactCredentials(text: string): string {
   return text
+    .replace(/(["']?(?:password|passwd|authPassword|secret|api[_-]?key)["']?)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s;,)]+)/gi, '$1$2<已隐去的凭据>')
     .replace(/[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{8,}/g, match => `<已隐去 ${match.length} 字符的令牌>`)
     .replace(/[A-Za-z0-9+/]{40,}={0,2}/g, match => `<已隐去 ${match.length} 字符的凭据>`)
 }

@@ -280,6 +280,8 @@ export declare function providerNames(custom?: Record<string, ServerPreset>): st
  * this provider name be written?", where a broken table can only mean "no".
  */
 export declare function presetNamesIn(text: string | undefined): string[];
+/** Materialize shared account defaults without replacing a named provider's servers. */
+export declare function mergeAccountDefaults(common: AccountConfig, account?: AccountConfig): AccountConfig;
 /** v0.1-compatible wrapper: resolve the single (or default) account. */
 export declare function resolveEmailConfig(config: EmailConfig | undefined): ResolvedEmailConfig;
 export declare function clampInt(value: unknown, fallback: number, min: number, max: number): number;

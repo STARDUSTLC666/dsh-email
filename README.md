@@ -2,11 +2,13 @@
 
 # dsh-email
 
-## 0.14.2 更新（2026-09-28）
+## 0.14.5 更新（2026-10-01）
 
-修复保存过的空服务器默认值覆盖 Outlook 预设的问题：恢复 `587 / STARTTLS`，并覆盖 Harness 0.1.7 的旧配置迁移路径。明确设置的自定义主机、端口和 TLS 仍然生效。感谢 [SenkjM 在 #17 / #18 提供复现和修复方向](https://github.com/STARDUSTLC666/dsh-email/pull/18)。
+修复 [#20](https://github.com/STARDUSTLC666/dsh-email/issues/20)：具名账号选择自己的服务商后，使用该服务商的服务器；Gmail 不再继承共享 Outlook 端点并被误判为 OAuth2。账号卡片保存不再把默认账号端点写回共享配置。保留显式账号端点与旧单账号配置，同时修复顶层发送别名和登录凭据未生效的问题。连接失败显示所选账号及实际 IMAP 主机、端口，服务端回显的密码继续脱敏。
 
-验证宿主：官方源码构建的 Harness `0.2.0-rc.1`（commit `407e65c8`）+ Node `24.16.0`（2026-09-28）。282 项插件测试在隔离环境全部通过；同一个宿主里 18 个插件共同加载，注册 10 个工具，工具 schema 与健康检查契约通过。本轮未启用真实端口与外部服务。
+空地址卡片点击测试时先提示填写邮箱地址；切换到 Outlook 后，内置应用 ID 提示随保存结果更新，不再误报缺失。独立登录密码只显示是否已保存，仍不回填明文。
+
+验证宿主：官方源码构建的 Harness `0.2.0-rc.2`（commit `639ed01539`）+ Windows / Node `24.16.0`。295 项邮件测试通过；18 个插件共同加载，邮件注册 10 个工具。原生桌面已实测新增卡片、Outlook/Gmail 切换、自动保存和删除。最后的字段提示修正通过组件行为回归，尚未再次实机操作；未验证真实邮箱登录、OAuth2 授权或发信成功。
 
 > **让 agent 协助处理邮件**：收发、搜索、回复转发、附件、邮件整理与新邮件提醒，支持八种常见邮箱服务预设。
 
@@ -61,7 +63,7 @@ IMAP/SMTP email tools for DeepSeek Harness, with replies, forwarding, mailbox or
 - **0.10.8 及更早**：见 [CHANGELOG.md](CHANGELOG.md)。
 ## 兼容性
 
-当前验证基线为官方源码构建的 Harness **0.2.0-rc.1**（2026-09-28，含本地工具调度器 `Symbol.for` 修复）。18 个插件共同加载；邮件设置覆盖旧配置迁移、真实网页编辑与自动保存、刷新恢复、修订冲突和重启持久化检查。本轮使用隔离测试账号，未连接真实邮箱或发送邮件。
+当前验证基线为官方发布标签源码构建的 Harness **0.2.0-rc.2**（2026-09-30）。18 个插件共同加载，99 个工具与 35 个技能的注册及输出检查通过；邮件新增多服务商隔离、卡片保存、端点错误提示、发送别名与编辑提示回归。桌面操作范围与尚未完成的真实服务验证见上文。
 
 **0.11.0 的同载验证（2026-09-18，本地构建的 Harness `0.1.5-rc.2`，`web` profile）**：插件挂载无报错；设置路由 GET 返回 200 且响应中已无 `raw` 字段；用 `text/plain` 发 POST 被 **415** 拒绝（同源守卫在真实宿主下生效）；`application/json` 的 POST 下卡片投影正确，账号钉住 `authKind: password` 后 `authKindDeclared` 与 `authKind` 均为 `password`；设置面板实际渲染出账号卡片、8 个服务商预设的中文下拉、「认证方式」三态选择器、「应用（客户端）ID」输入格与提示、未填 ID 时的警示条（说明 `--dsw-alias-state-warn-primary` 在真实宿主下确有定义）与「登录 Microsoft 账号」按钮；浏览器控制台无报错；save 全链路可用，验证结束后已把 `accountsYaml` 还原为空、原有账号恢复。离线测试 231 项全绿。**仍未做**：真实 Outlook 租户的 OAuth2 端到端（设备码流程要真人在浏览器完成授权）与真实发信未测，`clientId` 相关路径目前只有假 authority 的用例覆盖。采用 `cordis.patch.yml` + `dsh.bundle.patch` 组合包模型。Node 要求为 22.19 及以上的 22.x，或 24 及以上。外部服务的实际业务操作需按各组件配置单独验证。
 
@@ -133,7 +135,7 @@ dsh plugin --profile web remove dsh-email
     downloadDir: E:/attachments # 可选，默认 $DSH_HOME/email-downloads
 ```
 
-顶层的 `provider`/`user`/`password`/`imap`/`smtp`/`inboxFolder` 仍然可用，作为各账号的共享默认值（v0.1 单账号写法完全兼容）。
+顶层的 `provider`/`user`/`password`/`imap`/`smtp`/`inboxFolder` 仍兼容旧单账号写法。具名账号声明自己的 `provider` 时，服务器取该预设，账号自己的 `imap`/`smtp` 显式覆盖优先；未声明服务商的账号继续继承顶层服务器。共享连接超时仍可生效。
 
 想在多个账号之间复用同一套连接端点，可以用 `serverPresets` 自定义服务商预设（YAML 映射，键 = 预设名，值含可选的 `label` 与 `imap`/`smtp`）：
 

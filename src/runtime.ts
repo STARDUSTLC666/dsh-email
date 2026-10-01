@@ -1,5 +1,5 @@
 /** Live settings, account-pool ownership, and independent tool/web watch cursors. */
-import { clampInt, presetNamesIn, resolveEmailSettings, serializeAccountsYaml, type EmailConfig, type ResolvedEmailSettings } from './config.js'
+import { clampInt, mergeAccountDefaults, presetNamesIn, resolveEmailSettings, serializeAccountsYaml, type EmailConfig, type ResolvedEmailSettings } from './config.js'
 import { EmailPool, messageOf } from './mail-client.js'
 import { EmailSettingsSchema, SETTINGS_NAMESPACE, toEmailConfig, toSettingsBase, validateSettingsValue, type EmailSettingsValue } from './settings.js'
 import type { EmailWatchResult } from './types.js'
@@ -80,7 +80,7 @@ export function createEmailRuntime(
       const shared = Object.fromEntries(['provider', 'user', 'password', 'senderName', 'authUser', 'authPassword', 'clientId', 'authKind', 'imap', 'smtp', 'inboxFolder']
         .filter(key => (config as any)[key] !== undefined).map(key => [key, (config as any)[key]]))
       const cards = config.accounts && Object.keys(config.accounts).length > 0
-        ? Object.fromEntries(Object.entries(config.accounts).map(([key, account]) => [key, { ...shared, ...account }]))
+        ? Object.fromEntries(Object.entries(config.accounts).map(([key, account]) => [key, mergeAccountDefaults(shared, account)]))
         : typeof config.user === 'string' && config.user !== '' ? { default: shared } : {}
       return EmailSettingsSchema({ ...toSettingsBase(config), ...endpointDefaults,
         accountsYaml: config.accountsYaml ?? serializeAccountsYaml(cards, config.defaultAccount),

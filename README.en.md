@@ -1,10 +1,12 @@
 # dsh-email
 
-## 0.14.2 update (2026-09-28)
+## 0.14.5 update (2026-10-01)
 
-Fixes saved blank-host defaults overriding Outlook's 587/STARTTLS preset, including legacy settings migrated to Harness 0.1.7. Explicit custom hosts, ports and TLS choices remain effective. Thanks to [SenkjM for the reproduction and proposed fix in #17 / #18](https://github.com/STARDUSTLC666/dsh-email/pull/18).
+Fixes [#20](https://github.com/STARDUSTLC666/dsh-email/issues/20): a named account's provider selects its own servers, so Gmail no longer inherits shared Outlook endpoints or becomes an OAuth2 account. Card saves exclude form-derived shared endpoints. Explicit account endpoints and legacy single-account configuration remain supported; top-level sender aliases and login credentials now take effect. Connection failures identify the selected account and actual IMAP host and port, with echoed credentials redacted.
 
-Validation host: Harness `0.2.0-rc.1` built from official sources (commit `407e65c8`) with Node `24.16.0` on 2026-09-28. All 282 plugin tests pass in an isolated environment; all 18 plugins mount together in one host registering 10 tools, with tool schemas and health-check contracts passing. No live ports or external services were exercised in this round.
+An empty card asks for its email address before testing. Outlook's built-in application ID updates from the saved snapshot, avoiding a false missing-ID warning. Stored separate login passwords are acknowledged without exposing their values.
+
+Validation host: Harness `0.2.0-rc.2` built from the official release tag (commit `639ed01539`), Windows and Node `24.16.0`. All 295 email tests pass; all 18 plugins mount together, with 10 email tools. Native Desktop checks covered adding a card, switching Outlook/Gmail, automatic saving and deletion. The final field-hint fixes have component behavior regressions but have not been retested in the native UI. Successful real-mailbox login, OAuth2 authorization and sending remain unverified.
 
 ![npm](https://img.shields.io/npm/v/dsh-email) ![downloads](https://img.shields.io/npm/dm/dsh-email) ![license](https://img.shields.io/github/license/STARDUSTLC666/dsh-email) ![stars](https://img.shields.io/github/stars/STARDUSTLC666/dsh-email?style=social)
 
@@ -53,7 +55,7 @@ Example:
 - **0.10.8 and earlier**: see [CHANGELOG.md](CHANGELOG.md).
 ## Compatibility
 
-The current baseline is official-source Harness **0.2.0-rc.1** (2026-09-28, with a local `Symbol.for` tool-scheduler fix). All 18 plugins load together. Settings coverage includes legacy migration, real Web UI editing and automatic saving, refresh, revision conflicts and restart persistence with isolated fixture accounts. No live mailbox connection or sending was exercised in this round.
+The current baseline is Harness **0.2.0-rc.2** built from its official release tag on 2026-09-30. All 18 plugins mount together with 99 tools and 35 skills; registration and output checks pass. New email regressions cover provider isolation, card saves, endpoint diagnostics, sender aliases and editor hints. The native UI scope and remaining live-service checks are described above.
 
 **0.11.0 co-load verification (2026-09-18, locally built Harness `0.1.5-rc.2`, `web` profile)**: the plugin mounted without errors; the settings route answered GET with 200 and no `raw` field in the response; a `text/plain` POST was refused with **415**, proving the same-origin guard holds in the real host; under a `application/json` POST the card projection was correct, and an account pinning `authKind: password` reported both `authKindDeclared` and `authKind` as `password`; the panel actually rendered account cards, the eight provider presets with localized labels, the three-way authentication selector, the application (client) ID field with its hint, the missing-ID warning banner (so `--dsw-alias-state-warn-primary` is genuinely defined in the real host) and the Sign in with Microsoft button; the browser console was clean; save worked end to end, and afterwards `accountsYaml` was restored to empty with the original account intact. Offline tests: 231 green. **Still not done**: an end-to-end OAuth2 run against a real Outlook tenant (the device-code flow needs a human to authorize in a browser) and real sending; the `clientId` paths are covered only against a fake authority. Uses the `cordis.patch.yml` + `dsh.bundle.patch` bundle model. Node requirements are 22.19 or later within 22.x, or 24 or later. Live external-service workflows require separate configuration and validation.
 
