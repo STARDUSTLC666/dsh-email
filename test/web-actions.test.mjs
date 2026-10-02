@@ -22,6 +22,41 @@ const BASE = {
   smtp: { host: '', port: 465, secure: true },
 }
 
+test('missing mail credentials direct the settings user to the visible field and connection test', async t => {
+  const previous = process.env.DSH_EMAIL_PASSWORD
+  delete process.env.DSH_EMAIL_PASSWORD
+  t.after(() => { if (previous === undefined) delete process.env.DSH_EMAIL_PASSWORD; else process.env.DSH_EMAIL_PASSWORD = previous })
+  const { post } = mount(t, { config: {}, value: { provider: 'qq', user: 'ui-test@example.com', password: '' } })
+  const result = await post({ action: 'test', value: { ...BASE, user: 'ui-test@example.com', password: '' } })
+  assert.equal(result.body.ok, false)
+  assert.match(result.body.error.message, /授权码.*未填写/)
+  assert.match(result.body.error.message, /设置.*邮件/)
+  assert.doesNotMatch(result.body.error.message, /cordis\.patch|重启|tool-email/)
+})
+
+test('testing one account ignores incomplete neighboring account drafts', async t => {
+  const connections = []
+  t.mock.method(EmailPool.prototype, 'withImap', async function (name) { connections.push(name) })
+  const { post } = mount(t, { config: {} })
+  const yaml = 'first: { provider: qq, user: first@example.com }\nsecond: { provider: qq, user: second@example.com, password: fixture-password }\n'
+  const result = await post({ action: 'test', account: 'second', value: { ...BASE, accountsYaml: yaml, password: '' } })
+  assert.equal(result.body.ok, true)
+  assert.equal(result.body.value.account, 'second')
+  assert.deepEqual(connections, ['second'])
+})
+
+test('the selected card reports its own missing password without using the environment credential', async t => {
+  const previous = process.env.DSH_EMAIL_PASSWORD
+  process.env.DSH_EMAIL_PASSWORD = 'unrelated-env-credential'
+  t.after(() => { if (previous === undefined) delete process.env.DSH_EMAIL_PASSWORD; else process.env.DSH_EMAIL_PASSWORD = previous })
+  const { post } = mount(t, { config: {} })
+  const yaml = 'first: { provider: qq, user: first@example.com }\nsecond: { provider: qq, user: second@example.com }\n'
+  const result = await post({ action: 'test', account: 'second', value: { ...BASE, accountsYaml: yaml, password: '' } })
+  assert.equal(result.body.ok, false)
+  assert.match(result.body.error.message, /账号 "second".*授权码/)
+  assert.doesNotMatch(result.body.error.message, /账号 "first"/)
+})
+
 /**
  * Mount the real route through apply() and drive it with fake req/res objects,
  * the same way plugin-lifecycle.test.mjs does. Returns { get, post } where

@@ -178,6 +178,8 @@ export declare class EmailSettingsBackend {
     constructor(ctx: any, scope: any, rowConfig: EmailConfig);
     /** Wired by apply(): the email_watch core; 'web' keeps its own cursor scope. */
     watchImpl?: (account: string, folder: string, limit: number, scope: string) => Promise<EmailWatchResult>;
+    private get namespace();
+    private get currentConfig();
     private userSection;
     /** Effective config for the stored value (row + user-set fields only). */
     private effectiveStored;

@@ -15,10 +15,8 @@ export declare function messageOf(error: unknown, fallback: string): string;
  * messages are rendered in the settings panel, returned by the mail tools, and
  * pasted into bug reports.
  *
- * Two shapes are masked: a JWT (three base64url segments, which is what every
- * OAuth2 access token looks like) and a long base64 run (the quoted XOAUTH2
- * blob). The replacement keeps the length so a report still says how big the
- * thing was, without saying what it was.
+ * Mask JWTs, long base64 authentication blobs and credential assignments.
+ * Token replacements retain their length for diagnostics.
  */
 export declare function redactCredentials(text: string): string;
 /** The IMAP auth shape imapflow accepts: a password, or an OAuth2 access token. */
@@ -108,8 +106,7 @@ export declare function extractMessageIds(source: Buffer): {
  */
 export declare function buildReplyMessage(original: OriginalDigest, mode: EmailReplyMode, selfAddress: string | readonly string[], text: string, forwardTo?: string): BuiltReply;
 /**
- * One mailbox pool for the whole plugin: pooled IMAP connections per
- * account plus pooled SMTP transporters, with idle sweep and error eviction.
+ * One mailbox pool for the whole plugin: pooled IMAP connections per account.
  */
 export declare class EmailPool {
     private readonly settings;
@@ -155,14 +152,13 @@ export declare class EmailPool {
     startIdleSweep(): void;
     dispose(): void;
     /**
-     * A pooled transporter for one account. The token is captured when the
-     * transporter is built; an OAuth2 token that turns out to be stale is
-     * re-minted in sendMail, which rebuilds the transporter.
+     * Create an unpooled sender with its own socket. The socket callback exposes
+     * only the public SMTP transport hook to the cancellation owner.
      */
     private transporter;
-    private dropTransporter;
     /**
-     * Send through the pooled transporter while making cancellation close it.
+     * Give each send its own SMTP connection so cancellation can close that
+     * operation without closing another send for the same account.
      *
      * An OAuth2 transporter carries a token that was minted when it was built,
      * so a rejection is retried once against a freshly built one (and a fresh

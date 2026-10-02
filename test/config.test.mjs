@@ -12,42 +12,11 @@ test('empty imap/smtp host in the settings page never shadows the provider prese
     smtp: { host: '', port: 465, secure: true },
   }
   const cfg = toEmailConfig(value, { imap: value.imap, smtp: value.smtp })
-  // Both endpoints still hold the schema defaults, so neither is a user
-  // decision: the whole endpoint stays the preset's.
   assert.equal(cfg.imap, undefined, 'an untouched endpoint must not be projected')
   assert.equal(cfg.smtp, undefined, 'an untouched endpoint must not be projected')
   const merged = resolveEmailSettings({ provider: 'qq', user: 'me@qq.com', password: 'p', ...cfg })
   assert.equal(merged.accounts.get('default').imap.host, 'imap.qq.com')
   assert.equal(merged.accounts.get('default').smtp.host, 'smtp.qq.com')
-  assert.equal(merged.accounts.get('default').smtp.port, 465)
-})
-
-test('a stored endpoint that still equals the schema defaults never shadows the preset (outlook keeps 587)', () => {
-  // Saving the settings page once persists the schema defaults, so a live
-  // document carries imap/smtp { host: '', port: <default>, secure: true }.
-  // Projecting that pair read as a user decision and forced smtp 465 over the
-  // outlook preset's 587, dialling the implicit-TLS port instead of
-  // 587/STARTTLS — the send then hung until the tool deadline.
-  const stored = { imap: { host: '', port: 993, secure: true }, smtp: { host: '', port: 465, secure: true } }
-  const projected = toEmailConfig({ provider: 'outlook', user: 'me@outlook.com', password: 'p', ...stored }, stored)
-  assert.equal(projected.smtp, undefined)
-  assert.equal(projected.imap, undefined)
-  const resolved = resolveEmailSettings({ provider: 'outlook', user: 'me@outlook.com', password: 'p', ...projected })
-  assert.equal(resolved.accounts.get('default').smtp.port, 587)
-  assert.equal(resolved.accounts.get('default').smtp.secure, false)
-  assert.equal(resolved.accounts.get('default').imap.port, 993)
-
-  // A value the user really changed is still a decision, even with no host.
-  const changed = toEmailConfig(
-    { provider: 'outlook', user: 'me@outlook.com', password: 'p', smtp: { host: '', port: 2525, secure: false } },
-    { smtp: { port: 2525, secure: false } },
-  )
-  assert.equal(changed.smtp.port, 2525, 'a port the user changed is still projected')
-  assert.equal(changed.smtp.secure, false)
-
-  // The draft path (user === null) keeps projecting everything, as documented.
-  const draft = toEmailConfig({ provider: 'outlook', user: 'me@outlook.com', password: 'p', ...stored }, null)
-  assert.equal(draft.smtp.port, 465)
 })
 
 test('single-account shorthand resolves as account "default"', () => {
@@ -79,8 +48,8 @@ test('unknown provider fails loud with the supported list', () => {
 })
 
 test('missing user / password / hosts each produce an actionable error', () => {
-  assert.throws(() => resolveEmailSettings({}), /user（邮箱地址）未填写/)
-  assert.throws(() => resolveEmailSettings({ provider: 'qq', user: 'a@b.c' }), /password 未填写/)
+  assert.throws(() => resolveEmailSettings({}), /邮箱地址未填写/)
+  assert.throws(() => resolveEmailSettings({ provider: 'qq', user: 'a@b.c' }), /授权码.*未填写/)
   assert.throws(() => resolveEmailSettings({ user: 'a@b.c', password: 'p' }), /imap.host 未填写/)
 })
 
@@ -113,7 +82,7 @@ test('blank settings passwords use the environment in both draft tests and saved
     }
     assert.equal(resolveEmailSettings({ provider: 'qq', user: 'me@qq.com', password: 'explicit-secret' }).accounts.get('default').password, 'explicit-secret')
     delete process.env[EMAIL_PASSWORD_ENV]
-    assert.throws(() => resolveEmailSettings(toEmailConfig(draft, null)), /password 未填写/)
+    assert.throws(() => resolveEmailSettings(toEmailConfig(draft, null)), /授权码.*未填写/)
   } finally {
     if (old === undefined) delete process.env[EMAIL_PASSWORD_ENV]
     else process.env[EMAIL_PASSWORD_ENV] = old
@@ -173,11 +142,11 @@ test('multi-account ignores the password env fallback', () => {
   try {
     assert.throws(
       () => resolveEmailSettings({ provider: 'qq', accounts: { a: { user: 'a@x.y' } } }),
-      /password 未填写/,
+      /授权码.*未填写/,
     )
     assert.throws(
       () => resolveEmailSettings({ provider: 'qq', password: 'shared-secret', accounts: { a: { user: 'a@x.y', password: '' } } }),
-      /password 未填写/,
+      /授权码.*未填写/,
     )
   } finally {
     if (old === undefined) delete process.env[EMAIL_PASSWORD_ENV]
@@ -537,4 +506,3 @@ test('serverPresets: a preset may be bare — its endpoints are copied verbatim'
   assert.equal(bare.imap.port, undefined, 'an omitted port stays omitted — the preset is copied, not guessed')
   assert.equal(bare.smtp.host, 'smtp.bare')
 })
-

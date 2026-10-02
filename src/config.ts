@@ -68,6 +68,25 @@ export interface SmtpConfig {
   secure?: boolean
 }
 
+/** Legacy form placeholders; an untouched blank-host endpoint delegates to its provider. */
+export const ENDPOINT_DEFAULTS = {
+  imap: { port: 993, secure: true }, smtp: { port: 465, secure: true },
+} as const
+
+export function normalizeSettingsEndpoint<T extends SmtpConfig>(value: T, kind: keyof typeof ENDPOINT_DEFAULTS): Omit<T, 'host' | 'port' | 'secure'> & SmtpConfig {
+  if (typeof value.host !== 'string' || value.host.trim() !== '') return value
+  const normalized = { ...value }
+  delete normalized.host
+  const defaults = ENDPOINT_DEFAULTS[kind]
+  // A changed port or TLS choice is intentional; preserve that whole combination.
+  if ((value.port === undefined || value.port === defaults.port)
+    && (value.secure === undefined || value.secure === defaults.secure)) {
+    delete normalized.port
+    delete normalized.secure
+  }
+  return normalized
+}
+
 /** One mailbox account. Top-level shorthand fields act as shared defaults. */
 export interface AccountConfig {
   /** Built-in provider name, or a custom serverPresets name. */
@@ -368,13 +387,18 @@ function normalizeAccountForYaml(value: unknown): unknown {
  * Resolve and validate the raw row config. Throws with an actionable message
  * (in Chinese, since it is what the user and the model both read) when the
  * account is not fully specified.
+ * An explicit account resolves only that card for connection tests, without
+ * making named accounts eligible for the single-account environment password.
  */
-export function resolveEmailSettings(config: EmailConfig | undefined): ResolvedEmailSettings {
+export function resolveEmailSettings(config: EmailConfig | undefined, onlyAccount?: string): ResolvedEmailSettings {
   const raw = config ?? {}
   const common: AccountConfig = {
     provider: raw.provider,
     user: raw.user,
     password: raw.password,
+    senderName: raw.senderName,
+    authUser: raw.authUser,
+    authPassword: raw.authPassword,
     clientId: raw.clientId,
     authKind: raw.authKind,
     imap: raw.imap,
@@ -385,6 +409,10 @@ export function resolveEmailSettings(config: EmailConfig | undefined): ResolvedE
   const entries = parsedYaml !== undefined
     ? parsedYaml.map
     : (raw.accounts === undefined || Object.keys(raw.accounts).length === 0 ? undefined : raw.accounts)
+  const available = entries === undefined ? ['default'] : Object.keys(entries)
+  if (onlyAccount !== undefined && !available.includes(onlyAccount)) {
+    throw new Error(`未知账号 "${onlyAccount}"，可用：${available.join('、')}`)
+  }
   // The custom preset table is read once, here, and never stored on the result:
   // it is a lookup source for provider names, not part of the resolved config.
   // A broken preset text degrades to "no custom presets" — the account-level
@@ -402,11 +430,14 @@ export function resolveEmailSettings(config: EmailConfig | undefined): ResolvedE
     accounts.set('default', resolveAccount('default', common, {}, true, providers, known))
   } else {
     for (const [name, acc] of Object.entries(entries)) {
+      if (onlyAccount !== undefined && name !== onlyAccount) continue
       accounts.set(name, resolveAccount(name, common, acc ?? {}, false, providers, known))
     }
   }
   let defaultName: string
-  if (raw.defaultAccount !== undefined && raw.defaultAccount !== '') {
+  if (onlyAccount !== undefined) {
+    defaultName = onlyAccount
+  } else if (raw.defaultAccount !== undefined && raw.defaultAccount !== '') {
     if (!accounts.has(raw.defaultAccount)) {
       throw new Error(`dsh-email：defaultAccount "${raw.defaultAccount}" 不存在，可用账号：${[...accounts.keys()].join('、')}`)
     }
@@ -472,7 +503,25 @@ export function presetNamesIn(text: string | undefined): string[] {
   }
 }
 
-/** Merge one account over the shared shorthand and validate it. */
+/** Materialize shared account defaults without replacing a named provider's servers. */
+export function mergeAccountDefaults(common: AccountConfig, account: AccountConfig = {}): AccountConfig {
+  const acc = account ?? {}
+  const ownProvider = acc.provider !== undefined && acc.provider !== ''
+  // A named provider selects its own servers; shared connection budgets still apply.
+  const sharedImap = ownProvider ? {
+    ...(common.imap?.connectionTimeoutMs !== undefined ? { connectionTimeoutMs: common.imap.connectionTimeoutMs } : {}),
+    ...(common.imap?.socketTimeoutMs !== undefined ? { socketTimeoutMs: common.imap.socketTimeoutMs } : {}),
+  } : common.imap && normalizeSettingsEndpoint(common.imap, 'imap')
+  const sharedSmtp = !ownProvider && common.smtp ? normalizeSettingsEndpoint(common.smtp, 'smtp') : undefined
+  const imap = { ...sharedImap, ...(acc.imap && normalizeSettingsEndpoint(acc.imap, 'imap')) }
+  const smtp = { ...sharedSmtp, ...(acc.smtp && normalizeSettingsEndpoint(acc.smtp, 'smtp')) }
+  return { ...common, ...acc,
+    imap: Object.keys(imap).length > 0 ? imap : undefined,
+    smtp: Object.keys(smtp).length > 0 ? smtp : undefined,
+  }
+}
+
+/** Merge one account over shared defaults and its selected provider, then validate it. */
 function resolveAccount(
   name: string,
   common: AccountConfig,
@@ -496,20 +545,23 @@ function resolveAccount(
   const authUser = (acc.authUser ?? common.authUser ?? '').trim() || user
   const authPassword = (acc.authPassword ?? common.authPassword) || password
   const senderName = (acc.senderName ?? common.senderName ?? '').trim()
+  const merged = mergeAccountDefaults(common, acc)
+  const accountImap = merged.imap && normalizeSettingsEndpoint(merged.imap, 'imap')
+  const accountSmtp = merged.smtp && normalizeSettingsEndpoint(merged.smtp, 'smtp')
   const imap = {
-    host: acc.imap?.host ?? common.imap?.host ?? preset?.imap.host,
-    port: acc.imap?.port ?? common.imap?.port ?? preset?.imap.port,
-    secure: acc.imap?.secure ?? common.imap?.secure ?? preset?.imap.secure,
-    connectionTimeoutMs: acc.imap?.connectionTimeoutMs ?? common.imap?.connectionTimeoutMs,
-    socketTimeoutMs: acc.imap?.socketTimeoutMs ?? common.imap?.socketTimeoutMs,
+    host: accountImap?.host ?? preset?.imap.host,
+    port: accountImap?.port ?? preset?.imap.port,
+    secure: accountImap?.secure ?? preset?.imap.secure,
+    connectionTimeoutMs: accountImap?.connectionTimeoutMs,
+    socketTimeoutMs: accountImap?.socketTimeoutMs,
   }
   const smtp = {
-    host: acc.smtp?.host ?? common.smtp?.host ?? preset?.smtp.host,
-    port: acc.smtp?.port ?? common.smtp?.port ?? preset?.smtp.port,
-    secure: acc.smtp?.secure ?? common.smtp?.secure ?? preset?.smtp.secure,
+    host: accountSmtp?.host ?? preset?.smtp.host,
+    port: accountSmtp?.port ?? preset?.smtp.port,
+    secure: accountSmtp?.secure ?? preset?.smtp.secure,
   }
   const problems: string[] = []
-  if (user === '') problems.push(`账号 "${name}" 的 user（邮箱地址）未填写`)
+  if (user === '') problems.push(`账号 "${name}" 的邮箱地址未填写`)
   // An explicit `authKind` outranks the derivation: a tenant that still accepts
   // an app password for Exchange Online, or a mailbox that worked before the
   // derivation existed, keeps working instead of being told「尚未登录」.
@@ -524,12 +576,12 @@ function resolveAccount(
   // in the OAuth2 store, and requiring a password would demand a secret
   // Microsoft no longer accepts for Exchange Online.
   if (!oauth2 && authPassword === '') {
-    problems.push(`账号 "${name}" 的 ${authUser === user ? 'password' : 'authPassword'} 未填写（单账号可用环境变量 ${EMAIL_PASSWORD_ENV}）`)
+    problems.push(`账号 "${name}" 的${authUser === user ? '授权码 / 应用专用密码' : '登录账号的密码'}未填写`)
   }
   if (imap.host === undefined || imap.host === '') problems.push(`账号 "${name}" 的 imap.host 未填写（可填 provider 预设：${known.join('/')}）`)
   if (smtp.host === undefined || smtp.host === '') problems.push(`账号 "${name}" 的 smtp.host 未填写（同上）`)
   if (problems.length > 0) {
-    throw new Error(`dsh-email 未配置：${problems.join('；')}。请在 profile 的 cordis.patch.yml 中覆盖 tool-email 行并重启（见插件 README）`)
+    throw new Error(`邮件账号配置不完整：${problems.join('；')}。请在「设置 → 邮件」补全对应账号，再点击「测试连接」。修改会自动保存并立即生效。`)
   }
   const clientId = (acc.clientId ?? common.clientId ?? '').trim()
   return {

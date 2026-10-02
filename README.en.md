@@ -1,5 +1,19 @@
 # dsh-email
 
+## 0.14.6 update (2026-10-02)
+
+Completes [PR #18](https://github.com/STARDUSTLC666/dsh-email/pull/18): untouched saved form endpoints and partial drafts with empty endpoints preserve explicitly configured row IMAP/SMTP servers. The Outlook 587/STARTTLS fix and deliberate port/TLS overrides remain supported.
+
+All 297 email tests pass on Windows / Node `24.16.0`. Both new server-preservation regressions failed before the fix and pass afterward. This change has not been validated through real mailbox login, OAuth2 authorization or delivery.
+
+## 0.14.5 update (2026-10-01)
+
+Fixes [#20](https://github.com/STARDUSTLC666/dsh-email/issues/20): a named account's provider selects its own servers, so Gmail no longer inherits shared Outlook endpoints or becomes an OAuth2 account. Card saves exclude form-derived shared endpoints. Explicit account endpoints and legacy single-account configuration remain supported; top-level sender aliases and login credentials now take effect. Connection failures identify the selected account and actual IMAP host and port, with echoed credentials redacted.
+
+An empty card asks for its email address before testing. Outlook's built-in application ID updates from the saved snapshot, avoiding a false missing-ID warning. Stored separate login passwords are acknowledged without exposing their values.
+
+Validation host: Harness `0.2.0-rc.2` built from the official release tag (commit `639ed01539`), Windows and Node `24.16.0`. All 295 email tests pass; all 18 plugins mount together, with 10 email tools. Native Desktop checks covered adding a card, switching Outlook/Gmail, automatic saving and deletion. The final field-hint fixes have component behavior regressions but have not been retested in the native UI. Successful real-mailbox login, OAuth2 authorization and sending remain unverified.
+
 ![npm](https://img.shields.io/npm/v/dsh-email) ![downloads](https://img.shields.io/npm/dm/dsh-email) ![license](https://img.shields.io/github/license/STARDUSTLC666/dsh-email) ![stars](https://img.shields.io/github/stars/STARDUSTLC666/dsh-email?style=social)
 
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
@@ -37,6 +51,8 @@ Example:
 
 ### Changelog
 
+- **0.14.0 (2026-09-23)**: supports Harness 0.1.7 settings. Existing mailbox settings migrate automatically and appear as editable cards; edits auto-save and survive refresh and restart. Advanced options and saved passwords are preserved; removing all cards no longer resurrects a hidden legacy account.
+
 - **0.13.2 (2026-09-21)**: download attachments by their real MIME section IDs, fixing duplicate filenames selecting the first file. Legacy parsed metadata matches sections one-to-one. Body-only reads and attachment-index caching remain intact; 268 tests pass, including downloaded-file byte checks.
 - **0.13.1 (2026-09-19)**: ships a community public-client registration (thanks [gurio-wine](https://github.com/gurio-wine)), so Outlook / Exchange Online works out of the box; supply your own `clientId` to override it — the card shows which application is in effect. 264 tests.
 - **0.13.0 (2026-09-18)**: fixes for bodies truncated to nothing, `email_watch` skipping new mail, and the attachment cache ignoring UIDVALIDITY; all ten tools declare a timeout; reads and body search download text parts only; the scan fallback labels its own semantics. 262 tests.
@@ -45,15 +61,13 @@ Example:
 - **0.10.8 and earlier**: see [CHANGELOG.md](CHANGELOG.md).
 ## Compatibility
 
-2026-09-21: the current release package was installed through the official CLI in an isolated profile and co-loaded with the other two most-downloaded plugins on source-built Harness `0.1.6-alpha.2`. All 18 plugin tools registered; calendar/email configuration checks, PPT theme listing and 17-row table generation passed. The host is based on the official alpha.2 release plus the tool-scheduler `Symbol.for` fix (`93badd88`). This run did not connect to live mail or calendar services.
-
-Co-load verification was performed on 2026-09-16 with official source builds of Harness `0.1.5-rc.2` and `0.1.6-alpha.1`: all 18 components load alongside ModLens, with passing tool schemas, skill registration and offline read-only calls.
+The current baseline is Harness **0.2.0-rc.2** built from its official release tag on 2026-09-30. All 18 plugins mount together with 99 tools and 35 skills; registration and output checks pass. New email regressions cover provider isolation, card saves, endpoint diagnostics, sender aliases and editor hints. The native UI scope and remaining live-service checks are described above.
 
 **0.11.0 co-load verification (2026-09-18, locally built Harness `0.1.5-rc.2`, `web` profile)**: the plugin mounted without errors; the settings route answered GET with 200 and no `raw` field in the response; a `text/plain` POST was refused with **415**, proving the same-origin guard holds in the real host; under a `application/json` POST the card projection was correct, and an account pinning `authKind: password` reported both `authKindDeclared` and `authKind` as `password`; the panel actually rendered account cards, the eight provider presets with localized labels, the three-way authentication selector, the application (client) ID field with its hint, the missing-ID warning banner (so `--dsw-alias-state-warn-primary` is genuinely defined in the real host) and the Sign in with Microsoft button; the browser console was clean; save worked end to end, and afterwards `accountsYaml` was restored to empty with the original account intact. Offline tests: 231 green. **Still not done**: an end-to-end OAuth2 run against a real Outlook tenant (the device-code flow needs a human to authorize in a browser) and real sending; the `clientId` paths are covered only against a fake authority. Uses the `cordis.patch.yml` + `dsh.bundle.patch` bundle model. Node requirements are 22.19 or later within 22.x, or 24 or later. Live external-service workflows require separate configuration and validation.
 
 On 2026-09-10, npm `dsh-email@0.10.6` passed real QQ mailbox folder/list/read/search calls, the settings page's connection test and Save & Apply, and separate SMTP authentication. An empty authorization-code field correctly used `DSH_EMAIL_PASSWORD`. This recheck did not connect to a real mailbox or send, modify or delete mail.
 
-Follows the official [plugin packaging and installation requirements](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.md): an ESM entry point, prebuilt `lib/`, `dsh.bundle.patch` and a `cordis.patch.yml` layer. The plugin explicitly injects its required services and supplies JSON Schema parameters, canonical output and rendering, with no runtime imports of `@deepseek-ai/*` internals. Use Node 22.19 or later within 22.x, or Node 24 or later. Harness is evolving rapidly; the version above is the tested baseline.
+Follows the official [plugin packaging and installation requirements](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.md): an ESM entry point, prebuilt `lib/`, `dsh.bundle.patch` and a `cordis.patch.yml` layer. The plugin explicitly injects its required services and supplies JSON Schema parameters, canonical output and rendering, without importing host-internal services; configuration uses the public `@deepseek-ai/schemastery` package. Use Node 22.19 or later within 22.x, or Node 24 or later. Harness is evolving rapidly; the version above is the tested baseline.
 
 ## Installation
 
@@ -74,7 +88,7 @@ The whole settings page follows DSH's light and dark themes: every panel style r
 
 Multiple accounts can be edited visually in the settings page: account cards add, edit and delete accounts, rename them, pick the default, and run "Test connection" per account name; a half-filled account never blocks saving — it just gets an "incomplete" badge. Card edits are debounced and auto-saved; there is no longer a "write to YAML text, then click save" step. Version conflicts (settings changed elsewhere) are automatically rebased and re-saved once, rather than repeatedly failing with a stale revision. When a card is saved, an already-stored authorization code is kept by default (leave the password field empty to keep it, type into it to overwrite); comments in the YAML are preserved in place where possible — with an explicit notice when they cannot be. Rename re-keys in place, preserving auth codes and advanced keys, and refuses to overwrite an existing account name. Account-level hand-written imap/smtp endpoints are only cleaned when the **provider actually changes** — runtime resolution prefers the account's own host, so a routine save never silently re-points the connection target.
 
-Values saved in the settings page live in the `dsh-email` namespace of `settings.yaml` and override the YAML default-account config. Authorization-code fields are marked secret, but saving a filled field still writes its value to the local settings file. For a single account, set `DSH_EMAIL_PASSWORD` and leave the authorization-code field empty to avoid saving it; the environment value is not copied into settings.
+On Harness 0.1.7, the page saves directly to the current profile’s `tool-email` entry and applies changes live. Installations using the default entry automatically import the retired `dsh-email` section from `settings.yaml` or `settings.yaml.imported` once. Existing profile values win, and the original file is preserved. Older hosts retain their original settings storage. Authorization-code fields are marked secret, but saving a filled field still writes its value to the local settings file. For a single account, set `DSH_EMAIL_PASSWORD` and leave the authorization-code field empty to avoid saving it; the environment value is not copied into settings.
 
 ## Uninstall
 

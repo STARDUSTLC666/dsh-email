@@ -919,13 +919,18 @@ export class EmailSettingsBackend {
   /** Wired by apply(): the email_watch core; 'web' keeps its own cursor scope. */
   watchImpl?: (account: string, folder: string, limit: number, scope: string) => Promise<EmailWatchResult>
 
+  private get namespace(): string { return this.scope.namespace ?? SETTINGS_NAMESPACE }
+
+  private get currentConfig(): EmailConfig { return this.scope.config ?? this.rowConfig }
+
   private userSection(): Partial<EmailSettingsValue> | undefined {
-    const descriptor = (this.ctx.settings.describe?.() ?? []).find((row: any) => row.ns === SETTINGS_NAMESPACE)
+    const descriptor = (this.ctx.settings.describe?.() ?? []).find((row: any) => row.ns === this.namespace)
     return descriptor?.user as Partial<EmailSettingsValue> | undefined
   }
 
   /** Effective config for the stored value (row + user-set fields only). */
   private effectiveStored(): EmailConfig {
+    if (this.scope.config) return { ...this.currentConfig }
     const stored = this.scope.get() as EmailSettingsValue
     const merged = { ...this.rowConfig, ...toEmailConfig(stored, this.userSection()) }
     // toEmailConfig drops serverPresets — it must never enter the fingerprint —
@@ -935,14 +940,14 @@ export class EmailSettingsBackend {
   }
 
   async snapshot() {
-    const descriptor = (this.ctx.settings.describe?.() ?? []).find((row: any) => row.ns === SETTINGS_NAMESPACE)
+    const descriptor = (this.ctx.settings.describe?.() ?? []).find((row: any) => row.ns === this.namespace)
     const value = this.scope.get() as EmailSettingsValue
     const whale = findWhaleAsset()
     const presets = presetsSnapshot(value.serverPresets)
     // The cards describe the *effective* accountsYaml — the same text the
     // advanced editor shows, and the same source the accounts field reads.
     const effective = this.effectiveStored()
-    const draft = readAccountsDraft(effective.accountsYaml ?? '', presets.custom, effective.defaultAccount, tokenLookup())
+    const draft = readAccountsDraft(this.scope.config ? value.accountsYaml : effective.accountsYaml ?? '', presets.custom, effective.defaultAccount, tokenLookup())
     return {
       settings: {
         value,
@@ -977,7 +982,21 @@ export class EmailSettingsBackend {
     // one of them is a legal choice rather than an unknown provider.
     validateSettingsValue(value, presetNamesIn(value?.serverPresets ?? this.scope.get()?.serverPresets))
     const before = accountNamesOf(this.scope.get() as EmailSettingsValue)
-    await this.ctx.settings.replace(SETTINGS_NAMESPACE, value, expectedRevision)
+    if (this.scope.config) {
+      // The card editor takes ownership of legacy shorthand/maps. Clear only
+      // the superseded account storage, so removing the last card cannot
+      // resurrect a hidden old account on the next read.
+      const section: Record<string, unknown> = Object.hasOwn(value, 'accountsYaml')
+        ? { ...value, accounts: {}, user: '', password: '', authUser: '', authPassword: '' }
+        : { ...value }
+      if (Object.hasOwn(value, 'accountsYaml')) {
+        // The form displays the default card's resolved endpoints; those are not shared edits.
+        delete section.imap
+        delete section.smtp
+      }
+      await this.ctx.settings.update(this.namespace, section, expectedRevision)
+    }
+    else await this.ctx.settings.replace(this.namespace, value, expectedRevision)
     // A deleted account must not leave its refresh token behind: the store is
     // keyed by account name, so the credential of a mailbox that is no longer
     // configured would sit on disk, and a later account reusing that name would
@@ -1005,12 +1024,12 @@ export class EmailSettingsBackend {
     // does for the stored settings (it never enters the resolved fingerprint).
     const draft = toEmailConfig(value, null)
     const presets = value?.serverPresets ?? this.scope.get()?.serverPresets
+    const requested = typeof accountName === 'string' && accountName.trim() !== '' ? accountName.trim() : ''
     const settings = resolveEmailSettings({
-      ...this.rowConfig,
+      ...this.currentConfig,
       ...draft,
       ...(typeof presets === 'string' ? { serverPresets: presets } : {}),
-    })
-    const requested = typeof accountName === 'string' && accountName.trim() !== '' ? accountName.trim() : ''
+    }, requested || undefined)
     const available = [...settings.accounts.keys()]
     const name = requested !== '' ? requested : settings.defaultAccount
     const cfg = settings.accounts.get(name)
@@ -1018,13 +1037,14 @@ export class EmailSettingsBackend {
       throw new Error(`未知账号 "${name}"，可用：${available.join('、')}`)
     }
     const target = { account: name, imapHost: cfg.imap.host, imapPort: cfg.imap.port }
+    const targetDescription = '账号 "' + name + '" · IMAP ' + cfg.imap.host + ':' + cfg.imap.port
     // An OAuth2 account has no password to check: without a token there is
     // nothing to dial with, and a failed dial would only say so less clearly.
     if (cfg.authKind === 'oauth2') {
       try {
         await getFreshAccessToken(name, cfg)
       } catch (error) {
-        throw new Error(messageOf(error, '尚未登录：请先在设置页完成设备码登录'))
+        throw new Error(targetDescription + '（OAuth2）：' + redactCredentials(messageOf(error, '尚未登录：请先在设置页完成设备码登录')))
       }
     }
     const pool = new EmailPool(settings)
@@ -1037,14 +1057,17 @@ export class EmailSettingsBackend {
       // actionable hint instead of the opaque message. The server's own text is
       // redacted first: a refused authentication string is echoed verbatim by
       // many servers, and for XOAUTH2 that blob carries the access token.
-      const raw = redactCredentials(messageOf(error, 'unknown error'))
+      let raw = redactCredentials(messageOf(error, 'unknown error'))
+      for (const secret of [cfg.password, cfg.authPassword]) {
+        if (secret && secret.length >= 4) raw = raw.split(secret).join('[redacted]')
+      }
       const lower = raw.toLowerCase()
       if (lower.includes('command failed') || lower.includes('authentication') || lower.includes('login')) {
         throw new Error(cfg.authKind === 'oauth2'
-          ? '邮箱登录失败：请在设置页重新完成设备码登录（' + raw + '）'
-          : '邮箱登录失败：请检查邮箱地址与授权码（' + raw + '）')
+          ? targetDescription + '（OAuth2）：邮箱登录失败：请在设置页重新完成设备码登录（' + raw + '）'
+          : targetDescription + '：邮箱登录失败：请检查邮箱地址与授权码（' + raw + '）')
       }
-      throw error
+      throw new Error(targetDescription + '：' + raw)
     } finally {
       pool.dispose()
     }
@@ -1221,7 +1244,7 @@ export class EmailSettingsBackend {
         const presets = typeof body.serverPresets === 'string'
           ? customPresetsOf(body.serverPresets).custom
           : customPresetsOf((this.scope.get() as EmailSettingsValue).serverPresets).custom
-        const draft = readAccountsDraft(text, presets, this.rowConfig.defaultAccount, tokenLookup())
+        const draft = readAccountsDraft(text, presets, this.currentConfig.defaultAccount, tokenLookup())
         this.responseJson(res, 200, {
           ok: true,
           value: {

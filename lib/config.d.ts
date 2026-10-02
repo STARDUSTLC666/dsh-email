@@ -56,6 +56,18 @@ export interface SmtpConfig {
     port?: number;
     secure?: boolean;
 }
+/** Legacy form placeholders; an untouched blank-host endpoint delegates to its provider. */
+export declare const ENDPOINT_DEFAULTS: {
+    readonly imap: {
+        readonly port: 993;
+        readonly secure: true;
+    };
+    readonly smtp: {
+        readonly port: 465;
+        readonly secure: true;
+    };
+};
+export declare function normalizeSettingsEndpoint<T extends SmtpConfig>(value: T, kind: keyof typeof ENDPOINT_DEFAULTS): Omit<T, 'host' | 'port' | 'secure'> & SmtpConfig;
 /** One mailbox account. Top-level shorthand fields act as shared defaults. */
 export interface AccountConfig {
     /** Built-in provider name, or a custom serverPresets name. */
@@ -256,8 +268,10 @@ export declare function serializeAccountsYaml(raw: unknown, defaultAccount?: str
  * Resolve and validate the raw row config. Throws with an actionable message
  * (in Chinese, since it is what the user and the model both read) when the
  * account is not fully specified.
+ * An explicit account resolves only that card for connection tests, without
+ * making named accounts eligible for the single-account environment password.
  */
-export declare function resolveEmailSettings(config: EmailConfig | undefined): ResolvedEmailSettings;
+export declare function resolveEmailSettings(config: EmailConfig | undefined, onlyAccount?: string): ResolvedEmailSettings;
 /** Every name a `provider:` may legally use, built-ins first. */
 export declare function providerNames(custom?: Record<string, ServerPreset>): string[];
 /**
@@ -266,6 +280,8 @@ export declare function providerNames(custom?: Record<string, ServerPreset>): st
  * this provider name be written?", where a broken table can only mean "no".
  */
 export declare function presetNamesIn(text: string | undefined): string[];
+/** Materialize shared account defaults without replacing a named provider's servers. */
+export declare function mergeAccountDefaults(common: AccountConfig, account?: AccountConfig): AccountConfig;
 /** v0.1-compatible wrapper: resolve the single (or default) account. */
 export declare function resolveEmailConfig(config: EmailConfig | undefined): ResolvedEmailConfig;
 export declare function clampInt(value: unknown, fallback: number, min: number, max: number): number;
