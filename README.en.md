@@ -1,5 +1,11 @@
 # dsh-email
 
+## 0.14.6 update (2026-10-02)
+
+Completes [PR #18](https://github.com/STARDUSTLC666/dsh-email/pull/18): untouched saved form endpoints and partial drafts with empty endpoints preserve explicitly configured row IMAP/SMTP servers. The Outlook 587/STARTTLS fix and deliberate port/TLS overrides remain supported.
+
+All 297 email tests pass on Windows / Node `24.16.0`. Both new server-preservation regressions failed before the fix and pass afterward. This change has not been validated through real mailbox login, OAuth2 authorization or delivery.
+
 ## 0.14.5 update (2026-10-01)
 
 Fixes [#20](https://github.com/STARDUSTLC666/dsh-email/issues/20): a named account's provider selects its own servers, so Gmail no longer inherits shared Outlook endpoints or becomes an OAuth2 account. Card saves exclude form-derived shared endpoints. Explicit account endpoints and legacy single-account configuration remain supported; top-level sender aliases and login credentials now take effect. Connection failures identify the selected account and actual IMAP host and port, with echoed credentials redacted.

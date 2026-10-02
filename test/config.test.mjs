@@ -12,9 +12,8 @@ test('empty imap/smtp host in the settings page never shadows the provider prese
     smtp: { host: '', port: 465, secure: true },
   }
   const cfg = toEmailConfig(value, { imap: value.imap, smtp: value.smtp })
-  assert.equal(cfg.imap.host, undefined, 'empty host must not be projected')
-  assert.equal(cfg.smtp.host, undefined, 'empty host must not be projected')
-  assert.equal(cfg.imap.port, undefined, 'a saved placeholder default must remain provider-derived')
+  assert.equal(cfg.imap, undefined, 'an untouched endpoint must not be projected')
+  assert.equal(cfg.smtp, undefined, 'an untouched endpoint must not be projected')
   const merged = resolveEmailSettings({ provider: 'qq', user: 'me@qq.com', password: 'p', ...cfg })
   assert.equal(merged.accounts.get('default').imap.host, 'imap.qq.com')
   assert.equal(merged.accounts.get('default').smtp.host, 'smtp.qq.com')

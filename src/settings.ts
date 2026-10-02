@@ -153,7 +153,8 @@ export function toEmailConfig(value: EmailSettingsValue, user?: Partial<EmailSet
     if (isSet(imapKeys.host) && isSet(imapValue.host) && imapValue.host !== '') imap.host = imapValue.host
     if (isSet(imapKeys.port) && isSet(imapValue.port)) imap.port = imapValue.port
     if (isSet(imapKeys.secure) && isSet(imapValue.secure)) imap.secure = imapValue.secure
-    out.imap = imap
+    // An empty endpoint must not erase the row's configured server during merge.
+    if (Object.keys(imap).length > 0) out.imap = imap
   }
   const smtpValue = user?.smtp?.host !== undefined && draft.smtp ? normalizeSettingsEndpoint(draft.smtp, 'smtp') : draft.smtp
   const smtpKeys = user === null ? smtpValue : user?.smtp
@@ -162,7 +163,7 @@ export function toEmailConfig(value: EmailSettingsValue, user?: Partial<EmailSet
     if (isSet(smtpKeys.host) && isSet(smtpValue.host) && smtpValue.host !== '') smtp.host = smtpValue.host
     if (isSet(smtpKeys.port) && isSet(smtpValue.port)) smtp.port = smtpValue.port
     if (isSet(smtpKeys.secure) && isSet(smtpValue.secure)) smtp.secure = smtpValue.secure
-    out.smtp = smtp
+    if (Object.keys(smtp).length > 0) out.smtp = smtp
   }
   return out
 }

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { EmailSettingsSchema, toEmailConfig } from '../lib/settings.js'
+import { EmailSettingsSchema, SETTINGS_NAMESPACE, toEmailConfig, toSettingsBase } from '../lib/settings.js'
 import { resolveEmailSettings } from '../lib/config.js'
 import { createEmailRuntime } from '../lib/runtime.js'
 
@@ -53,4 +53,38 @@ test('current Harness configs containing migrated placeholder endpoints recover 
       'Harness 0.1.7 reads the config directly, without legacy settings projection')
   } finally { runtime.dispose() }
   assert.deepEqual(config, before)
+})
+
+test('untouched saved endpoints preserve explicit row servers in the legacy settings runtime', () => {
+  const row = { provider: 'outlook', user: 'fixture@outlook.com', authKind: 'password', password: 'fixture',
+    imap: { host: 'imap.custom.example', port: 143, secure: false },
+    smtp: { host: 'smtp.custom.example', port: 2525, secure: false } }
+  const saved = { imap: { host: '', port: 993, secure: true }, smtp: { host: '', port: 465, secure: true } }
+  const draft = EmailSettingsSchema({ ...toSettingsBase(row), ...saved })
+  const expected = resolveEmailSettings(row).accounts.get('default')
+  const before = structuredClone(row)
+  const runtime = createEmailRuntime({
+    settings: {
+      register: () => ({ get: () => draft }),
+      describe: () => [{ ns: SETTINGS_NAMESPACE, user: saved }],
+    },
+    effect() {},
+  }, row, () => ({ startIdleSweep() {}, dispose() {} }))
+  try {
+    const actual = runtime.getEffectiveSettings().accounts.get('default')
+    assert.deepEqual(actual.imap, expected.imap, 'saved form defaults must not replace the row IMAP server')
+    assert.deepEqual(actual.smtp, expected.smtp, 'saved form defaults must not replace the row SMTP server')
+  } finally { runtime.dispose() }
+  assert.deepEqual(row, before, 'resolving placeholders must not rewrite the row config')
+})
+
+test('a partial draft with empty endpoints keeps existing row servers', () => {
+  const row = { user: 'fixture@example.com', password: 'fixture',
+    imap: { host: 'imap.custom.example', port: 143, secure: false },
+    smtp: { host: 'smtp.custom.example', port: 2525, secure: false } }
+  const projected = toEmailConfig({ imap: { host: '' }, smtp: {} }, null)
+  const actual = resolveEmailSettings({ ...row, ...projected }).accounts.get('default')
+  const expected = resolveEmailSettings(row).accounts.get('default')
+  assert.deepEqual(actual.imap, expected.imap)
+  assert.deepEqual(actual.smtp, expected.smtp)
 })

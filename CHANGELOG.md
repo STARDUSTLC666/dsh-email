@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.14.6（2026-10-02）
+
+- 完成 [PR #18](https://github.com/STARDUSTLC666/dsh-email/pull/18) 的兼容合并：未修改的表单端点不再产出空对象，避免旧设置和不完整草稿覆盖配置文件里手动填写的 IMAP/SMTP 服务器。
+- 保留 0.14.2 的共享端点归一化规则：Outlook 使用 587/STARTTLS；不含占位 host 的显式 465/TLS 设置、已修改的端口组合和新版 Harness 配置保持有效。
+- 新增旧设置运行时和不完整草稿的服务器保留回归，感谢 SenkjM 提供修复方向。
+- Windows / Node 24.16.0 下 297 项邮件测试通过；两项新增回归在修复前失败、修复后通过。未进行真实邮箱授权或 SMTP 投递验收。
+
 ## 0.14.5（2026-10-01）
 
 - 修复 [#20](https://github.com/STARDUSTLC666/dsh-email/issues/20)：具名账号的服务商预设不再被顶层共享服务器遮蔽；Gmail 不再因继承 Outlook 端点被误判为 OAuth2。保留账号显式端点、传输超时和旧单账号继承规则。
