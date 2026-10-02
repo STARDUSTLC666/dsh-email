@@ -1,7 +1,7 @@
 {
   "name": "dsh-email",
   "version": "0.14.7",
-  "description": "DSH 邮件插件：IMAP/SMTP 收发搜索、回复转发、附件与整理，多账号卡片设置页、Outlook OAuth2 登录与发信审批。",
+  "description": "在 DSH 中收发、搜索和整理邮件，支持多个邮箱账号。",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -20,7 +20,8 @@
     "cordis.patch.yml",
     "README.md",
     "README.en.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "docs"
   ],
   "scripts": {
     "build": "tsc",
