@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.14.7（2026-10-02）
+
+- Fix account cards displaying preset endpoints instead of explicitly configured servers; refresh the summary after saves and provider changes without persisting projections.
+- Upgrade ImapFlow, Mailparser, Nodemailer and the transitive IP address parser; use Nodemailer's bundled types.
+- Handle missing IMAP messages, empty searches and missing attachment streams with explicit recovery errors.
+- Add regression coverage for endpoint display and empty IMAP responses. Windows: 304 tests; production dependency audit: 0 findings.
+
 ## 0.14.6（2026-10-02）
 
 - 完成 [PR #18](https://github.com/STARDUSTLC666/dsh-email/pull/18) 的兼容合并：未修改的表单端点不再产出空对象，避免旧设置和不完整草稿覆盖配置文件里手动填写的 IMAP/SMTP 服务器。

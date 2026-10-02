@@ -1,5 +1,8 @@
 # Narrow exception for the reviewed security update; not a blanket age-policy bypass.
 minimumReleaseAgeExclude:
-  - mailparser@3.9.22
+  - imapflow@2.2.1
+  - mailparser@3.9.33
+  - nodemailer@10.0.13
+  - ip-address@10.7.3
   - '@deepseek-ai/cosmokit@1.8.4'
   - '@deepseek-ai/schemastery@3.18.3'

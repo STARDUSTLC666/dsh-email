@@ -33,6 +33,32 @@ function editor(name, props) {
   return { render, find }
 }
 
+test('account cards display explicitly configured servers instead of provider defaults', () => {
+  const props = {
+    detail: { list: [{ name: 'work', provider: 'gmail', user: 'fixture@example.invalid', imap: { host: 'imap.private.example', port: 1993 }, smtp: { host: 'smtp.private.example', port: 1465 } }] },
+    presets: { builtin: { gmail: { imap: { host: 'imap.gmail.com', port: 993 }, smtp: { host: 'smtp.gmail.com', port: 465 } } } },
+  }
+  const view = editor('AccountCardsEditor', props)
+  const meta = pattern => view.find(view.render(), node => node.children.some(value => typeof value === 'string' && pattern.test(value)))
+  assert.ok(meta(/imap\.private\.example:1993.*smtp\.private\.example:1465/))
+  assert.equal(meta(/imap\.gmail\.com:993/), undefined)
+  props.detail.list[0].imap = { host: 'imap.updated.example', port: 2993 }
+  assert.ok(meta(/imap\.updated\.example:2993/), 'a fresh snapshot updates only the displayed server, preserving edits')
+})
+
+test('switching providers clears the old projected servers before the next snapshot', () => {
+  const props = {
+    detail: { list: [{ name: 'work', provider: 'gmail', user: 'fixture@example.invalid', imap: { host: 'old.private.example', port: 993 }, smtp: { host: 'old.smtp.example', port: 465 } }] },
+    presets: { builtin: { outlook: { imap: { host: 'outlook.office365.com', port: 993 }, smtp: { host: 'smtp.office365.com', port: 587 } } } },
+    onAutoSave() {},
+  }
+  const view = editor('AccountCardsEditor', props)
+  view.find(view.render(), node => node.type === 'button' && node.children.includes('编辑')).props.onClick()
+  view.find(view.render(), node => node.type === 'select').props.onChange({ target: { value: 'outlook' } })
+  assert.ok(view.find(view.render(), node => node.children.some(value => typeof value === 'string' && /outlook\.office365\.com:993.*smtp\.office365\.com:587/.test(value))))
+  assert.equal(view.find(view.render(), node => node.children.some(value => typeof value === 'string' && /old\.private/.test(value))), undefined)
+})
+
 test('an incomplete new account reports unsaved edits until a provider is selected', () => {
   const states = [], saves = []
   const view = editor('AccountCardsEditor', {

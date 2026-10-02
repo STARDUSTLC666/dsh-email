@@ -455,7 +455,7 @@ export class EmailPool {
     // 附件索引只需要 MIME 结构：bodyStructure 已经给出每个附件的 part/名称/大小，
     // 不必为了拿它先拉整封 source（第一次就下载附件的邮件也一样）。
     const message = await client.fetchOne(uid, { uid: true, bodyStructure: true }, { uid: true })
-    if (message === false) {
+    if (message === false || message === undefined) {
       throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folder + '"）')
     }
     signal?.throwIfAborted()
@@ -470,7 +470,7 @@ export class EmailPool {
     const full = message.source !== undefined
       ? message
       : await client.fetchOne(uid, { uid: true, source: true, bodyStructure: true }, { uid: true })
-    if (full === false || full.source === undefined) {
+    if (full === false || full === undefined || full.source === undefined) {
       throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folder + '"）')
     }
     const body = await parseRawMessage(full.source, this.settings.maxBodyChars)
@@ -687,7 +687,7 @@ export class EmailPool {
       greetingTimeout: 10000,
       socketTimeout: 60000,
       getSocket: (options: SMTPTransport.Options, callback: (error: Error | null, socketOptions: any) => void) => {
-        const socket = createConnection({ host: options.host ?? cfg.smtp.host, port: options.port ?? cfg.smtp.port })
+        const socket = createConnection({ host: options.host ?? cfg.smtp.host, port: Number(options.port ?? cfg.smtp.port) })
         onSocket(socket)
         let settled = false
         const finish = (error: Error | null, socketOptions?: any): void => {
@@ -802,6 +802,7 @@ export class EmailPool {
   private async downloadPartText(client: ImapFlow, uid: number, part: TextBodyPart, maxBytes: number, signal?: AbortSignal): Promise<string> {
     const dl = await client.download(uid, part.key, { uid: true, maxBytes })
     signal?.throwIfAborted()
+    if (dl.content === undefined) throw new MailError('邮件正文分段已不存在；将尝试重新读取邮件')
     const buf = await collectStream(dl.content, maxBytes, signal)
     signal?.throwIfAborted()
     return buf.toString('utf8')
@@ -841,7 +842,7 @@ export class EmailPool {
         if (until !== undefined) query.before = until
         const found = await client.search(query, { uid: true })
         signal?.throwIfAborted()
-        uids = found === false ? [] : found
+        uids = Array.isArray(found) ? found : []
         scopeCount = uids.length
       } else if (total > 0) {
         const start = Math.max(1, total - (limit + offset) + 1)
@@ -869,7 +870,7 @@ export class EmailPool {
       const uidValidity = mailbox === false ? 0 : Number(mailbox.uidValidity ?? 0)
       const found = await client.search({ seen: false }, { uid: true })
       signal?.throwIfAborted()
-      const uids = (found === false ? [] : found).slice().sort((a, b) => b - a)
+      const uids = (Array.isArray(found) ? found : []).slice().sort((a, b) => b - a)
       return { account: name, folder: folderName, uidValidity, count: uids.length, uids }
     }, true, signal)
   }
@@ -905,7 +906,7 @@ export class EmailPool {
         client.search({ cc: query, ...dateRange }, { uid: true }),
       ])
       signal?.throwIfAborted()
-      const uids = [...new Set(found.flatMap(result => result === false ? [] : result))].sort((a, b) => b - a)
+      const uids = [...new Set(found.flatMap(result => Array.isArray(result) ? result : []))].sort((a, b) => b - a)
       if (uids.length > 0) {
         // The sample has to cover the requested page (offset + limit) — the same
         // window the fallback scan looks at — so one FETCH serves both the
@@ -1024,7 +1025,7 @@ export class EmailPool {
       // 先只要信封与 MIME 结构，正文按 text/* 分段下载：带 20 MiB 附件的邮件
       // 只为看正文时不再整封拉下来，附件元数据直接复用 bodyStructure。
       const message = await client.fetchOne(uid, { uid: true, envelope: true, bodyStructure: true }, { uid: true })
-      if (message === false) {
+      if (message === false || message === undefined) {
         throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folderName + '"；可用 email_list 重新获取 uid）')
       }
       signal?.throwIfAborted()
@@ -1064,7 +1065,7 @@ export class EmailPool {
       const full = message.source !== undefined
         ? message
         : await client.fetchOne(uid, { uid: true, source: true, bodyStructure: true }, { uid: true })
-      if (full === false || full.source === undefined) {
+      if (full === false || full === undefined || full.source === undefined) {
         throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folderName + '"；可用 email_list 重新获取 uid）')
       }
       const body = await parseRawMessage(full.source, this.settings.maxBodyChars)
@@ -1081,7 +1082,7 @@ export class EmailPool {
     return this.withImap(name, folderName, async (client) => {
       const before = await client.fetchOne(uid, { uid: true, flags: true }, { uid: true })
       signal?.throwIfAborted()
-      if (before === false) {
+      if (before === false || before === undefined) {
         throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folderName + '"；可用 email_list 重新获取 uid）')
       }
       let seen = before.flags?.has('\\Seen') === true
@@ -1168,8 +1169,9 @@ export class EmailPool {
       }
       const dl = await client.download(uid, att.part, { uid: true, maxBytes: this.settings.maxAttachmentBytes })
       signal?.throwIfAborted()
+      if (dl.content === undefined) throw new MailError('附件分段已不存在，请重新读取邮件后再下载')
       const buf = await collectStream(dl.content, this.settings.maxAttachmentBytes, signal)
-      const safeName = sanitizeFilename(dl.meta.filename ?? att.filename ?? attachments[index].filename)
+      const safeName = sanitizeFilename(dl.meta?.filename ?? att.filename ?? attachments[index].filename)
       // Default the destination to the session workspace so the model can
       // read the file back; an explicit downloadDir always wins.
       const dir = this.settings.downloadDirExplicit
@@ -1215,7 +1217,7 @@ export class EmailPool {
     // leaves a half-written mailbox state behind.
     const built = await this.withImap(name, folderName, async (client) => {
       const message = await client.fetchOne(uid, { uid: true, source: true }, { uid: true })
-      if (message === false || message.source === undefined) {
+      if (message === false || message === undefined || message.source === undefined) {
         throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folderName + '"；可用 email_list 重新获取 uid）')
       }
       const ids = extractMessageIds(message.source)

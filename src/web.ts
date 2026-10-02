@@ -215,9 +215,8 @@ function accountEndpoint(
  * render as a card. Nothing here resolves, validates or touches the network —
  * an unknown provider degrades that one card's endpoints, never the list.
  *
- * The endpoints are read from the *preset* only: an account stores a provider
- * id, so a stale hand-written `imap.host` in an existing YAML must not show up
- * in the editor as if it still drove the connection.
+ * Explicit account endpoints override the preset, exactly as in connection
+ * resolution. The card reports them for display without writing them back.
  *
  * `tokens` is the OAuth2 login state, looked up once per snapshot rather than
  * per card: the token file is read from disk, and a card is rendered on every

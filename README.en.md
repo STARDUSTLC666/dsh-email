@@ -1,5 +1,12 @@
 # dsh-email
 
+## 0.14.7 update (2026-10-02)
+
+- Account cards display the effective IMAP/SMTP endpoints. Changing providers clears stale display values without persisting the endpoint summary into account configuration.
+- Upgrade to ImapFlow 2.2.1, Mailparser 3.9.33 and Nodemailer 10.0.13, adapt upstream types and empty responses, and eliminate the production dependency audit findings.
+- Give recovery guidance when a message or attachment disappears during a request; empty search responses remain empty lists.
+- All 304 tests pass on Windows, including local SMTP TLS, STARTTLS, cancellation and OAuth2 protocol fixtures. Production mailbox login and delivery still require user acceptance.
+
 ## 0.14.6 update (2026-10-02)
 
 Completes [PR #18](https://github.com/STARDUSTLC666/dsh-email/pull/18): untouched saved form endpoints and partial drafts with empty endpoints preserve explicitly configured row IMAP/SMTP servers. The Outlook 587/STARTTLS fix and deliberate port/TLS overrides remain supported.
