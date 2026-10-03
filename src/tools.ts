@@ -56,7 +56,7 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
     ...(drafts ? [{
       name: 'email_draft',
       description: '准备可编辑的本地邮件草稿，不投递邮件。用户在设置 → 邮件 → 草稿中编辑、检查附件预览并明确确认后才发送。可在邮箱尚未配置时准备文字草稿；不用于回复原邮件线程。',
-      parameters: { type: 'object', properties: { account: { type: 'string', description: '发件账号名，省略时使用默认账号' }, to: { type: 'string', description: 'To 地址，支持显示名和地址组' }, cc: { type: 'string' }, subject: { type: 'string' }, text: { type: 'string', description: '纯文本正文' }, attachments: { type: 'array', items: { type: 'string' }, maxItems: 10, description: '本地附件路径，用户在预览中检查后才提交' } }, required: ['to', 'subject', 'text'], additionalProperties: false },
+      parameters: { type: 'object', properties: { account: { type: 'string', description: '发件账号名，省略时使用默认账号' }, to: { type: 'string', description: 'To 地址，支持显示名和地址组' }, cc: { type: 'string' }, subject: { type: 'string' }, text: { type: 'string', description: '纯文本正文' }, attachments: { type: 'array', items: { type: 'string' }, description: '最多 10 个本地附件路径，用户在预览中检查后才提交' } }, required: ['to', 'subject', 'text'], additionalProperties: false },
       output: { schema: { type: 'object', properties: { id: { type: 'string' }, state: { type: 'string' }, subject: { type: 'string' } }, required: ['id', 'state', 'subject'] }, render: (_args: unknown, value: unknown): TextBlock[] => [{ type: 'text', text: '本地草稿已保存，邮件未发送。请在设置 → 邮件 → 草稿中打开并检查。\n草稿编号：' + (value as { id: string }).id + '\n主题：' + (value as { subject: string }).subject }] },
       timeoutMs: QUERY_TIMEOUT_MS,
       async execute(args: unknown, exec?: unknown) { const draft = await drafts.create(args as Record<string, unknown>, executionSignal(exec)); return { id: draft.id, state: draft.state, subject: draft.subject } },

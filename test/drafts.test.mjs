@@ -26,6 +26,13 @@ test('drafts persist across backend restarts and remain usable before mailbox co
   assert.equal(result.state, 'draft'); assert.equal(x.sends.length, 0)
   assert.equal((await stat(join(x.home, 'data/dsh-email/drafts-v1.json'))).isFile(), true)
 })
+test('draft tool rejects eleven attachments before reading files or sending', async t => {
+  const x = await setup(t)
+  const tool = buildEmailTools({ getPool() { throw Error('SMTP must not run') }, getEffectiveSettings() { throw Error('not configured') }, watch() {} }, { create: (body, signal) => x.backend.create(body, signal) }).find(def => def.name === 'email_draft')
+  await assert.rejects(tool.execute({ ...x.fields, attachments: Array.from({ length: 11 }, (_, i) => join(x.home, 'absent-' + i + '.txt')) }), /最多 10/)
+  assert.equal((await x.store.list()).length, 0)
+  assert.equal(x.sends.length, 0)
+})
 test('corrupt local data is preserved rather than silently replaced', async t => {
   const x = await setup(t), file = join(x.home, 'data/dsh-email/drafts-v1.json'); await mkdir(dirname(file), { recursive: true }); await writeFile(file, '{broken')
   await assert.rejects(x.store.create(x.fields), /已保留原文件/); assert.equal(await readFile(file, 'utf8'), '{broken')

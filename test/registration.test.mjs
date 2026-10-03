@@ -39,6 +39,23 @@ function fakeCtx(scopeValue = {}) {
 
 const QQ = { provider: 'qq', user: 'a@b.c', password: 'p' }
 
+test('all tool schemas use the portable Harness supported keyword subset', () => {
+  // The host rejects extra validation keywords instead of silently ignoring them.
+  // See deepseek-harness/packages/core/tools/src/json-schema.ts.
+  const supported = new Set(['type', 'oneOf', 'properties', 'required', 'additionalProperties', 'items', 'enum', 'const', 'title', 'description', 'default', 'examples', '$comment', 'deprecated', 'readOnly', 'writeOnly'])
+  const check = (schema, path) => {
+    assert.ok(schema && typeof schema === 'object' && !Array.isArray(schema), path)
+    for (const key of Object.keys(schema)) assert.ok(supported.has(key), path + '.' + key + ' is not supported by Harness')
+    for (const [key, value] of Object.entries(schema.properties ?? {})) check(value, path + '.properties.' + key)
+    if (schema.items) check(schema.items, path + '.items')
+    for (const [index, value] of (schema.oneOf ?? []).entries()) check(value, path + '.oneOf.' + index)
+  }
+  const ctx = fakeCtx()
+  apply(ctx, {})
+  assert.equal(ctx.tools.defs.length, 11)
+  for (const tool of ctx.tools.defs) { check(tool.parameters, tool.name + '.parameters'); check(tool.output.schema, tool.name + '.output') }
+})
+
 test('every registered tool parameters value is a compiled JSON Schema (native wire contract)', () => {
   const ctx = fakeCtx()
   apply(ctx, {})
