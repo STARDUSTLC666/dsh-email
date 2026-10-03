@@ -2,6 +2,8 @@
 
 [English](README.en.md)
 
+![dsh-email 鲸鱼娘插件封面](https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/cover-whale-girl.png)
+
 在 DSH 中收发、搜索和整理邮件，支持多个邮箱账号。
 
 [![npm](https://img.shields.io/npm/v/dsh-email)](https://www.npmjs.com/package/dsh-email) [![downloads](https://img.shields.io/npm/dm/dsh-email)](https://www.npmjs.com/package/dsh-email)

@@ -2,6 +2,8 @@
 
 [中文](README.md)
 
+![dsh-email whale girl plugin cover](https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/cover-whale-girl.png)
+
 Read, send, search and organize email from DSH with multiple accounts.
 
 [![npm](https://img.shields.io/npm/v/dsh-email)](https://www.npmjs.com/package/dsh-email) [![downloads](https://img.shields.io/npm/dm/dsh-email)](https://www.npmjs.com/package/dsh-email)
