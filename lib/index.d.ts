@@ -15,3 +15,5 @@ export { EmailSettingsSchema, SETTINGS_NAMESPACE, toEmailConfig, toSettingsBase,
 export { parseEmailDay } from './tool-contract.js';
 export { EmailSettingsBackend, installEmailSettingsWeb, SETTINGS_ROUTE } from './web.js';
 export type { AccountCardData, AccountCardInput } from './web.js';
+export { EmailDraftBackend, installEmailDrafts, EMAIL_DRAFT_ROUTE } from './draft-web.js';
+export { DraftStore, DraftError } from './draft-store.js';

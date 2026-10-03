@@ -6,6 +6,7 @@ import { EmailSettingsBackend, installEmailSettingsWeb } from './web.js'
 import { liveConfig, Config as ConfigSchema } from './host-config.js'
 import { installLegacySettingsImport } from './legacy-settings.js'
 import { EmailSettingsSchema, SETTINGS_NAMESPACE } from './settings.js'
+import { EmailDraftBackend, installEmailDrafts } from './draft-web.js'
 export const Config = ConfigSchema
 
 export const name = 'tool-email'
@@ -25,7 +26,9 @@ export function apply(ctx: any, config: Config = {}): void {
   const backend = new EmailSettingsBackend(ctx, runtime.settingsScope, config)
   backend.watchImpl = runtime.watch
   installEmailSettingsWeb(ctx, backend)
-  for (const definition of buildEmailTools(runtime)) ctx.tools.register(definition)
+  const drafts = new EmailDraftBackend(runtime, backend)
+  installEmailDrafts(ctx, drafts)
+  for (const definition of buildEmailTools(runtime, drafts)) ctx.tools.register(definition)
   installSendApproval(ctx, runtime)
 }
 
@@ -44,3 +47,5 @@ export { EmailSettingsSchema, SETTINGS_NAMESPACE, toEmailConfig, toSettingsBase,
 export { parseEmailDay } from './tool-contract.js'
 export { EmailSettingsBackend, installEmailSettingsWeb, SETTINGS_ROUTE } from './web.js'
 export type { AccountCardData, AccountCardInput } from './web.js'
+export { EmailDraftBackend, installEmailDrafts, EMAIL_DRAFT_ROUTE } from './draft-web.js'
+export { DraftStore, DraftError } from './draft-store.js'

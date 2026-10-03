@@ -232,6 +232,30 @@ export declare class EmailSettingsBackend {
             credit: string;
         };
     }>;
+    saveRecipientRules(text: string, expectedRevision: number): Promise<{
+        settings: {
+            value: EmailSettingsValue;
+            revision: any;
+            applies: any;
+        };
+        writable: boolean;
+        accounts: string[];
+        accountsDetail: {
+            error?: string | undefined;
+            list: AccountCardData[];
+            defaultAccount?: string | undefined;
+        };
+        presets: {
+            custom: Record<string, ServerPreset>;
+            error?: string;
+            builtin: Record<string, ProviderPreset>;
+        };
+        whale: {
+            url: string;
+            skin: boolean;
+            credit: string;
+        };
+    }>;
     /**
      * Test one account (by name, defaulting to the draft's default account) over
      * a live IMAP login. Returns the endpoint it dialled so the panel can show

@@ -11,6 +11,8 @@ Read, send, search and organize email from DSH with multiple accounts.
 - Read, send, reply and forward using IMAP and SMTP.
 - Manage attachments, search results and mailbox organization.
 - Configure multiple accounts, Outlook OAuth2 and send approval.
+- Prepare and edit local drafts, review To/Cc, content and attachment bytes, then confirm sending.
+- Manage trusted recipients per account and preview address, group and Cc matches.
 
 ## Install
 
@@ -25,6 +27,8 @@ For the web version, replace `desktop` with `web`. Restart DSH after installatio
 ## Start using it
 
 Add an account and test it in Settings → Email. Ask to list recent unread messages or prepare a reply; review recipients and content before sending.
+
+To edit before sending, ask: “Prepare a message with email_draft; do not send yet.” Open Drafts to save edits, inspect attachments and confirm. See [drafts and recipient rules](docs/DRAFTS.en.md).
 
 ## Requirements and configuration
 

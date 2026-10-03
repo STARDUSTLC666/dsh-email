@@ -128,6 +128,8 @@ export interface AccountConfig {
 }
 
 export interface EmailConfig extends AccountConfig {
+  /** Per-account recipient rules, independent of IMAP/SMTP connection settings. */
+  trustedRecipientsYaml?: string
   /** Ask the user for approval before email_send. Default true. */
   sendApproval?: boolean
   /** Plain-text body cap for email_read. Default 20000. */

@@ -1,6 +1,6 @@
 {
   "name": "dsh-email",
-  "version": "0.14.7",
+  "version": "0.15.0",
   "description": "在 DSH 中收发、搜索和整理邮件，支持多个邮箱账号。",
   "type": "module",
   "main": "lib/index.js",
@@ -62,15 +62,17 @@
     }
   },
   "dependencies": {
+    "@deepseek-ai/schemastery": "^3.18.3",
     "imapflow": "^2.2.1",
     "mailparser": "^3.9.33",
     "nodemailer": "^10.0.13",
+    "proper-lockfile": "4.1.2",
     "schemastery": "^3.18.0",
-    "yaml": "^2.9.0",
-    "@deepseek-ai/schemastery": "^3.18.3"
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
+    "@types/proper-lockfile": "4.1.4",
     "typescript": "^5.7.3"
   }
 }

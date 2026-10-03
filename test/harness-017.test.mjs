@@ -3,6 +3,19 @@ import assert from 'node:assert/strict'
 import { createEmailRuntime } from '../lib/runtime.js'
 import { EmailSettingsBackend } from '../lib/web.js'
 
+test('rule saves preserve credentials, and an older account autosave cannot restore an old rule', async t => {
+  let value = { provider: 'qq', user: 'me@example.test', password: 'fixture-secret', trustedRecipientsYaml: '', maxAttachmentBytes: 3145728 }, revision = 1
+  const refs = Object.fromEntries(Object.keys(value).map(key => [key, { get: () => value[key] }]))
+  const ctx = { fiber: { entry: { options: { id: 'email' } } }, settings: { describe: () => [{ ns: 'email', user: value, revision }], async update(_ns, patch, expected) { if (expected !== revision) throw Object.assign(new Error('conflict'), { code: 'SETTINGS_CONFLICT' }); value = { ...value, ...patch }; revision++ } }, effect: fn => fn(), logger: { warn() {} } }
+  const runtime = createEmailRuntime(ctx, refs, () => ({ startIdleSweep() {}, dispose() {} })); t.after(() => runtime.dispose())
+  const backend = new EmailSettingsBackend(ctx, runtime.settingsScope, refs), rule = 'default: { skipApproval: true, addresses: [friend@example.test] }'
+  await backend.saveRecipientRules(rule, 1)
+  assert.equal(value.password, 'fixture-secret'); assert.equal(value.maxAttachmentBytes, 3145728)
+  await assert.rejects(backend.saveRecipientRules('', 1), { code: 'SETTINGS_CONFLICT' })
+  await backend.save({ user: 'new@example.test', trustedRecipientsYaml: '' }, 2)
+  assert.equal(value.trustedRecipientsYaml, rule); assert.equal(value.password, 'fixture-secret'); assert.equal(value.user, 'new@example.test')
+})
+
 test('0.1.7 reads live Config references and writes the owning entry without resetting advanced fields', async t => {
   let value = { provider: 'outlook', user: 'me@example.com', authKind: 'password', password: 'fixture', maxAttachmentBytes: 3145728, accountsYaml: undefined, accounts: {} }
   let revision = 4

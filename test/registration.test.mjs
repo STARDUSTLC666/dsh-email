@@ -55,11 +55,11 @@ test('every registered tool parameters value is a compiled JSON Schema (native w
   assert.deepEqual(send.parameters.properties.attachments.items, { type: 'string' })
 })
 
-test('apply registers the ten email tools even without config', () => {
+test('apply registers the eleven email tools even without config', () => {
   const ctx = fakeCtx()
   apply(ctx, {})
   const names = ctx.tools.defs.map(def => def.name).sort()
-  assert.deepEqual(names, ['email_attachment', 'email_folders', 'email_health', 'email_list', 'email_mark', 'email_read', 'email_reply', 'email_search', 'email_send', 'email_watch'])
+  assert.deepEqual(names, ['email_attachment', 'email_draft', 'email_folders', 'email_health', 'email_list', 'email_mark', 'email_read', 'email_reply', 'email_search', 'email_send', 'email_watch'])
 })
 
 test('every tool returns a config hint instead of throwing when unconfigured', async () => {
@@ -243,11 +243,10 @@ test('no approval channel denies with the headless hint', async () => {
 })
 
 
-test('README 工具一览里的 10 个工具都声明有限的 timeoutMs（查询 60s，search/watch 120s）', () => {
+test('all eleven public tools declare finite timeouts', () => {
   const ctx = fakeCtx()
   apply(ctx, {})
-  // README「工具一览」的 10 个工具，逐项核对，防止漏加。
-  const readmeTools = ['email_list', 'email_read', 'email_search', 'email_send', 'email_folders', 'email_attachment', 'email_health', 'email_watch', 'email_mark', 'email_reply']
+  const readmeTools = ['email_draft', 'email_list', 'email_read', 'email_search', 'email_send', 'email_folders', 'email_attachment', 'email_health', 'email_watch', 'email_mark', 'email_reply']
   assert.deepEqual(ctx.tools.defs.map(def => def.name).sort(), [...readmeTools].sort())
   const slow = new Set(['email_search', 'email_watch'])
   for (const def of ctx.tools.defs) {

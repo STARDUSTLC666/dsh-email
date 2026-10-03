@@ -1209,6 +1209,14 @@ export class EmailPool {
     }
   }
 
+  /** Send the attachment bytes the human reviewed, without re-reading mutable paths. */
+  async sendPrepared(accountName: string, to: string, subject: string, text: string, cc: string, attachments: Array<{ filename: string; content: Buffer }>, signal?: AbortSignal): Promise<EmailSendResult> {
+    const name = this.resolveName(accountName), cfg = this.account(name)
+    if (attachments.length > 10 || attachments.reduce((sum, file) => sum + file.content.length, 0) > Math.min(this.settings.maxAttachmentBytes, 20 * 1024 * 1024)) throw new MailError('草稿附件超过大小或数量上限')
+    const info = await this.sendMail(name, cfg, { from: senderOf(cfg), to, cc, subject, text, attachments, disableFileAccess: true, disableUrlAccess: true }, signal)
+    return { account: name, messageId: String(info.messageId ?? ''), accepted: Array.isArray(info.accepted) ? info.accepted.map(String) : [], rejected: Array.isArray(info.rejected) ? info.rejected.map(String) : [], response: String(info.response ?? '') }
+  }
+
   async reply(accountName: string | undefined, folder: string, uid: number, mode: EmailReplyMode, text: string, forwardTo: string, cc: string | undefined, signal?: AbortSignal): Promise<EmailReplyResult> {
     const name = this.resolveName(accountName)
     const cfg = this.account(name)

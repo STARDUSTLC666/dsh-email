@@ -4,6 +4,14 @@
 
 [历史英文记录](docs/CHANGELOG.en.md)
 
+## 0.15.0 (2026-10-03)
+
+- 新增 email_draft 和本地草稿工作台，支持编辑 To/Cc、发件账号、正文、附件上传与预览下载，再明确确认发送。
+- 发送使用已预览的附件字节；草稿版本冲突、账号或规则变化、重复确认均被拦截。结果不明时先核对邮箱，不自动重发；回执列明接受与拒绝的地址。
+- 新增按账号保存的可信地址/域名规则和匹配预览。全部 To/Cc 匹配且主动启用后才跳过 email_send 的插件确认；回复、宿主权限和草稿手动确认保留。
+- 关闭设置可恢复当前会话中未保存的编辑；修复窄屏侧栏挤压和自定义服务器账号被误标为未完成。
+- 验证范围详见 [0.15.0 验收](docs/validation/0.15.0.md)。
+
 ## 0.14.7 (2026-10-02)
 
 - Fix account cards displaying preset endpoints instead of explicitly configured servers; refresh the summary after saves and provider changes without persisting projections.

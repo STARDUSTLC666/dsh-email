@@ -4,12 +4,15 @@
 
 ## 工具一览
 
+可编辑草稿和按账号的可信收件人规则见[草稿工作台](DRAFTS.md)。新工作台已用官方 Harness 0.2.0-rc.2 验收。
+
 | 工具 | 作用 |
 |---|---|
 | `email_list` | 列出文件夹里最新的邮件（未读过滤、分页、只看摘要不带正文） |
 | `email_read` | 按 uid 读取一封邮件的全文（HTML 邮件自动转纯文本，超长截断） |
 | `email_search` | 按关键词搜索主题/发件人/收件人/抄送（服务器端 subject/from/to/cc；命中会先用信封复核，QQ 这种"什么都匹配"的响应会被判无效）；复核或服务器都没给出可信结果时，默认回退到最近 30 封的正文扫描（含 to/cc） |
 | `email_send` | 代发邮件（支持带附件）。**默认发信前会弹确认**，显示收件人、主题和附件数，由你批准后才发出 |
+| `email_draft` | 准备本地草稿，不发送；用户在「设置 → 邮件 → 草稿」编辑、保存、检查预览后手动确认发送 |
 | `email_folders` | 列出邮箱的文件夹（INBOX/已发送/垃圾邮件/自定义…），拿 path 喂给其他工具 |
 | `email_attachment` | 按序号下载邮件附件（默认存到会话工作区，模型可直接读取；大小受 maxAttachmentBytes 限制） |
 | `email_health` | 离线检查账号配置及 IMAP/SMTP 主机信息；不建立网络连接，实际 IMAP 连通性使用设置页的“测试连接” |
@@ -160,8 +163,8 @@ dsh plugin --profile web remove dsh-email
 ## 安全须知
 
 - **授权码就是你的邮箱钥匙**。它写在本机（profile 的 `cordis.patch.yml` 或 `settings.yaml`），请勿提交到任何 Git 仓库；更推荐用环境变量 `DSH_EMAIL_PASSWORD`。
-- `email_send` 默认走 DSH 审批通道：每次发信都显示「发送邮件给 xx，主题「xx」」，你批准才发出。没有审批通道的环境（如无 UI 的 headless）会**直接拒绝发信**，这是安全默认。
-- 会话处于 **Full Access（完全访问）** 模式时，harness 的审批策略是 never（不弹任何确认框）——`email_send` 会**被拦截并给出明确提示**。两条出路：① 把访问模式切回 Read Only / Write；② 关闭 `sendApproval`（设置页勾掉「发信前确认」），即显式声明自行承担风险。
+- `email_send` 默认走 DSH 审批通道，没有审批界面时拒绝发信。主动启用且保存的可信规则仅在全部 To/Cc 匹配时跳过插件确认，详见[收件人规则](DRAFTS.md)；宿主的其他权限仍生效。
+- **Full Access** 模式的宿主审批策略为 never。需要逐次审批的旧发信路径仍会被拦截；可切换访问模式，或使用新草稿页手动核对并确认。`sendApproval: false` 是关闭所有插件发信确认的全局选项。
 - 本插件不做任何联网上报，凭证只在内存中用于连接你的邮箱服务器。
 
 ## Outlook OAuth2（设备码登录）

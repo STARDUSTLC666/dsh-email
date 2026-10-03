@@ -67,6 +67,13 @@ function fixture(t, row = account) {
   return { state, runtime, tools: buildEmailTools(runtime), ctx }
 }
 
+test('saving recipient rules does not reconnect a live mailbox', t => {
+  const { runtime, state } = fixture(t), before = runtime.getPool()
+  state.user = { trustedRecipientsYaml: 'default: { skipApproval: true, domains: [example.com] }' }
+  assert.equal(runtime.getSettingsValue().trustedRecipientsYaml.includes('example.com'), true)
+  assert.equal(runtime.getPool(), before); assert.equal(before.disposals, 0); assert.equal(state.pools.length, 1)
+})
+
 test('live settings reuse the current pool, replace it on changes, and release it once at unload', (t) => {
   const { runtime, state } = fixture(t)
   const first = runtime.getPool()

@@ -976,6 +976,9 @@ export class EmailSettingsBackend {
   }
 
   async save(value: EmailSettingsValue, expectedRevision: number) {
+    // Rules have an explicit, separate save action. A stale account autosave
+    // must never restore an older trust policy after another tab changed it.
+    value = { ...value, trustedRecipientsYaml: (this.scope.get() as EmailSettingsValue).trustedRecipientsYaml ?? '' }
     if (this.ctx.settings.writable === false) throw new Error('settings provider is read-only')
     // The provider dropdown offers the custom preset names, so a value naming
     // one of them is a legal choice rather than an unknown provider.
@@ -1008,6 +1011,15 @@ export class EmailSettingsBackend {
         if (!after.has(name)) clearTokenFor(name)
       }
     }
+    return this.snapshot()
+  }
+
+  async saveRecipientRules(text: string, expectedRevision: number) {
+    if (this.ctx.settings.writable === false) throw new Error('settings provider is read-only')
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) throw new Error('请重新加载规则后保存')
+    validateSettingsValue({ trustedRecipientsYaml: text } as EmailSettingsValue)
+    if (this.scope.config) await this.ctx.settings.update(this.namespace, { trustedRecipientsYaml: text }, expectedRevision)
+    else await this.ctx.settings.replace(this.namespace, { ...this.scope.get(), trustedRecipientsYaml: text }, expectedRevision)
     return this.snapshot()
   }
 

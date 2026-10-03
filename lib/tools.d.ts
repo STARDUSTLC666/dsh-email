@@ -1,4 +1,5 @@
 import type { EmailRuntime } from './runtime.js';
+import type { EmailDraftBackend } from './draft-web.js';
 import { type TextBlock } from './tool-contract.js';
 export interface EmailToolDefinition {
     name: string;
@@ -11,4 +12,4 @@ export interface EmailToolDefinition {
     execute(args: unknown, exec?: unknown): Promise<unknown>;
     timeoutMs?: number;
 }
-export declare function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffectiveSettings' | 'watch'>): EmailToolDefinition[];
+export declare function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffectiveSettings' | 'watch'>, drafts?: Pick<EmailDraftBackend, 'create'>): EmailToolDefinition[];

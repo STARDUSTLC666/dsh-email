@@ -1,6 +1,7 @@
 /** Outgoing-mail approval is independent of tool execution. */
 import type { EmailRuntime } from './runtime.js'
 import type { EmailReplyArgs, EmailSendArgs } from './types.js'
+import { matchRecipients, parseRecipientPolicies } from './recipient-policy.js'
 
 type ApprovalDecision = { kind: 'allow' } | { kind: 'deny'; reason: string } | { kind: 'ask'; reason?: string }
 interface PendingExecution {
@@ -27,11 +28,21 @@ export function installSendApproval(ctx: ApprovalContext, runtime: Pick<EmailRun
     } catch {
       return next() // unconfigured: let the tool report the actionable hint
     }
+    if (exec.name === 'email_send') {
+      const args = (exec.arguments ?? {}) as EmailSendArgs
+      try {
+        const settings = runtime.getEffectiveSettings(), account = typeof args.account === 'string' && args.account.trim() ? args.account.trim() : settings.defaultAccount
+        if (settings.accounts.has(account) && typeof args.to === 'string' && (args.cc === undefined || typeof args.cc === 'string')) {
+          const policy = parseRecipientPolicies(value.trustedRecipientsYaml).get(account)
+          if (policy?.skipApproval && (await matchRecipients(args.to, args.cc ?? '', policy)).skipsApproval) return next()
+        }
+      } catch { /* Invalid rules or addresses keep the usual approval; never grant trust on a parse failure. */ }
+    }
     let reason: string
     if (exec.name === 'email_send') {
       const args = (exec.arguments ?? {}) as EmailSendArgs
       const attachCount = Array.isArray(args.attachments) ? args.attachments.length : 0
-      reason = '发送邮件给 ' + args.to + '，主题「' + args.subject + '」' + (attachCount > 0 ? '，附件 ' + attachCount + ' 个' : '')
+      reason = '发送邮件给 ' + args.to + (args.cc ? '，抄送 ' + args.cc : '') + '，主题「' + args.subject + '」' + (attachCount > 0 ? '，附件 ' + attachCount + ' 个' : '')
     } else {
       const args = (exec.arguments ?? {}) as EmailReplyArgs
       const mode = typeof args.mode === 'string' && args.mode.trim() !== '' ? args.mode.trim().toLowerCase() : 'reply'

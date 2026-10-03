@@ -4,12 +4,15 @@
 
 ## Tools
 
+See the [draft workbench](DRAFTS.en.md) for editable drafts and per-account trusted recipients. The new workbench was validated with official Harness 0.2.0-rc.2.
+
 | Tool | Purpose |
 |---|---|
 | `email_list` | List the newest mail in a folder (unread filter, pagination, summaries only, no body) |
 | `email_read` | Read one message's full text by uid (HTML auto-converted to plain text, oversized bodies truncated) |
 | `email_search` | Search subject/sender/recipient/CC by keyword (server-side subject/from/to/cc; hits are re-checked against the envelopes, so "match-everything" servers such as QQ are rejected); when nothing believable is returned, it falls back to a body scan of the most recent 30 messages by default (including to/cc) |
 | `email_send` | Send mail on your behalf (attachments supported). **Prompts for confirmation before sending by default**, showing recipients, subject and attachment count; only sends after you approve |
+| `email_draft` | Prepare a local draft without sending; edit, save, inspect the preview and manually confirm in Settings → Email → Drafts |
 | `email_folders` | List the mailbox folders (INBOX/Sent/Junk/custom…); feed the `path` to other tools |
 | `email_attachment` | Download an attachment by index (saved to the session workspace by default so the model can read it directly; size capped by `maxAttachmentBytes`) |
 | `email_health` | Check account configuration and IMAP/SMTP host details offline; makes no network connection. Use Test connection in Web settings to verify IMAP connectivity |
@@ -160,8 +163,8 @@ Every provider requires an authorization code / app-specific password instead of
 ## Security
 
 - **The authorization code is the key to your mailbox.** It lives on this machine (`cordis.patch.yml` or `settings.yaml` in the profile); never commit it to any Git repo; prefer the `DSH_EMAIL_PASSWORD` env var.
-- `email_send` goes through the DSH approval channel by default: every send shows "send mail to xx, subject "xx"" and only sends after you approve. Environments without an approval channel (e.g. headless with no UI) **refuse to send outright** — that is the secure default.
-- When the session is in **Full Access** mode, the harness approval policy is never (no confirmation dialogs) — `email_send` is **blocked with a clear hint**. Two ways out: ① switch the access mode back to Read Only / Write; ② turn off `sendApproval` (uncheck "Confirm before sending" in the settings page), explicitly declaring you accept the risk.
+- `email_send` uses the DSH approval channel by default and refuses sends when no approval UI is available. Explicitly enabled, saved [trusted rules](DRAFTS.en.md) skip plugin approval only when every To/Cc address matches; host permissions still apply.
+- **Full Access** uses the host's never approval policy. Legacy sends requiring individual approval remain blocked; change the access mode or use the new draft page to review and confirm manually. `sendApproval: false` globally disables plugin send approval.
 - This plugin performs no outbound telemetry; credentials are used in memory only to connect to your mail servers.
 
 ## Outlook OAuth2 (device-code login)

@@ -46,6 +46,15 @@ test('account cards display explicitly configured servers instead of provider de
   assert.ok(meta(/imap\.updated\.example:2993/), 'a fresh snapshot updates only the displayed server, preserving edits')
 })
 
+test('a custom account with both explicit servers is complete without a provider preset', () => {
+  const props = { detail: { list: [{ name: 'custom', user: 'fixture@example.test', imap: { host: 'imap.private.example' }, smtp: { host: 'smtp.private.example' } }] }, presets: { builtin: {}, custom: {} } }
+  const complete = editor('AccountCardsEditor', props)
+  assert.equal(complete.find(complete.render(), node => node.type === 'span' && node.children.includes('未完成')), undefined)
+  props.detail.list[0].smtp = undefined
+  const incomplete = editor('AccountCardsEditor', props)
+  assert.ok(incomplete.find(incomplete.render(), node => node.type === 'span' && node.children.includes('未完成')))
+})
+
 test('switching providers clears the old projected servers before the next snapshot', () => {
   const props = {
     detail: { list: [{ name: 'work', provider: 'gmail', user: 'fixture@example.invalid', imap: { host: 'old.private.example', port: 993 }, smtp: { host: 'old.smtp.example', port: 465 } }] },

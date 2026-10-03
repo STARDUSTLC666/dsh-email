@@ -1,5 +1,6 @@
 import z from 'schemastery'
 import { ENDPOINT_DEFAULTS, normalizeSettingsEndpoint, PROVIDER_NAMES, type EmailConfig } from './config.js'
+import { parseRecipientPolicies } from './recipient-policy.js'
 
 /** Settings-document namespace this plugin owns (editable from the Web settings page). */
 export const SETTINGS_NAMESPACE = 'dsh-email'
@@ -15,6 +16,7 @@ export const EmailSettingsSchema = z.object({
   password: z.string().role('secret').default(''),
   inboxFolder: z.string().default('INBOX'),
   sendApproval: z.boolean().default(true),
+  trustedRecipientsYaml: z.string().default(''),
   maxBodyChars: z.number().default(20000),
   downloadDir: z.string().default(''),
   accountsYaml: z.string().role('secret').default(''),
@@ -40,6 +42,7 @@ export interface EmailSettingsValue {
   password: string
   inboxFolder: string
   sendApproval: boolean
+  trustedRecipientsYaml?: string
   maxBodyChars: number
   downloadDir: string
   accountsYaml: string
@@ -56,6 +59,7 @@ export function toSettingsBase(config: EmailConfig): Partial<EmailSettingsValue>
     ...(config.password !== undefined && config.password !== '' ? { password: config.password } : {}),
     ...(config.inboxFolder !== undefined && config.inboxFolder !== '' ? { inboxFolder: config.inboxFolder } : {}),
     ...(config.sendApproval !== undefined ? { sendApproval: config.sendApproval } : {}),
+    ...(config.trustedRecipientsYaml !== undefined ? { trustedRecipientsYaml: config.trustedRecipientsYaml } : {}),
     ...(config.maxBodyChars !== undefined ? { maxBodyChars: config.maxBodyChars } : {}),
     ...(config.downloadDir !== undefined && config.downloadDir !== '' ? { downloadDir: config.downloadDir } : {}),
     ...(config.serverPresets !== undefined && config.serverPresets !== '' ? { serverPresets: config.serverPresets } : {}),
@@ -136,6 +140,7 @@ export function toEmailConfig(value: EmailSettingsValue, user?: Partial<EmailSet
   if (has('password')) set('password', draft.password)
   if (has('inboxFolder')) set('inboxFolder', draft.inboxFolder)
   if (has('sendApproval')) set('sendApproval', draft.sendApproval)
+  if (has('trustedRecipientsYaml')) set('trustedRecipientsYaml', draft.trustedRecipientsYaml)
   if (has('maxBodyChars')) set('maxBodyChars', draft.maxBodyChars)
   if (has('downloadDir')) set('downloadDir', draft.downloadDir)
   if (has('accountsYaml')) set('accountsYaml', draft.accountsYaml)
@@ -200,6 +205,10 @@ function describeValue(value: unknown): string {
  */
 export function validateSettingsValue(value: EmailSettingsValue, extraProviders: readonly string[] = []): void {
   const draft = (value ?? {}) as Partial<EmailSettingsValue>
+  if (draft.trustedRecipientsYaml !== undefined) {
+    if (typeof draft.trustedRecipientsYaml !== 'string') throw new Error('可信收件人规则必须为文本')
+    parseRecipientPolicies(draft.trustedRecipientsYaml)
+  }
   const provider = draft.provider
   if (isSet(provider) && provider !== '' && !PROVIDER_NAMES.includes(provider) && !extraProviders.includes(provider)) {
     const names = [...PROVIDER_NAMES, ...extraProviders]

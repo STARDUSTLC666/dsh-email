@@ -208,6 +208,11 @@ export declare class EmailPool {
     folders(accountName: string | undefined, subscribedOnly: boolean, signal?: AbortSignal): Promise<EmailFoldersResult>;
     downloadAttachment(accountName: string | undefined, folder: string, uid: number, index: number, workspaceHint?: string, signal?: AbortSignal): Promise<EmailAttachmentResult>;
     send(accountName: string | undefined, to: string, subject: string, text: string | undefined, cc: string | undefined, attachmentPaths: string[] | undefined, signal?: AbortSignal): Promise<EmailSendResult>;
+    /** Send the attachment bytes the human reviewed, without re-reading mutable paths. */
+    sendPrepared(accountName: string, to: string, subject: string, text: string, cc: string, attachments: Array<{
+        filename: string;
+        content: Buffer;
+    }>, signal?: AbortSignal): Promise<EmailSendResult>;
     reply(accountName: string | undefined, folder: string, uid: number, mode: EmailReplyMode, text: string, forwardTo: string, cc: string | undefined, signal?: AbortSignal): Promise<EmailReplyResult>;
 }
 /** Stat every attachment path up front; total size must stay under the cap. */
