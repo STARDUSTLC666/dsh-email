@@ -6,7 +6,7 @@
 
 Read, send, search and organize email from DSH with multiple accounts.
 
-[![npm](https://img.shields.io/npm/v/dsh-email)](https://www.npmjs.com/package/dsh-email) [![downloads](https://img.shields.io/npm/dm/dsh-email)](https://www.npmjs.com/package/dsh-email)
+[![npm](https://img.shields.io/npm/v/dsh-email)](https://www.npmjs.com/package/dsh-email) [![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-downloads.svg)](https://www.npmjs.com/package/dsh-email)
 
 ## What it does
 
