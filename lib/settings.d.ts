@@ -12,6 +12,7 @@ export declare const EmailSettingsSchema: import("@deepseek-ai/schemastery").def
     password: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
     inboxFolder: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
     sendApproval: import("@deepseek-ai/schemastery").default<boolean, boolean, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    newMailPopup: import("@deepseek-ai/schemastery").default<boolean, boolean, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
     trustedRecipientsYaml: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
     maxBodyChars: import("@deepseek-ai/schemastery").default<number, number, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
     downloadDir: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
@@ -41,6 +42,7 @@ export declare const EmailSettingsSchema: import("@deepseek-ai/schemastery").def
     password: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
     inboxFolder: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
     sendApproval: import("@deepseek-ai/schemastery").default<boolean, boolean, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    newMailPopup: import("@deepseek-ai/schemastery").default<boolean, boolean, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
     trustedRecipientsYaml: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
     maxBodyChars: import("@deepseek-ai/schemastery").default<number, number, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
     downloadDir: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
@@ -71,6 +73,7 @@ export interface EmailSettingsValue {
     password: string;
     inboxFolder: string;
     sendApproval: boolean;
+    newMailPopup?: boolean;
     trustedRecipientsYaml?: string;
     maxBodyChars: number;
     downloadDir: string;

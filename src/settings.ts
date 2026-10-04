@@ -16,6 +16,7 @@ export const EmailSettingsSchema = z.object({
   password: z.string().role('secret').default(''),
   inboxFolder: z.string().default('INBOX'),
   sendApproval: z.boolean().default(true),
+  newMailPopup: z.boolean().default(true),
   trustedRecipientsYaml: z.string().default(''),
   maxBodyChars: z.number().default(20000),
   downloadDir: z.string().default(''),
@@ -42,6 +43,7 @@ export interface EmailSettingsValue {
   password: string
   inboxFolder: string
   sendApproval: boolean
+  newMailPopup?: boolean
   trustedRecipientsYaml?: string
   maxBodyChars: number
   downloadDir: string
@@ -59,6 +61,7 @@ export function toSettingsBase(config: EmailConfig): Partial<EmailSettingsValue>
     ...(config.password !== undefined && config.password !== '' ? { password: config.password } : {}),
     ...(config.inboxFolder !== undefined && config.inboxFolder !== '' ? { inboxFolder: config.inboxFolder } : {}),
     ...(config.sendApproval !== undefined ? { sendApproval: config.sendApproval } : {}),
+    ...(config.newMailPopup !== undefined ? { newMailPopup: config.newMailPopup } : {}),
     ...(config.trustedRecipientsYaml !== undefined ? { trustedRecipientsYaml: config.trustedRecipientsYaml } : {}),
     ...(config.maxBodyChars !== undefined ? { maxBodyChars: config.maxBodyChars } : {}),
     ...(config.downloadDir !== undefined && config.downloadDir !== '' ? { downloadDir: config.downloadDir } : {}),
@@ -205,6 +208,9 @@ function describeValue(value: unknown): string {
  */
 export function validateSettingsValue(value: EmailSettingsValue, extraProviders: readonly string[] = []): void {
   const draft = (value ?? {}) as Partial<EmailSettingsValue>
+  if (draft.newMailPopup !== undefined && typeof draft.newMailPopup !== 'boolean') {
+    throw new Error('新邮件弹窗开关必须为布尔值')
+  }
   if (draft.trustedRecipientsYaml !== undefined) {
     if (typeof draft.trustedRecipientsYaml !== 'string') throw new Error('可信收件人规则必须为文本')
     parseRecipientPolicies(draft.trustedRecipientsYaml)

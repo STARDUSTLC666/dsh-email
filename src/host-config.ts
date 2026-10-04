@@ -14,6 +14,7 @@ export const Config: z = z.object({
   clientId: z.string().volatile(), authKind: z.union(['password', 'oauth2']).volatile(),
   imap: endpoint().volatile(), smtp: endpoint().volatile(),
   inboxFolder: z.string().volatile(), sendApproval: z.boolean().volatile(),
+  newMailPopup: z.boolean().volatile(),
   maxBodyChars: z.number().volatile(), downloadDir: z.string().volatile(),
   accounts: z.dict(z.any()).role('secret').volatile(), defaultAccount: z.string().volatile(),
   accountsYaml: z.string().role('secret').volatile(), serverPresets: z.string().volatile(),

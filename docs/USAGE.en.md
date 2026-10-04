@@ -24,6 +24,8 @@ See the [draft workbench](DRAFTS.en.md) for editable drafts and per-account trus
 
 Once an account is configured, a "whale-girl courier" popup lives in the bottom-right corner of the main UI: it checks for new mail every 30 seconds and shows a card (sender + subject) when something arrives, auto-dismissing after 12 seconds. The popup shares the cursor logic with `email_watch` but keeps its own counter, so they never consume each other's mail.
 
+In Settings → Email → Accounts, turn off **Show new-mail popups** to hide the current popup and stop automatic mail checks. This setting saves automatically and survives a restart; it defaults to on. Re-enabling first seeds a fresh baseline, without replaying mail from the disabled period. Checks pause while the page is hidden. A change saved in another page takes effect on the next local-settings refresh. Conversation tools, including `email_watch`, remain available.
+
 The popup artwork prefers the locally installed [dsh-deep-whale](https://github.com/Small-tailqwq/dsh-deep-whale) whale-girl skin assets (**never bundled** — read at runtime from your own installation): the artwork is a derivative of the original whale-girl character by [上善](https://www.pixiv.net/users/62155430) (skin by Small-tailqwq), published under CC BY-NC-SA 4.0 (Attribution-NonCommercial-ShareAlike); the popup shows the full attribution chain. Without the skin, a bundled community whale-girl artwork is used (copyright stays with the original author, personal non-commercial use only; removed on request via issue).
 
 Example:

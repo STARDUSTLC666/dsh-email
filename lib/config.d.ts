@@ -108,6 +108,8 @@ export interface AccountConfig {
     inboxFolder?: string;
 }
 export interface EmailConfig extends AccountConfig {
+    /** Show browser new-mail notifications. UI policy only; default true. */
+    newMailPopup?: boolean;
     /** Per-account recipient rules, independent of IMAP/SMTP connection settings. */
     trustedRecipientsYaml?: string;
     /** Ask the user for approval before email_send. Default true. */
