@@ -2,13 +2,20 @@ export interface RecipientPolicy {
     skipApproval: boolean;
     addresses: string[];
     domains: string[];
+    denyAddresses?: string[];
+    denyDomains?: string[];
 }
 export interface RecipientMatch {
     field: 'to' | 'cc';
     address: string;
     matched: boolean;
+    blocked: boolean;
     rule: 'address' | 'domain' | '';
     value: string;
+}
+export declare class RecipientPolicyError extends Error {
+    readonly code = "recipient-denied";
+    constructor(addresses: string[]);
 }
 export declare function canonicalDomain(value: string): string;
 export declare function canonicalAddress(value: string): string;
@@ -23,4 +30,6 @@ export declare function matchRecipients(to: string, cc: string, policy?: Recipie
     rows: RecipientMatch[];
     allTrusted: boolean;
     skipsApproval: boolean;
+    blocked: boolean;
 }>;
+export declare function assertRecipientsAllowed(to: string, cc: string, policy?: RecipientPolicy): Promise<void>;

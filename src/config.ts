@@ -1,6 +1,7 @@
 import { homedir } from 'node:os'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { join } from 'node:path'
+import { parseRecipientPolicies, type RecipientPolicy } from './recipient-policy.js'
 
 /** The 8 built-in provider ids. A `provider` may also name a custom preset. */
 export type ProviderName = 'qq' | '163' | '126' | 'sina' | 'aliyun' | 'gmail' | 'outlook' | 'icloud'
@@ -236,6 +237,7 @@ export function isOAuth2Account(provider: string | undefined, imapHost: string |
 
 /** Fully resolved plugin settings: the account map plus shared policy. */
 export interface ResolvedEmailSettings {
+  recipientPolicies?: Map<string, RecipientPolicy>
   accounts: Map<string, ResolvedEmailConfig>
   defaultAccount: string
   sendApproval: boolean
@@ -457,6 +459,7 @@ export function resolveEmailSettings(config: EmailConfig | undefined, onlyAccoun
   }
   return {
     accounts,
+    recipientPolicies: parseRecipientPolicies(raw.trustedRecipientsYaml),
     defaultAccount: defaultName,
     sendApproval: raw.sendApproval !== false,
     maxBodyChars: clampInt(raw.maxBodyChars, 20000, 1000, 200000),

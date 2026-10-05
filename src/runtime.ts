@@ -108,6 +108,7 @@ export function createEmailRuntime(
   }
 
   let pool: EmailClient | null = null
+  let poolSettings: ResolvedEmailSettings | null = null
   let poolFingerprint = ''
   let disposed = false
   const getPool = (): EmailClient => {
@@ -117,9 +118,13 @@ export function createEmailRuntime(
     if (pool === null || fingerprint !== poolFingerprint) {
       pool?.dispose()
       pool = createPool(effective)
+      poolSettings = effective
       pool.startIdleSweep()
       poolFingerprint = fingerprint
     }
+    // Rules change without disrupting an IMAP connection or watch cursor. The
+    // pool reads this shared settings object at its SMTP submission boundary.
+    if (poolSettings) poolSettings.recipientPolicies = effective.recipientPolicies
     return pool
   }
 

@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import type { Readable } from 'node:stream'
 import type { AuthKind, ResolvedEmailConfig, ResolvedEmailSettings } from './config.js'
 import { getFreshAccessToken, OAuth2Error } from './oauth2.js'
+import { assertRecipientsAllowed } from './recipient-policy.js'
 import { flattenAddresses, parseRawMessage, sanitizeFilename, stripHtml, truncateText } from './parse.js'
 import type {
   AddressEntry,
@@ -728,6 +729,10 @@ export class EmailPool {
    * single attempt they always had.
    */
   private async sendMail(name: string, cfg: ResolvedEmailConfig, message: any, signal?: AbortSignal): Promise<any> {
+    signal?.throwIfAborted()
+    // This is shared by chat sends, prepared drafts, replies and forwards. Enforce
+    // before token refresh or opening any SMTP connection, even with approval off.
+    await assertRecipientsAllowed(message.to ?? '', message.cc ?? '', this.settings.recipientPolicies?.get(name))
     signal?.throwIfAborted()
     const attempt = async (forceToken: boolean): Promise<any> => {
       let token: string | undefined

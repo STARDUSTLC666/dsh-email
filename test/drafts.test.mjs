@@ -52,6 +52,17 @@ test('editing, cancellation and unconfirmed sends perform zero SMTP submissions'
   await assert.rejects(x.backend.action({ action: 'send', id: draft.id, preview: plan.id, confirmed: true }), /预览已过期/)
   assert.equal(x.sends.length, 0); assert.equal((await x.store.get(draft.id)).state, 'draft')
 })
+test('blocked recipients remain visible in review and a confirmed API send leaves a draft with zero submissions', async t => {
+  const x = await setup(t)
+  x.value.sendApproval = false
+  x.value.trustedRecipientsYaml = 'default: { domains: [example.test], skipApproval: true, denyAddresses: [bob@example.test] }'
+  const draft = await x.backend.create(x.fields)
+  const preview = await x.backend.action({ action: 'preview', id: draft.id, revision: 1 })
+  assert.equal(preview.matching.blocked, true); assert.equal(preview.matching.skipsApproval, false)
+  assert.equal(preview.matching.rows.find(row => row.field === 'cc').blocked, true)
+  await assert.rejects(x.backend.action({ action: 'send', id: draft.id, preview: preview.id, confirmed: true }), { code: 'recipient-denied' })
+  assert.equal(x.sends.length, 0); assert.equal((await x.store.get(draft.id)).state, 'draft')
+})
 test('the attachment downloaded in preview is exactly what is sent even if the original changes', async t => {
   const x = await setup(t), path = join(x.home, 'original.txt'); await writeFile(path, 'reviewed bytes')
   const draft = await x.backend.create({ ...x.fields, attachments: [path] }), preview = await x.backend.action({ action: 'preview', id: draft.id, revision: 1 })

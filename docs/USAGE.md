@@ -2,6 +2,10 @@
 
 [返回简介](../README.md) · [更新记录](../CHANGELOG.md) · [验证记录](VALIDATION.md)
 
+## 本次改进
+
+设置页可选填 blockedAddresses / blockedDomains。禁止规则覆盖 To、Cc，sendApproval=off 时仍生效。域名按完整域名匹配，不自动包含子域名。移除被禁止的收件人并重新预览后才能确认发送。
+
 ## 工具一览
 
 可编辑草稿和按账号的可信收件人规则见[草稿工作台](DRAFTS.md)。新工作台已用官方 Harness 0.2.0-rc.2 验收。

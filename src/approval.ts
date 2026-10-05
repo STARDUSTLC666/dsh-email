@@ -22,7 +22,6 @@ export function installSendApproval(ctx: ApprovalContext, runtime: Pick<EmailRun
   ctx.on('tools/pre-execute', async (exec, next) => {
     if (exec?.name !== 'email_send' && exec?.name !== 'email_reply') return next()
     const value = runtime.getSettingsValue()
-    if (value.sendApproval === false) return next()
     try {
       runtime.getEffectiveSettings()
     } catch {
@@ -34,10 +33,15 @@ export function installSendApproval(ctx: ApprovalContext, runtime: Pick<EmailRun
         const settings = runtime.getEffectiveSettings(), account = typeof args.account === 'string' && args.account.trim() ? args.account.trim() : settings.defaultAccount
         if (settings.accounts.has(account) && typeof args.to === 'string' && (args.cc === undefined || typeof args.cc === 'string')) {
           const policy = parseRecipientPolicies(value.trustedRecipientsYaml).get(account)
-          if (policy?.skipApproval && (await matchRecipients(args.to, args.cc ?? '', policy)).skipsApproval) return next()
+          if (policy) {
+            const matching = await matchRecipients(args.to, args.cc ?? '', policy)
+            if (matching.blocked) return { kind: 'deny', reason: '收件人被禁止规则拦截，邮件未发送：' + matching.rows.filter(row => row.blocked).map(row => row.address).join(', ') }
+            if (matching.skipsApproval) return next()
+          }
         }
       } catch { /* Invalid rules or addresses keep the usual approval; never grant trust on a parse failure. */ }
     }
+    if (value.sendApproval === false) return next()
     let reason: string
     if (exec.name === 'email_send') {
       const args = (exec.arguments ?? {}) as EmailSendArgs

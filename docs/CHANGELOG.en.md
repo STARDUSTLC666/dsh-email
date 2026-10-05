@@ -4,6 +4,10 @@
 
 These English notes preserve the earlier translations. The main changelog contains the consolidated version history.
 
+## 0.16.0 (2026-10-05)
+
+- Add per-account blocked addresses and domains. Deny rules override trust and stop every sending path before SMTP connection. Draft previews explain the block and preserve editable drafts.
+
 ## 0.14.7 (2026-10-02)
 
 - Account cards display the effective IMAP/SMTP endpoints. Changing providers clears stale display values without persisting the endpoint summary into account configuration.

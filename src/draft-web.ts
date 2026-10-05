@@ -3,7 +3,7 @@ import { createReadStream } from 'node:fs'
 import { mkdir, open, stat } from 'node:fs/promises'
 import { basename, dirname, resolve } from 'node:path'
 import { DraftError, DraftStore, draftFields, type DraftAttachment, type EmailDraft } from './draft-store.js'
-import { matchRecipients, parseRecipientPolicies, serializeRecipientPolicies } from './recipient-policy.js'
+import { assertRecipientsAllowed, matchRecipients, parseRecipientPolicies, serializeRecipientPolicies, RecipientPolicyError } from './recipient-policy.js'
 import { messageOf, redactCredentials } from './mail-client.js'
 import type { EmailRuntime } from './runtime.js'
 import type { EmailSettingsBackend } from './web.js'
@@ -135,6 +135,7 @@ export class EmailDraftBackend {
       return this.store.sendLock(id, async current => {
         const before = await this.store.get(id); editable(before)
         if (before.revision !== plan.draft.revision || plan.key !== this.connection(before.account).key) throw new DraftError('草稿、账号或规则已改变，请重新预览', 'draft-conflict')
+        await assertRecipientsAllowed(before.to, before.cc, this.connection(before.account).policy)
         const pool = this.runtime.getPool(); current.throwIfAborted()
         const pending = await this.store.change(id, before.revision, value => { editable(value); value.state = 'sending'; value.attemptAt = new Date(this.now()).toISOString() }, current)
         this.invalidate(id)
@@ -147,6 +148,10 @@ export class EmailDraftBackend {
         let receipt: EmailSendResult
         try { receipt = await pool.sendPrepared(before.account, before.to, before.subject, before.text, before.cc, plan.attachments.map(({ filename, content }) => ({ filename, content })), current) }
         catch (error) {
+          if (error instanceof RecipientPolicyError) {
+            await this.store.change(id, pending.revision, value => { value.state = 'draft'; delete value.attemptAt })
+            throw error
+          }
           const failed = await this.store.change(id, pending.revision, value => { value.state = 'uncertain'; value.error = '提交结果未确定；请先去邮箱核对，不会自动重发。' + this.safe(error) }).catch(() => null)
           if (!failed) throw new DraftError('提交结果未确定，且回执未能保存；请先去邮箱核对，不要直接重发', 'draft-storage')
           return { draft: view(failed) }

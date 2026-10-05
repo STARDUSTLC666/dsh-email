@@ -2,6 +2,10 @@
 
 [Overview](../README.en.md) · [Changelog](../CHANGELOG.md) · [Validation](VALIDATION.md)
 
+## Current improvements
+
+Optionally configure blockedAddresses / blockedDomains per account. Rules cover To and Cc and remain active with sendApproval=off. Domains match exactly, excluding subdomains unless listed. Remove blocked recipients and preview again before sending.
+
 ## Tools
 
 See the [draft workbench](DRAFTS.en.md) for editable drafts and per-account trusted recipients. The new workbench was validated with official Harness 0.2.0-rc.2.

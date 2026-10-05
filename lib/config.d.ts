@@ -1,3 +1,4 @@
+import { type RecipientPolicy } from './recipient-policy.js';
 /** The 8 built-in provider ids. A `provider` may also name a custom preset. */
 export type ProviderName = 'qq' | '163' | '126' | 'sina' | 'aliyun' | 'gmail' | 'outlook' | 'icloud';
 /**
@@ -217,6 +218,7 @@ export interface ResolvedEmailConfig {
 export declare function isOAuth2Account(provider: string | undefined, imapHost: string | undefined): boolean;
 /** Fully resolved plugin settings: the account map plus shared policy. */
 export interface ResolvedEmailSettings {
+    recipientPolicies?: Map<string, RecipientPolicy>;
     accounts: Map<string, ResolvedEmailConfig>;
     defaultAccount: string;
     sendApproval: boolean;

@@ -2,8 +2,12 @@ import nodemailer from 'nodemailer'
 import { domainToASCII } from 'node:url'
 import { parse, stringify } from 'yaml'
 
-export interface RecipientPolicy { skipApproval: boolean; addresses: string[]; domains: string[] }
-export interface RecipientMatch { field: 'to' | 'cc'; address: string; matched: boolean; rule: 'address' | 'domain' | ''; value: string }
+export interface RecipientPolicy { skipApproval: boolean; addresses: string[]; domains: string[]; denyAddresses?: string[]; denyDomains?: string[] }
+export interface RecipientMatch { field: 'to' | 'cc'; address: string; matched: boolean; blocked: boolean; rule: 'address' | 'domain' | ''; value: string }
+export class RecipientPolicyError extends Error {
+  readonly code = 'recipient-denied'
+  constructor(addresses: string[]) { super('收件人被禁止规则拦截，邮件未发送 / Recipients blocked; no email sent: ' + addresses.join(', ')); this.name = 'RecipientPolicyError' }
+}
 const normalizer = nodemailer.createTransport({ jsonTransport: true, disableFileAccess: true, disableUrlAccess: true })
 export function canonicalDomain(value: string): string {
   const domain = domainToASCII(value.trim().replace(/\.$/, '')).toLowerCase()
@@ -44,27 +48,34 @@ export function parseRecipientPolicies(text?: string): Map<string, RecipientPoli
   if (!plain(data) || Object.keys(data).length > 50) throw new Error('规则应按账号名填写，最多 50 个账号')
   const policies = new Map<string, RecipientPolicy>()
   for (const [account, raw] of Object.entries(data)) {
-    if (!account.trim() || account.length > 200 || !plain(raw) || Object.keys(raw).some(key => !['skipApproval', 'addresses', 'domains'].includes(key))) throw new Error('账号规则只支持 skipApproval、addresses 与 domains')
+    if (!account.trim() || account.length > 200 || !plain(raw) || Object.keys(raw).some(key => !['skipApproval', 'addresses', 'domains', 'denyAddresses', 'denyDomains'].includes(key))) throw new Error('账号规则只支持 skipApproval、addresses、domains、denyAddresses 与 denyDomains')
     if (raw.skipApproval !== undefined && typeof raw.skipApproval !== 'boolean') throw new Error('skipApproval 必须是布尔值')
     const list = (key: string, convert: (s: string) => string): string[] => {
       const values = raw[key] ?? []
       if (!Array.isArray(values) || values.length > 100 || values.some(value => typeof value !== 'string')) throw new Error(key + ' 必须为字符串数组，最多 100 项')
       return [...new Set(values.map(value => convert(value as string)))]
     }
-    policies.set(account, { skipApproval: raw.skipApproval === true, addresses: list('addresses', canonicalAddress), domains: list('domains', canonicalDomain) })
+    policies.set(account, { skipApproval: raw.skipApproval === true, addresses: list('addresses', canonicalAddress), domains: list('domains', canonicalDomain), denyAddresses: list('denyAddresses', canonicalAddress), denyDomains: list('denyDomains', canonicalDomain) })
   }
   return policies
 }
 export function serializeRecipientPolicies(policies: Map<string, RecipientPolicy>): string {
   return policies.size ? stringify(Object.fromEntries(policies)) : ''
 }
-export async function matchRecipients(to: string, cc: string, policy?: RecipientPolicy): Promise<{ rows: RecipientMatch[]; allTrusted: boolean; skipsApproval: boolean }> {
+export async function matchRecipients(to: string, cc: string, policy?: RecipientPolicy): Promise<{ rows: RecipientMatch[]; allTrusted: boolean; skipsApproval: boolean; blocked: boolean }> {
   const rows: RecipientMatch[] = (await normalizeRecipients(to, cc)).map(row => {
-    if (policy?.addresses.includes(row.address)) return { ...row, matched: true, rule: 'address', value: row.address }
     const domain = row.address.slice(row.address.lastIndexOf('@') + 1)
-    if (policy?.domains.includes(domain)) return { ...row, matched: true, rule: 'domain', value: domain }
-    return { ...row, matched: false, rule: '', value: '' }
+    if (policy?.denyAddresses?.includes(row.address)) return { ...row, matched: false, blocked: true, rule: 'address', value: row.address }
+    if (policy?.denyDomains?.includes(domain)) return { ...row, matched: false, blocked: true, rule: 'domain', value: domain }
+    if (policy?.addresses.includes(row.address)) return { ...row, matched: true, blocked: false, rule: 'address', value: row.address }
+    if (policy?.domains.includes(domain)) return { ...row, matched: true, blocked: false, rule: 'domain', value: domain }
+    return { ...row, matched: false, blocked: false, rule: '', value: '' }
   })
   const allTrusted = rows.length > 0 && rows.every(row => row.matched)
-  return { rows, allTrusted, skipsApproval: policy?.skipApproval === true && allTrusted }
+  return { rows, allTrusted, skipsApproval: policy?.skipApproval === true && allTrusted, blocked: rows.some(row => row.blocked) }
+}
+export async function assertRecipientsAllowed(to: string, cc: string, policy?: RecipientPolicy): Promise<void> {
+  if (!policy?.denyAddresses?.length && !policy?.denyDomains?.length) return
+  const matching = await matchRecipients(to, cc, policy)
+  if (matching.blocked) throw new RecipientPolicyError(matching.rows.filter(row => row.blocked).map(row => row.address))
 }
