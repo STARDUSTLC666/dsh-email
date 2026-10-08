@@ -71,9 +71,9 @@ interface OAuthFailure {
  * normal state, not an error: the user simply has not finished in the browser.
  */
 export declare function classifyOAuthFailure(payload: unknown, httpStatus?: number): OAuthFailure;
-/** Read the store. A missing or unreadable file is 「no tokens」, never a crash. */
+/** Missing/legacy malformed entries mean no tokens; unreadable or corrupt files fail closed. */
 export declare function readTokenStore(): OAuth2TokenStore;
-/** Persist the store. Owner-only where the platform honours the mode; utf8, no BOM. */
+/** Windows: current-user DPAPI. POSIX: private atomic file. Never write plaintext on Windows. */
 export declare function writeTokenStore(store: OAuth2TokenStore): void;
 /** Drop one account's tokens (a dead refresh token, or a mailbox that moved). */
 export declare function clearTokenFor(name: string): boolean;

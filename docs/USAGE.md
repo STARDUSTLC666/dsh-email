@@ -207,7 +207,7 @@ dsh plugin --profile web remove dsh-email
 - **正文搜索**：服务器端只搜 subject / from / to / cc；多数服务器（如 QQ）的 IMAP `TEXT` / `HEADER` 搜索不可靠，无结果时回退到最近 `bodySearchLimit` 封的正文扫描（较慢，可用 `bodySearchFallback` 关闭）。
 - **附件**：内嵌图片暂不支持单独下载；附件定位失败会直接报错而不是下载错误文件（安全默认）。
 - **密码落盘**：设置页保存的授权码以明文写在本机 `settings.yaml`（secret 标记只保证它不进日志 / 导出 / 诊断，不做磁盘加密）。请勿把 `settings.yaml` 交给不信任的人。
-- **OAuth2 token 落盘**：access / refresh token 以明文 JSON 存在 `$DSH_HOME/data/dsh-email/oauth2-tokens.json`（刻意不放进 `settings.yaml`，因此不会随设置导出）。写入时带了 `mode: 0o600`，但这个权限位只在**文件创建那一刻**生效，且**在 Windows 上等于无效**——请勿把该文件交给不信任的人。token 与签发它的应用 ID 绑定，换了 `clientId` 需要重新登录；删除账号会清理它的 token。
+- **OAuth2 token 落盘**：文件为 `$DSH_HOME/data/dsh-email/oauth2-tokens.json`，不随设置导出。0.16.2 起，**Windows 使用当前用户的 DPAPI 加密**，无需设置额外密码；首次读取旧的有效登录数据时自动原位迁移，不留下明文备份。系统 PowerShell / DPAPI 不可用时不会回退写明文；损坏、未知格式或无法解锁的文件保留，并提示恢复操作。macOS / Linux 仍使用明文 JSON，写入以权限 `0600` 的临时文件原子替换，不把这等同于磁盘加密。DPAPI 不隔离同一 Windows 用户运行的其他程序；换设备 / 系统账号需要重新登录，旧版插件也无法读取新的加密格式。遇到解锁问题时，先妥善保留并移走旧文件，再重新登录；请勿分享令牌文件。token 与应用 ID 绑定，换 `clientId` 需重新登录；删除账号只清理该账号的 token。
 - **本地改动会被 `pnpm install` 还原**：如果你是直接改 `node_modules/dsh-email/` 里的文件做本地部署，任何一次 `pnpm install` 都会把它还原成 registry 上的版本（例如 0.10.7）；要长期保留请改成从本地路径或 Git 提交安装。
 
 ## 开发

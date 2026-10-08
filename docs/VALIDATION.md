@@ -1,5 +1,7 @@
 # dsh-email 验证记录
 
+[0.16.2 Windows 令牌加密与迁移验收](validation/0.16.2.md)。
+
 [0.16.1 会话附件与发信策略验收](validation/0.16.1.md)。
 
 [0.15.3 通知开关验收](validation/0.15.3.md)。

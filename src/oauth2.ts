@@ -18,10 +18,10 @@
  * fingerprint and are never logged. Every message that leaves this module is
  * the text the user reads in Chinese, without any token material in it.
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { clampInt, OUTLOOK_OAUTH2_CLIENT_ID, type ResolvedEmailConfig } from './config.js'
+import { isLegacyOAuth2Document, OAuth2StorageError, readOAuth2Document, writeOAuth2Document } from './oauth2-storage.js'
 
 /** The authority that serves both endpoints. `common` accepts any work/school/personal tenant. */
 export const OAUTH2_TENANT = 'common'
@@ -204,13 +204,15 @@ export function classifyOAuthFailure(payload: unknown, httpStatus = 0): OAuthFai
 
 // --- token store -------------------------------------------------------------
 
-/** Read the store. A missing or unreadable file is 「no tokens」, never a crash. */
+/** Missing/legacy malformed entries mean no tokens; unreadable or corrupt files fail closed. */
 export function readTokenStore(): OAuth2TokenStore {
   let doc: unknown
   try {
-    doc = JSON.parse(readFileSync(oauth2TokenFile(), 'utf8'))
-  } catch {
-    return { version: 1, accounts: {} }
+    doc = readOAuth2Document(oauth2TokenFile())
+  } catch (error) {
+    if (error instanceof OAuth2StorageError) throw new OAuth2Error(error.message)
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { version: 1, accounts: {} }
+    throw new OAuth2Error('无法读取 OAuth2 登录数据，请检查文件访问权限。原文件未被覆盖。')
   }
   if (doc === null || typeof doc !== 'object' || Array.isArray(doc)) return { version: 1, accounts: {} }
   const raw = (doc as { accounts?: unknown }).accounts
@@ -221,7 +223,9 @@ export function readTokenStore(): OAuth2TokenStore {
       if (entry !== undefined) accounts[name] = entry
     }
   }
-  return { version: 1, accounts }
+  const store: OAuth2TokenStore = { version: 1, accounts }
+  if (process.platform === 'win32' && isLegacyOAuth2Document(doc) && Object.keys(accounts).length > 0) writeTokenStore(store)
+  return store
 }
 
 /** Keep only well-formed entries: a half-written file must not poison a login. */
@@ -238,11 +242,12 @@ function tokenEntryOf(value: unknown): OAuth2TokenEntry | undefined {
   }
 }
 
-/** Persist the store. Owner-only where the platform honours the mode; utf8, no BOM. */
+/** Windows: current-user DPAPI. POSIX: private atomic file. Never write plaintext on Windows. */
 export function writeTokenStore(store: OAuth2TokenStore): void {
-  const file = oauth2TokenFile()
-  mkdirSync(dirname(file), { recursive: true })
-  writeFileSync(file, JSON.stringify(store, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 })
+  try { writeOAuth2Document(oauth2TokenFile(), store) } catch (error) {
+    if (error instanceof OAuth2StorageError) throw new OAuth2Error(error.message)
+    throw error
+  }
 }
 
 /** Drop one account's tokens (a dead refresh token, or a mailbox that moved). */

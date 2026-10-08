@@ -469,12 +469,14 @@ test('classifyOAuthFailure separates「keep polling」from「tell the user」', 
 
 // --- token store hygiene --------------------------------------------------------
 
-test('the token store tolerates a missing, corrupt or malformed file', () => {
+test('the token store tolerates a missing file and malformed entries, but preserves corrupt files', () => {
   rmSync(tokenFile(), { force: true })
   assert.deepEqual(readTokenStore(), { version: 1, accounts: {} })
 
   writeFileSync(tokenFile(), 'not json at all', 'utf8')
-  assert.deepEqual(readTokenStore(), { version: 1, accounts: {} })
+  assert.throws(() => readTokenStore(), /原文件未被覆盖/)
+  assert.throws(() => writeTokens({}), /原文件未被覆盖/)
+  assert.equal(readFileSync(tokenFile(), 'utf8'), 'not json at all')
 
   writeFileSync(tokenFile(), JSON.stringify({ version: 1, accounts: { a: { refreshToken: '' }, b: 'nope', c: null } }), 'utf8')
   assert.deepEqual(readTokenStore().accounts, {}, 'an entry without a refresh token cannot be used')
@@ -484,7 +486,7 @@ test('writeTokenStore is UTF-8 without a BOM and survives a round trip', () => {
   writeTokens({ 工作: { user: '中文@outlook.com', clientId: 'c', refreshToken: 'r', accessToken: 'a', expiresAt: 123 } })
   const raw = readFileSync(tokenFile())
   assert.equal(raw[0] === 0xef && raw[1] === 0xbb && raw[2] === 0xbf, false, 'no BOM')
-  assert.equal(raw.toString('utf8').includes('中文@outlook.com'), true)
+  assert.equal(raw.toString('utf8').includes('中文@outlook.com'), process.platform !== 'win32')
   assert.equal(readTokenStore().accounts['工作'].refreshToken, 'r')
   assert.deepEqual(oauth2StateOf('工作'), { state: 'logged-in', user: '中文@outlook.com' })
 })

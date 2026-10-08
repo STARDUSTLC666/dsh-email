@@ -14,7 +14,7 @@ Feedback and contributions are welcome: report [issues](https://github.com/STARD
 
 - Read, send, reply and forward using IMAP and SMTP.
 - Manage attachments, search results and mailbox organization.
-- Configure multiple accounts, Outlook OAuth2 and send approval.
+- Configure multiple accounts, Outlook OAuth2, encrypted Windows login tokens and send approval.
 - Turn new-mail popups off in settings; the preference survives restarts.
 - Prepare and edit local drafts, review To/Cc, content and attachment bytes, then confirm sending.
 - Manage trusted and blocked recipients per account and preview address, group and Cc matches.

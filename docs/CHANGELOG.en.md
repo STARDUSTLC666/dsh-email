@@ -4,6 +4,12 @@
 
 These English notes preserve the earlier translations. The main changelog contains the consolidated version history.
 
+## 0.16.2 (2026-10-08)
+
+- Encrypt Windows access / refresh tokens with current-user DPAPI and migrate valid legacy tokens in place, without plaintext backups or secrets in process arguments.
+- Preserve corrupt, unsupported or locked stores and fail closed when encryption is unavailable. Save through private atomic replacement; POSIX writes use 0600 files.
+- Replace the import-only suggestion in [PR #22](https://github.com/STARDUSTLC666/dsh-email/pull/22) with an implementation in the TypeScript source. See the usage guide for recovery and protection boundaries.
+
 ## 0.16.1 (2026-10-08)
 
 - Resolve relative attachments against the current session workspace in both send and draft tools, preserving absolute paths and calls without session context.
