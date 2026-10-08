@@ -4,6 +4,11 @@
 
 These English notes preserve the earlier translations. The main changelog contains the consolidated version history.
 
+## 0.16.1 (2026-10-08)
+
+- Resolve relative attachments against the current session workspace in both send and draft tools, preserving absolute paths and calls without session context.
+- Clarify saved trust, deny rules and Full Access confirmation behavior in both languages and model-facing descriptions; correct the documented deny-rule field names.
+
 ## 0.16.0 (2026-10-05)
 
 - Add per-account blocked addresses and domains. Deny rules override trust and stop every sending path before SMTP connection. Draft previews explain the block and preserve editable drafts.

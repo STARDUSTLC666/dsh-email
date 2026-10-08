@@ -4,7 +4,9 @@
 
 ## Current improvements
 
-Optionally configure blockedAddresses / blockedDomains per account. Rules cover To and Cc and remain active with sendApproval=off. Domains match exactly, excluding subdomains unless listed. Remove blocked recipients and preview again before sending.
+Relative attachment paths in `email_send` and `email_draft` resolve against the current session workspace, avoiding a same-name file in the DSH startup directory after switching workspaces. Absolute paths remain exact; calls without session context retain startup-directory fallback.
+
+Set blocked addresses and domains per account in the Recipient Rules tab; the text configuration fields are `denyAddresses` / `denyDomains`. Rules cover To and Cc and remain active with send approval off. Domains match exactly, excluding subdomains unless listed. Remove blocked recipients and preview again before sending. Trust skips `email_send` plugin confirmation only when every To/Cc address matches and skipping has been explicitly enabled; host permissions still apply.
 
 ## Tools
 

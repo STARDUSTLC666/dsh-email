@@ -7,7 +7,7 @@
 Ask the assistant to use `email_draft`, or create a draft in Settings → Email → Drafts. The tool only saves a local draft; it does not submit mail. Parameters are `to`, `subject`, `text`, with optional `account`, `cc`, and an `attachments` array of local paths.
 
 1. Choose the sender account, edit To/Cc, subject and plain text, then save.
-2. Add attachments. Browser uploads become plugin-owned copies; tool-supplied paths remain references to the original files.
+2. Add attachments. Browser uploads become plugin-owned copies; tool-supplied paths remain references to the original files. Relative tool paths resolve against the current session workspace, while absolute paths remain exact. Calls without session context use the DSH startup directory.
 3. Review the actual sender and display name, every expanded To/Cc address, content, attachment names and sizes. Download preview attachments to inspect them.
 4. Acknowledge the review and confirm sending. Drafts require manual confirmation even when all recipients match trusted rules.
 

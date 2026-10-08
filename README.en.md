@@ -8,6 +8,8 @@ Read, send, search and organize email from DSH with multiple accounts.
 
 [![npm](https://img.shields.io/npm/v/dsh-email)](https://www.npmjs.com/package/dsh-email) [![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-downloads.svg)](https://www.npmjs.com/package/dsh-email)
 
+Feedback and contributions are welcome: report [issues](https://github.com/STARDUSTLC666/dsh-email/issues) or submit [pull requests](https://github.com/STARDUSTLC666/dsh-email/pulls).
+
 ## What it does
 
 - Read, send, reply and forward using IMAP and SMTP.
@@ -15,7 +17,7 @@ Read, send, search and organize email from DSH with multiple accounts.
 - Configure multiple accounts, Outlook OAuth2 and send approval.
 - Turn new-mail popups off in settings; the preference survives restarts.
 - Prepare and edit local drafts, review To/Cc, content and attachment bytes, then confirm sending.
-- Manage trusted recipients per account and preview address, group and Cc matches.
+- Manage trusted and blocked recipients per account and preview address, group and Cc matches.
 
 ## Install
 

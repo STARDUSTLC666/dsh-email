@@ -8,6 +8,8 @@
 
 [![npm](https://img.shields.io/npm/v/dsh-email)](https://www.npmjs.com/package/dsh-email) [![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-downloads.svg)](https://www.npmjs.com/package/dsh-email)
 
+欢迎使用，遇到问题或有改进建议，请提交 [issues](https://github.com/STARDUSTLC666/dsh-email/issues) 和 [PR](https://github.com/STARDUSTLC666/dsh-email/pulls)。
+
 ## 功能
 
 - 通过 IMAP / SMTP 收发、回复和转发邮件。
@@ -15,7 +17,7 @@
 - 多账号设置，支持 Outlook OAuth2 和发信审批。
 - 新邮件弹窗可在设置中关闭，保存后重启仍生效。
 - 准备和编辑本地草稿，核对发件人、To/Cc、正文与附件预览后再确认发送。
-- 按账号管理可信收件人，预览规则如何匹配地址、地址组和抄送。
+- 按账号管理可信与禁止收件人，预览规则如何匹配地址、地址组和抄送。
 
 ## 安装
 
