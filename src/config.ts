@@ -585,7 +585,7 @@ function resolveAccount(
   if (!oauth2 && authPassword === '') {
     problems.push(`账号 "${name}" 的${authUser === user ? '授权码 / 应用专用密码' : '登录账号的密码'}未填写`)
   }
-  if (imap.host === undefined || imap.host === '') problems.push(`账号 "${name}" 的 imap.host 未填写（可填 provider 预设：${known.join('/')}）`)
+  if (imap.host === undefined || imap.host === '') problems.push(`账号 "${name}" 的 imap.host 未填写（可填 provider 预设：${known.join(', ')}）`)
   if (smtp.host === undefined || smtp.host === '') problems.push(`账号 "${name}" 的 smtp.host 未填写（同上）`)
   if (problems.length > 0) {
     throw new Error(`邮件账号配置不完整：${problems.join('；')}。请在「设置 → 邮件」补全对应账号，再点击「测试连接」。修改会自动保存并立即生效。`)

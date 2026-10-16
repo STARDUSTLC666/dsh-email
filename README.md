@@ -10,6 +10,9 @@
 
 欢迎使用，遇到问题或有改进建议，请提交 [issues](https://github.com/STARDUSTLC666/dsh-email/issues) 和 [PR](https://github.com/STARDUSTLC666/dsh-email/pulls)。
 
+
+DSH `0.2.1-alpha.5` 的本轮检查与未验收范围见 [0.16.3 验收记录](docs/validation/0.16.3.md)。
+
 ## 功能
 
 - 通过 IMAP / SMTP 收发、回复和转发邮件。

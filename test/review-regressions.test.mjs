@@ -151,6 +151,16 @@ test('a server error quoted back to the user never carries the credential', () =
   assert.equal(redactCredentials('LOGIN failed for outlook.office365.com'), 'LOGIN failed for outlook.office365.com')
 })
 
+test('incomplete-account guidance keeps provider choices through credential redaction', () => {
+  let failure
+  try { resolveEmailSettings({}) } catch (error) { failure = error }
+  assert.ok(failure instanceof Error)
+  const clean = redactCredentials(failure.message)
+  assert.match(clean, /provider 预设/)
+  for (const provider of ['gmail', 'qq', 'outlook']) assert.ok(clean.includes(provider), provider)
+  assert.doesNotMatch(clean, /已隐去/)
+})
+
 test('the top-level authKind shorthand reaches every account, and an account may override it', () => {
   const settings = resolveEmailSettings({
     authKind: 'password',

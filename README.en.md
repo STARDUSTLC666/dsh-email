@@ -10,6 +10,9 @@ Read, send, search and organize email from DSH with multiple accounts.
 
 Feedback and contributions are welcome: report [issues](https://github.com/STARDUSTLC666/dsh-email/issues) or submit [pull requests](https://github.com/STARDUSTLC666/dsh-email/pulls).
 
+
+See the [0.16.3 validation record](docs/validation/0.16.3.md) for DSH `0.2.1-alpha.5` browser checks and the remaining limits.
+
 ## What it does
 
 - Read, send, reply and forward using IMAP and SMTP.
