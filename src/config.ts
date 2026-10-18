@@ -537,7 +537,9 @@ function resolveAccount(
   providers: Record<string, EndpointPreset>,
   known: string[],
 ): ResolvedEmailConfig {
-  const requested = acc.provider ?? common.provider
+  // Public settings persist the form's empty custom-server selection directly.
+  // Normalize it like the legacy projection and YAML writer before preset lookup.
+  const requested = (acc.provider === '' ? undefined : acc.provider) ?? (common.provider === '' ? undefined : common.provider)
   const preset = requested === undefined ? undefined : providers[requested]
   if (requested !== undefined && preset === undefined) {
     throw new Error(`dsh-email：账号 "${name}" 的 provider "${requested}" 未知，可选：${known.join('/')}；或省略 provider 直接填 imap.host 与 smtp.host`)

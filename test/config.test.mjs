@@ -4,6 +4,28 @@ import { join } from 'node:path'
 import { resolveEmailSettings, resolveEmailConfig, PROVIDER_NAMES, EMAIL_PASSWORD_ENV, clampInt, defaultDownloadDir } from '../lib/index.js'
 import { toEmailConfig } from '../lib/settings.js'
 
+test('blank providers from public settings autosave preserve custom servers and account credentials', () => {
+  const manual = { user: 'sender@custom.test', password: 'fixture-only', imap: { host: 'imap.custom.test', port: 143, secure: false }, smtp: { host: 'smtp.custom.test', port: 2525, secure: false } }
+  for (const config of [
+    { provider: '', ...manual, sendApproval: false },
+    { provider: '', defaultAccount: 'work', accounts: { work: manual }, sendApproval: false },
+    { provider: '', accountsYaml: 'work: ' + JSON.stringify(manual), sendApproval: true },
+    { accounts: { work: { provider: '', ...manual } }, sendApproval: false },
+  ]) {
+    const settings = resolveEmailSettings(config)
+    const account = settings.accounts.get(settings.defaultAccount)
+    assert.equal(account.imap.host, manual.imap.host)
+    assert.equal(account.imap.port, 143)
+    assert.equal(account.smtp.host, manual.smtp.host)
+    assert.equal(account.smtp.port, 2525)
+    assert.equal(account.user, manual.user)
+    assert.equal(account.password, manual.password)
+    assert.equal(settings.sendApproval, config.sendApproval)
+  }
+  assert.equal(resolveEmailSettings({ provider: 'qq', accounts: { work: { provider: '', user: 'sender@qq.com', password: 'fixture-only' } } }).accounts.get('work').imap.host, 'imap.qq.com')
+  assert.throws(() => resolveEmailSettings({ provider: 'unknown', ...manual }), /provider "unknown"/)
+})
+
 test('empty imap/smtp host in the settings page never shadows the provider preset (issues #3/#6)', () => {
   const value = {
     provider: 'qq', user: 'me@qq.com', password: 'p', inboxFolder: 'INBOX',

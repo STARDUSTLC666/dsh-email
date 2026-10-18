@@ -45,6 +45,19 @@ test('broken saved rules keep approval instead of granting access', async () => 
   const run = gate('work: { skipApproval: invalid }')
   await run.run('email_send', { to: 'Alice@example.test' }); assert.deepEqual(run.counts(), { asks: 1, nexts: 1 })
 })
+test('trusted recipients and global opt-out both preserve a downstream host denial', async () => {
+  for (const sendApproval of [true, false]) {
+    let listener, requests = 0
+    installSendApproval({ on(_event, handler) { listener = handler }, get() { return { request: async () => { requests++; return 'allowed-once' } } } }, {
+      getSettingsValue: () => ({ sendApproval, trustedRecipientsYaml: JSON.stringify({ work: policy }) }),
+      getEffectiveSettings: () => ({ accounts: new Map([['work', {}]]), defaultAccount: 'work' }),
+    })
+    const denied = { kind: 'deny', reason: 'Host access policy denies sending' }
+    const result = await listener({ name: 'email_send', arguments: { to: sendApproval ? 'Alice@example.test' : 'unknown@else.test' } }, async () => denied)
+    assert.equal(result, denied)
+    assert.equal(requests, 0)
+  }
+})
 test('blocked Cc and addresses outrank trusted rules and global approval off', async () => {
   const rules = { work: { ...policy, denyAddresses: ['Alice@example.test'], denyDomains: ['blocked.test'] } }
   const p = parseRecipientPolicies(JSON.stringify(rules)).get('work')

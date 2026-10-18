@@ -43,6 +43,14 @@ trustedRecipientsYaml: |
 
 Renaming an account does not transfer old rules. Rule changes do not reconnect the mailbox.
 
+## Global send confirmation
+
+At the top of Settings → Email → Accounts, use “Confirm model-initiated sends.” It is on by default. Turning it off saves automatically and displays the scope of the change.
+
+This is the global `sendApproval` setting and affects every account. With it off, model calls to `email_send` and `email_reply` (including reply-all and forward) skip the plugin's individual confirmation, including recipients outside the trusted list. Account trust rules only skip confirmation for `email_send` when every To/Cc recipient matches; they do not mean unrestricted sending.
+
+Blocked addresses and domains still stop delivery before an SMTP connection. Host permissions still apply, and the Drafts tab still requires human review and explicit send confirmation. Keep global confirmation on and configure account trust rules to allow only selected recipients.
+
 ## Storage and limits
 
 Drafts live at `DSH_HOME/data/dsh-email/drafts-v1.json`, with uploads under `draft-uploads`. Without DSH_HOME the default is `~/.dsh`. Profiles sharing DSH_HOME share drafts; accounts resolve against the current profile and the actual identity appears in review.

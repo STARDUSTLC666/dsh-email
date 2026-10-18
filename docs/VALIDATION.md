@@ -1,5 +1,7 @@
 # dsh-email 验证记录
 
+[0.17.1 发信策略与设置保存验收](validation/0.17.1.md)。
+
 [0.16.3 · DSH 0.2.1-alpha.5 浏览器操作验收](validation/0.16.3.md)。
 
 [0.16.2 Windows 令牌加密与迁移验收](validation/0.16.2.md)。
