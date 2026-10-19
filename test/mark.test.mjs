@@ -15,6 +15,7 @@ function poolWithFakeImap() {
     moveResult: { sourceUid: 5, destinationUid: 999 },
   }
   const fakeClient = {
+    capabilities: new Set(['MOVE']),
     async fetchOne(uid) {
       state.calls.push(['fetchOne', uid])
       if (!state.exists) return false
