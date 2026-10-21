@@ -4,6 +4,14 @@
 
 ## 本次改进
 
+`email_search` 先复核服务端候选；QQ 等服务器返回空集、报错或无可信命中时，分批扫描信封（From / To / Cc / Subject），默认最近 5000 封、每批 500 封，不下载正文或附件。可用 `headerScanLimit` 调整到 1–20000；按 `headerScan.nextScanOffset` 设置 `headerScanOffset` 继续查更早的信封。`offset` 仍是当前结果窗口内跳过的匹配数，两种 offset 不同。
+
+返回 `searchSource`、`serverMatchCount`、`serverSearchFailed`、`headerScan`（实际扫描数、文件夹总数、命中数、是否完整、下一窗口）和可选 `bodyScan`。信封无匹配且从最新窗口开始时，才按 `bodySearchFallback` / `bodySearchLimit` 检查最近正文。`bodySearchFallback:false` 只关闭正文扫描；部分扫描或正文窗口零命中不能断言邮箱里不存在目标邮件。
+
+切换到下一信封窗口时保留查询词、文件夹、日期条件与窗口大小，并把匹配 `offset` 归零。窗口对应实时邮箱，不是冻结快照；期间新增或删除邮件后，需要严格一致结果时请从 `headerScanOffset:0` 重新开始。
+
+结果按 UID 到达序倒排，不按发件 Date 头或 INTERNALDATE 排序；批量导入的旧邮件可能排在前面。`since` / `until` 使用接收 INTERNALDATE 过滤，缺失时退到 Date 头。
+
 `email_mark(action:"move")` 要求服务器支持 MOVE 或 UIDPLUS；两者均无时会拒绝移动，保持源邮件不变，避免全局 EXPUNGE 误删其他已标记删除的邮件。请改用邮箱原生客户端或升级服务器。
 
 `email_send` 和 `email_draft` 的相对附件路径以当前会话工作区为基准，避免切换工作区后误读 DSH 启动目录的同名文件；绝对路径保持原样，没有会话上下文时仍使用启动目录。
@@ -18,7 +26,7 @@
 |---|---|
 | `email_list` | 列出文件夹里最新的邮件（未读过滤、分页、只看摘要不带正文） |
 | `email_read` | 按 uid 读取一封邮件的全文（HTML 邮件自动转纯文本，超长截断） |
-| `email_search` | 按关键词搜索主题/发件人/收件人/抄送（服务器端 subject/from/to/cc；命中会先用信封复核，QQ 这种"什么都匹配"的响应会被判无效）；复核或服务器都没给出可信结果时，默认回退到最近 30 封的正文扫描（含 to/cc） |
+| `email_search` | 按关键词搜索主题/发件人/收件人/抄送，复核服务端候选，无可信结果时分批扫描信封（默认 5000 封）；返回覆盖范围和更早窗口游标，可选正文兜底仍限于最近的小窗口 |
 | `email_send` | 代发邮件（支持带附件）。**默认发信前会弹确认**，显示收件人、主题和附件数，由你批准后才发出 |
 | `email_draft` | 准备本地草稿，不发送；用户在「设置 → 邮件 → 草稿」编辑、保存、检查预览后手动确认发送 |
 | `email_folders` | 列出邮箱的文件夹（INBOX/已发送/垃圾邮件/自定义…），拿 path 喂给其他工具 |

@@ -16,7 +16,7 @@ See the [draft workbench](DRAFTS.en.md) for editable drafts and per-account trus
 |---|---|
 | `email_list` | List the newest mail in a folder (unread filter, pagination, summaries only, no body) |
 | `email_read` | Read one message's full text by uid (HTML auto-converted to plain text, oversized bodies truncated) |
-| `email_search` | Search subject/sender/recipient/CC by keyword (server-side subject/from/to/cc; hits are re-checked against the envelopes, so "match-everything" servers such as QQ are rejected); when nothing believable is returned, it falls back to a body scan of the most recent 30 messages by default (including to/cc) |
+| `email_search` | Search subject/sender/recipient/CC by keyword, verify server candidates and fall back to a batched header scan (default 5000 messages). Returns coverage and an older-window cursor; optional body search remains limited to recent messages. |
 | `email_send` | Send mail on your behalf (attachments supported). **Prompts for confirmation before sending by default**, showing recipients, subject and attachment count; only sends after you approve |
 | `email_draft` | Prepare a local draft without sending; edit, save, inspect the preview and manually confirm in Settings → Email → Drafts |
 | `email_folders` | List the mailbox folders (INBOX/Sent/Junk/custom…); feed the `path` to other tools |
@@ -25,6 +25,16 @@ See the [draft workbench](DRAFTS.en.md) for editable drafts and per-account trus
 | `email_watch` | Incremental new-mail check: the first call seeds a baseline, every later call reports only unread mail newer than the last check — ideal for scheduled new-mail notifications |
 | `email_mark` | Mark messages as read/unread, add/remove stars, or move messages to another folder |
 | `email_reply` | Reply, reply-all or forward with thread headers and quoted content; uses the same send-approval gate |
+
+### Search coverage and older messages
+
+When server SEARCH returns no verified matches or fails, `email_search` checks local subject, From, To and Cc headers in batches of 500. The default window is the newest 5000 messages; `headerScanLimit` accepts 1–20000. Header matches do not download message bodies or attachments. This handles empty SEARCH responses without relying on the small body-search window, including mail pushed back by imported messages.
+
+Inspect `searchSource`, `serverMatchCount`, `serverSearchFailed`, `headerScan` and `bodyScan`. `headerScan` reports the mailbox size, headers actually scanned, matches in that window and whether the scan covered the folder. Continue with its `nextScanOffset` as `headerScanOffset`, keeping the same query, folder, date filters and window size. `offset` separately pages matching rows within a window; reset it to 0 when moving to another window. These are live mailbox windows, not a frozen snapshot: restart from offset 0 after arrivals or deletions if consistency matters.
+
+If headers do not match, the optional body fallback still scans only the recent `bodySearchLimit` window (default 30). Disabling `bodySearchFallback` disables body scans only; header fallback stays available. An explicit older header window skips body fallback. A zero-result page does not establish that the whole mailbox, especially all message bodies, has no match.
+
+Results follow descending mailbox UID (arrival order), not the sender's Date header or sorted INTERNALDATE. Imported old messages can appear first. `since`/`until` filter the server's received date (INTERNALDATE), falling back to the envelope Date only if unavailable.
 
 ### New-mail notifications (web UI)
 

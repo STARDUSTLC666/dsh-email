@@ -1,6 +1,6 @@
 import { ImapFlow } from 'imapflow';
 import type { ResolvedEmailConfig, ResolvedEmailSettings } from './config.js';
-import type { AddressEntry, EmailAttachmentMeta, EmailAttachmentResult, EmailFoldersResult, EmailListResult, EmailMarkAction, EmailMarkResult, EmailReadResult, EmailReplyMode, EmailReplyResult, EmailSearchResult, EmailSendResult, ListedMessage } from './types.js';
+import type { AddressEntry, EmailAttachmentMeta, EmailAttachmentResult, EmailFoldersResult, EmailListResult, EmailMarkAction, EmailMarkResult, EmailReadResult, EmailReplyMode, EmailReplyResult, EmailSearchResult, EmailSearchOptions, EmailSendResult, ListedMessage } from './types.js';
 export declare class MailError extends Error {
     constructor(message: string);
 }
@@ -191,7 +191,8 @@ export declare class EmailPool {
     }>;
     /** Fetch the envelopes for one uid batch: the rows email_watch will report. */
     fetchByUids(accountName: string | undefined, folder: string, uids: number[], signal?: AbortSignal): Promise<ListedMessage[]>;
-    search(accountName: string | undefined, query: string, folder: string, limit: number, offset: number, since?: Date, until?: Date, signal?: AbortSignal): Promise<EmailSearchResult>;
+    search(accountName: string | undefined, query: string, folder: string, limit: number, offset: number, since?: Date, until?: Date, signal?: AbortSignal, options?: EmailSearchOptions): Promise<EmailSearchResult>;
+    private searchHeaders;
     /**
      * Confirm server-side hits against the mailbox itself: fetch the envelopes
      * of the newest candidates — the same window the body-scan fallback looks at

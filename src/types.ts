@@ -54,19 +54,38 @@ export interface EmailReadResult extends ReadMessageBody {
   folder: string
 }
 
+export interface EmailSearchOptions {
+  /** Local header window; independent of result offset and bodySearchLimit. */
+  headerScanLimit?: number
+  headerScanOffset?: number
+}
+export interface EmailHeaderScan {
+  mailboxTotal: number
+  scanned: number
+  matched: number
+  scanOffset: number
+  scanLimit: number
+  complete: boolean
+  nextScanOffset?: number
+}
 export interface EmailSearchResult {
   account: string
   query: string
-  /** Server path: the server's match count. Fallback scan: this page's row count (see countKind). */
+  /** Server candidates, local header-window matches, or body-fallback page rows; inspect searchSource and coverage. */
   count: number
   folder: string
   /** How many newest matches the caller skipped (0 on the first page). */
   offset: number
   messages: ListedMessage[]
-  /** Set to 'scanned' when the local body scan produced this page, so count is not a total. */
+  /** Local scans cannot claim a full mailbox/body match total. */
   countKind?: 'scanned'
-  /** How many newest messages the fallback scan looked at (set with countKind='scanned'). */
+  /** Header rows actually scanned, or the configured body window for legacy renderers. */
   scannedLimit?: number
+  searchSource?: 'server' | 'local-headers' | 'local-body'
+  serverMatchCount?: number
+  serverSearchFailed?: boolean
+  headerScan?: EmailHeaderScan
+  bodyScan?: { scanned: number; scanLimit: number }
 }
 
 export interface EmailSendResult {
@@ -125,6 +144,8 @@ export interface EmailSearchArgs extends AccountArg {
   offset?: number
   since?: string
   until?: string
+  headerScanLimit?: number
+  headerScanOffset?: number
 }
 
 export interface EmailSendArgs extends AccountArg {

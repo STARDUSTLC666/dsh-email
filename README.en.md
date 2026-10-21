@@ -17,6 +17,7 @@ See the [0.16.3 validation record](docs/validation/0.16.3.md) for DSH `0.2.1-alp
 
 - Read, send, reply and forward using IMAP and SMTP.
 - Manage attachments, search results and mailbox organization.
+- Scan headers in batches when server search is unreliable, report coverage and continue into older mail.
 - Configure multiple accounts, Outlook OAuth2, encrypted Windows login tokens and send approval.
 - Turn new-mail popups off in settings; the preference survives restarts.
 - Prepare and edit local drafts, review To/Cc, content and attachment bytes, then confirm sending.
