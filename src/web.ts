@@ -26,6 +26,7 @@ import {
   type OAuth2State,
 } from './oauth2.js'
 import { EmailPool, messageOf, redactCredentials } from './mail-client.js'
+import { AgentMailClient } from './agentmail.js'
 import type { ResolvedEmailConfig } from './config.js'
 import type { EmailWatchResult } from './types.js'
 
@@ -262,7 +263,7 @@ function buildAccountCards(
       provider: providerName,
       ...(preset?.label !== undefined && preset.label !== '' ? { providerLabel: preset.label } : {}),
       user,
-      hasPassword: typeof account.password === 'string' && account.password !== '',
+      hasPassword: typeof account.password === 'string' && account.password !== '' || typeof account.apiKey === 'string' && account.apiKey !== '',
       authKind,
       ...(pinned === 'oauth2' || pinned === 'password' ? { authKindDeclared: pinned } : {}),
       ...(clientId !== '' ? { clientId } : {}),
@@ -488,6 +489,7 @@ function washEndpoint(account: YAMLMap, key: 'imap' | 'smtp'): void {
  */
 function persistedProvider(provider: unknown, customNames: ReadonlySet<string>): string | undefined {
   if (typeof provider !== 'string' || provider === '') return undefined
+  if (provider === 'agentmail' || provider === 'agentmail-eu') return provider
   if (Object.prototype.hasOwnProperty.call(PROVIDER_PRESETS, provider)) return provider
   return customNames.has(provider) ? provider : undefined
 }
@@ -695,6 +697,11 @@ function serializeAccountsDraft(
     // never written — a stored copy is washed out below instead.
     const previousProvider = account.get('provider')
     const nextProvider = persistedProvider(card.provider, customNames)
+    const apiProvider = (value: unknown) => value === 'agentmail' || value === 'agentmail-eu'
+    if (apiProvider(previousProvider) !== apiProvider(nextProvider)) {
+      account.delete('password'); account.delete('apiKey'); account.delete('authPassword'); account.delete('authKind')
+    }
+    if (card.password !== undefined && apiProvider(nextProvider)) account.delete('apiKey')
     writeField(account, 'provider', nextProvider)
     writeField(account, 'user', card.user)
     // senderName / authUser are plain three-state fields (undefined = 保持原样,
@@ -913,7 +920,7 @@ export function postVerdict(headers: Record<string, unknown>): { status: number;
  * optimistic concurrency, and test a draft account over a live IMAP login.
  */
 export class EmailSettingsBackend {
-  constructor(private readonly ctx: any, private readonly scope: any, private readonly rowConfig: EmailConfig) {}
+  constructor(private readonly ctx: any, private readonly scope: any, private readonly rowConfig: EmailConfig, private readonly apiFetch?: typeof fetch) {}
 
   /** Wired by apply(): the email_watch core; 'web' keeps its own cursor scope. */
   watchImpl?: (account: string, folder: string, limit: number, scope: string) => Promise<EmailWatchResult>
@@ -1046,6 +1053,10 @@ export class EmailSettingsBackend {
     const cfg = settings.accounts.get(name)
     if (cfg === undefined) {
       throw new Error(`未知账号 "${name}"，可用：${available.join('、')}`)
+    }
+    if (cfg.transport === 'agentmail') {
+      await new AgentMailClient(settings,this.apiFetch).test(name)
+      return { ok: true, account: name, apiHost: cfg.apiBase, message: 'AgentMail API 连接成功 / AgentMail API connection successful' }
     }
     const target = { account: name, imapHost: cfg.imap.host, imapPort: cfg.imap.port }
     const targetDescription = '账号 "' + name + '" · IMAP ' + cfg.imap.host + ':' + cfg.imap.port

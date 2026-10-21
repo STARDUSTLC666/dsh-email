@@ -175,7 +175,8 @@ export declare class EmailSettingsBackend {
     private readonly ctx;
     private readonly scope;
     private readonly rowConfig;
-    constructor(ctx: any, scope: any, rowConfig: EmailConfig);
+    private readonly apiFetch?;
+    constructor(ctx: any, scope: any, rowConfig: EmailConfig, apiFetch?: typeof fetch | undefined);
     /** Wired by apply(): the email_watch core; 'web' keeps its own cursor scope. */
     watchImpl?: (account: string, folder: string, limit: number, scope: string) => Promise<EmailWatchResult>;
     private get namespace();
@@ -262,11 +263,18 @@ export declare class EmailSettingsBackend {
      * what was actually tried — including on failure.
      */
     test(value: EmailSettingsValue, accountName?: string): Promise<{
+        ok: boolean;
+        account: string;
+        apiHost: "https://api.agentmail.to" | "https://api.agentmail.eu" | undefined;
+        message: string;
+    } | {
         account: string;
         imapHost: string;
         imapPort: number;
         ok: boolean;
         ms: number;
+        apiHost?: undefined;
+        message?: undefined;
     }>;
     /**
      * Resolve one named account of the *stored* settings — the same accounts the

@@ -6,7 +6,7 @@ export interface AddressEntry {
 
 /** One listed message: everything cheap to fetch without the body. */
 export interface ListedMessage {
-  uid: number
+  uid: number | string
   /** ISO 8601 string, or '' when unknown. */
   date: string
   from: AddressEntry[]
@@ -40,6 +40,9 @@ export interface ReadMessageBody {
 }
 
 export interface EmailListResult {
+  countExact?: boolean
+  hasMore?: boolean
+  order?: 'relevance'
   account: string
   count: number
   folder: string
@@ -50,8 +53,9 @@ export interface EmailListResult {
 
 export interface EmailReadResult extends ReadMessageBody {
   account: string
-  uid: number
+  uid: number | string
   folder: string
+  uidValidity?: number
 }
 
 export interface EmailSearchOptions {
@@ -69,6 +73,9 @@ export interface EmailHeaderScan {
   nextScanOffset?: number
 }
 export interface EmailSearchResult {
+  countExact?: boolean
+  hasMore?: boolean
+  order?: 'relevance'
   account: string
   query: string
   /** Server candidates, local header-window matches, or body-fallback page rows; inspect searchSource and coverage. */
@@ -81,7 +88,7 @@ export interface EmailSearchResult {
   countKind?: 'scanned'
   /** Header rows actually scanned, or the configured body window for legacy renderers. */
   scannedLimit?: number
-  searchSource?: 'server' | 'local-headers' | 'local-body'
+  searchSource?: 'server' | 'local-headers' | 'local-body' | 'api'
   serverMatchCount?: number
   serverSearchFailed?: boolean
   headerScan?: EmailHeaderScan
@@ -110,7 +117,7 @@ export interface EmailFoldersResult {
 
 export interface EmailAttachmentResult {
   account: string
-  uid: number
+  uid: number | string
   filename: string
   contentType: string
   size: number
@@ -133,7 +140,7 @@ export interface EmailListArgs extends AccountArg {
 }
 
 export interface EmailReadArgs extends AccountArg {
-  uid: number
+  uid: number | string
   folder?: string
 }
 
@@ -162,7 +169,7 @@ export interface EmailFoldersArgs extends AccountArg {
 }
 
 export interface EmailAttachmentArgs extends AccountArg {
-  uid: number
+  uid: number | string
   /** 0-based index into the attachments of email_read. Default 0. */
   index?: number
   folder?: string
@@ -177,7 +184,7 @@ export interface EmailWatchArgs extends AccountArg {
 export type EmailMarkAction = 'read' | 'unread' | 'star' | 'unstar' | 'move'
 
 export interface EmailMarkArgs extends AccountArg {
-  uid: number
+  uid: number | string
   action: EmailMarkAction
   /** Target folder path; only used (and required) when action is 'move'. */
   toFolder?: string
@@ -186,7 +193,7 @@ export interface EmailMarkArgs extends AccountArg {
 
 export interface EmailMarkResult {
   account: string
-  uid: number
+  uid: number | string
   folder: string
   action: EmailMarkAction
   seen: boolean
@@ -200,7 +207,7 @@ export interface EmailMarkResult {
 export type EmailReplyMode = 'reply' | 'reply-all' | 'forward'
 
 export interface EmailReplyArgs extends AccountArg {
-  uid: number
+  uid: number | string
   /** The new text to write; the original is quoted below it automatically. */
   text: string
   mode?: EmailReplyMode
@@ -214,7 +221,7 @@ export interface EmailReplyResult {
   account: string
   mode: EmailReplyMode
   /** uid of the original message that was answered/forwarded. */
-  originalUid: number
+  originalUid: number | string
   messageId: string
   accepted: string[]
   rejected: string[]
@@ -224,6 +231,7 @@ export interface EmailReplyResult {
 }
 
 export interface EmailWatchResult {
+  totalUnreadExact?: boolean
   account: string
   folder: string
   /** True on the first call for this account+folder: it sets the baseline. */

@@ -1000,7 +1000,7 @@ export class EmailPool {
         return messageMatchesQuery(envelope?.subject ?? '', addressText, '', query)
       })
       .map(message => listedFrom(message, message.size, structureHasAttachment(message.bodyStructure)))
-      .sort((a, b) => b.uid - a.uid)
+      .sort((a, b) => Number(b.uid) - Number(a.uid))
   }
 
   /** Client-side scan of the tail of the mailbox, newest first. */
@@ -1064,7 +1064,7 @@ export class EmailPool {
     signal?.throwIfAborted()
     return fetched
         .map(message => listedFrom(message, message.size, structureHasAttachment(message.bodyStructure)))
-        .sort((a, b) => b.uid - a.uid)
+        .sort((a, b) => Number(b.uid) - Number(a.uid))
   }
 
   async read(accountName: string | undefined, uid: number, folder: string, signal?: AbortSignal): Promise<EmailReadResult> {
@@ -1097,6 +1097,7 @@ export class EmailPool {
               account: name,
               uid,
               folder: folderName,
+              uidValidity: this.uidValidityOf(client),
               date: envelopeDate instanceof Date ? envelopeDate.toISOString() : '',
               from: flattenAddresses(message.envelope.from),
               to: flattenAddresses(message.envelope.to),
@@ -1121,7 +1122,7 @@ export class EmailPool {
       const body = await parseRawMessage(full.source, this.settings.maxBodyChars)
       signal?.throwIfAborted()
       this.rememberRead(name, folderName, this.uidValidityOf(client), uid, { attachments: body.attachments, parts: collectAttachmentParts(full.bodyStructure) })
-      return { account: name, uid, folder: folderName, ...body }
+      return { account: name, uid, folder: folderName, uidValidity: this.uidValidityOf(client), ...body }
     }, true, signal)
   }
 
@@ -1266,10 +1267,19 @@ export class EmailPool {
   }
 
   /** Send the attachment bytes the human reviewed, without re-reading mutable paths. */
-  async sendPrepared(accountName: string, to: string, subject: string, text: string, cc: string, attachments: Array<{ filename: string; content: Buffer }>, signal?: AbortSignal): Promise<EmailSendResult> {
+  async sendPrepared(accountName: string, to: string, subject: string, text: string, cc: string, attachments: Array<{ filename: string; content: Buffer }>, signal?: AbortSignal, reply?: { uid: number; folder: string; uidValidity?: number }): Promise<EmailSendResult> {
     const name = this.resolveName(accountName), cfg = this.account(name)
     if (attachments.length > 10 || attachments.reduce((sum, file) => sum + file.content.length, 0) > Math.min(this.settings.maxAttachmentBytes, 20 * 1024 * 1024)) throw new MailError('草稿附件超过大小或数量上限')
-    const info = await this.sendMail(name, cfg, { from: senderOf(cfg), to, cc, subject, text, attachments, disableFileAccess: true, disableUrlAccess: true }, signal)
+    const thread: Record<string, unknown> = {}
+    if (reply) await this.withImap(name, reply.folder || cfg.inboxFolder, async client => {
+      if (reply.uidValidity !== undefined && reply.uidValidity !== this.uidValidityOf(client)) throw new MailError('原文件夹 UIDVALIDITY 已变化，无法关联旧回复草稿；请重新打开邮件准备回复')
+      const original = await client.fetchOne(reply.uid, { uid: true, headers: ['message-id', 'references'] }, { uid: true })
+      if (!original || !original.headers) throw new MailError('原邮件不存在或缺少线程头，请重新打开邮件')
+      const ids = extractMessageIds(original.headers)
+      if (!ids.messageId) throw new MailError('原邮件缺少 Message-ID，无法安全关联回复线程')
+      thread.inReplyTo = '<' + ids.messageId + '>'; thread.references = [...(ids.references ?? '').split(' ').filter(Boolean), ids.messageId].map(id => '<' + id + '>')
+    }, true, signal)
+    const info = await this.sendMail(name, cfg, { from: senderOf(cfg), to, cc, subject, text, attachments, ...thread, disableFileAccess: true, disableUrlAccess: true }, signal)
     return { account: name, messageId: String(info.messageId ?? ''), accepted: Array.isArray(info.accepted) ? info.accepted.map(String) : [], rejected: Array.isArray(info.rejected) ? info.rejected.map(String) : [], response: String(info.response ?? '') }
   }
 

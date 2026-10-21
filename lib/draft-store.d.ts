@@ -21,6 +21,11 @@ export interface EmailDraft {
     attemptAt?: string;
     receipt?: EmailSendResult;
     error?: string;
+    reply?: {
+        uid: number | string;
+        folder: string;
+        uidValidity?: number;
+    };
 }
 export interface DraftFields {
     account: string;

@@ -7,6 +7,8 @@ import { liveConfig, Config as ConfigSchema } from './host-config.js'
 import { installLegacySettingsImport } from './legacy-settings.js'
 import { EmailSettingsSchema, SETTINGS_NAMESPACE } from './settings.js'
 import { EmailDraftBackend, installEmailDrafts } from './draft-web.js'
+import { EmailMailboxBackend, installEmailMailbox } from './mailbox-web.js'
+import { EmailService, type MailDependencies } from './mail-service.js'
 export const Config = ConfigSchema
 
 export const name = 'tool-email'
@@ -15,6 +17,11 @@ export type Config = EmailConfig
 
 /** Compose settings/pool lifecycle, tools, browser routes and the outgoing-mail gate. */
 export function apply(ctx: any, config: Config = {}): void {
+  installEmailApplication(ctx,config)
+}
+
+/** Shared application assembly; transports can be supplied by embedders and protocol fixtures. */
+export function installEmailApplication(ctx:any,config:Config={},dependencies:MailDependencies={}):void {
   config = liveConfig(config)
   installLegacySettingsImport(ctx, config, SETTINGS_NAMESPACE, 'tool-email', Object.keys(EmailSettingsSchema.dict!))
   if (typeof ctx.settings.configure === 'function' && typeof ctx.inject === 'function') {
@@ -22,12 +29,13 @@ export function apply(ctx: any, config: Config = {}): void {
       settingsCtx.effect(() => settingsCtx.settings.configure({ auto: false }, ctx.fiber))
     })
   }
-  const runtime = createEmailRuntime(ctx, config)
-  const backend = new EmailSettingsBackend(ctx, runtime.settingsScope, config)
+  const runtime = createEmailRuntime(ctx, config, settings=>new EmailService(settings,dependencies))
+  const backend = new EmailSettingsBackend(ctx, runtime.settingsScope, config,dependencies.fetch)
   backend.watchImpl = runtime.watch
   installEmailSettingsWeb(ctx, backend)
   const drafts = new EmailDraftBackend(runtime, backend)
   installEmailDrafts(ctx, drafts)
+  installEmailMailbox(ctx, new EmailMailboxBackend(runtime, drafts))
   for (const definition of buildEmailTools(runtime, drafts)) ctx.tools.register(definition)
   installSendApproval(ctx, runtime)
 }
@@ -49,3 +57,6 @@ export { EmailSettingsBackend, installEmailSettingsWeb, SETTINGS_ROUTE } from '.
 export type { AccountCardData, AccountCardInput } from './web.js'
 export { EmailDraftBackend, installEmailDrafts, EMAIL_DRAFT_ROUTE } from './draft-web.js'
 export { DraftStore, DraftError } from './draft-store.js'
+export { AgentMailClient } from './agentmail.js'
+export { EmailService } from './mail-service.js'
+export { EmailMailboxBackend, installEmailMailbox, MAILBOX_ROUTE } from './mailbox-web.js'

@@ -90,6 +90,8 @@ export function normalizeSettingsEndpoint<T extends SmtpConfig>(value: T, kind: 
 
 /** One mailbox account. Top-level shorthand fields act as shared defaults. */
 export interface AccountConfig {
+  /** AgentMail credential; the account editor also accepts it through its secret field. */
+  apiKey?: string
   /** Built-in provider name, or a custom serverPresets name. */
   provider?: ProviderRef
   user?: string
@@ -197,6 +199,8 @@ const DEFAULT_IDLE_TIMEOUT_MS = 60000
 
 /** Fully resolved, validated configuration for one account. */
 export interface ResolvedEmailConfig {
+  transport?: 'agentmail'
+  apiBase?: 'https://api.agentmail.to' | 'https://api.agentmail.eu'
   user: string
   /** Display name for the From header, '' when the account does not set one. */
   senderName: string
@@ -401,7 +405,7 @@ export function resolveEmailSettings(config: EmailConfig | undefined, onlyAccoun
   const common: AccountConfig = {
     provider: raw.provider,
     user: raw.user,
-    password: raw.password,
+    password: raw.password, apiKey: raw.apiKey,
     senderName: raw.senderName,
     authUser: raw.authUser,
     authPassword: raw.authPassword,
@@ -492,7 +496,7 @@ function providerTable(custom: Record<string, ServerPreset>): Record<string, End
 
 /** Every name a `provider:` may legally use, built-ins first. */
 export function providerNames(custom: Record<string, ServerPreset> = {}): string[] {
-  const names = [...PROVIDER_NAMES]
+  const names: string[] = [...PROVIDER_NAMES, 'agentmail', 'agentmail-eu']
   for (const name of Object.keys(custom)) if (!names.includes(name)) names.push(name)
   return names
 }
@@ -541,6 +545,15 @@ function resolveAccount(
   // Normalize it like the legacy projection and YAML writer before preset lookup.
   const requested = (acc.provider === '' ? undefined : acc.provider) ?? (common.provider === '' ? undefined : common.provider)
   const preset = requested === undefined ? undefined : providers[requested]
+  if (requested === 'agentmail' || requested === 'agentmail-eu') {
+    const user = String(acc.user ?? common.user ?? '').trim()
+    const sharedApi = common.provider === requested
+    const key = String(acc.password || acc.apiKey || (sharedApi ? common.password || common.apiKey : '') || (allowEnvPassword ? process.env.DSH_AGENTMAIL_API_KEY ?? '' : '')).trim()
+    if (!/^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(user) || !key || key.length > 4096 || /[^\x21-\x7e]/.test(key)) throw new Error('AgentMail 账号需要有效邮箱地址和 API Key，请在「设置 → 邮件」补全后测试连接。')
+    return { transport: 'agentmail', apiBase: requested === 'agentmail-eu' ? 'https://api.agentmail.eu' : 'https://api.agentmail.to', user,
+      senderName: '', authUser: user, authPassword: key, password: key, authKind: 'password',
+      imap: { host: '', port: 993, secure: true }, smtp: { host: '', port: 465, secure: true }, inboxFolder: 'INBOX' }
+  }
   if (requested !== undefined && preset === undefined) {
     throw new Error(`dsh-email：账号 "${name}" 的 provider "${requested}" 未知，可选：${known.join('/')}；或省略 provider 直接填 imap.host 与 smtp.host`)
   }

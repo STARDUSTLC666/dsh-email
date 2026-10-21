@@ -1,10 +1,13 @@
 import type { EmailConfig } from './config.js';
+import { type MailDependencies } from './mail-service.js';
 export declare const Config: import("@deepseek-ai/schemastery").default;
 export declare const name = "tool-email";
 export declare const inject: string[];
 export type Config = EmailConfig;
 /** Compose settings/pool lifecycle, tools, browser routes and the outgoing-mail gate. */
 export declare function apply(ctx: any, config?: Config): void;
+/** Shared application assembly; transports can be supplied by embedders and protocol fixtures. */
+export declare function installEmailApplication(ctx: any, config?: Config, dependencies?: MailDependencies): void;
 export { clampInt, defaultDownloadDir, EMAIL_PASSWORD_ENV, isOAuth2Account, OUTLOOK_OAUTH2_CLIENT_ID, OUTLOOK_PROVIDER, parseAccountsYaml, parseServerPresets, presetNamesIn, providerNames, PROVIDER_NAMES, resolveEmailConfig, resolveEmailSettings, serializeAccountsYaml } from './config.js';
 export type { AuthKind, ResolvedEmailConfig } from './config.js';
 export { ACCESS_TOKEN_MARGIN_MS, classifyOAuthFailure, clearTokenFor, clientIdOf, DEVICE_CODE_URL, getFreshAccessToken, mapAadstsMessage, NO_CLIENT_ID_MESSAGE, NOT_LOGGED_IN_MESSAGE, oauth2StateOf, oauth2TokenFile, OAUTH2_SCOPES, OAuth2Error, pollDeviceFlow, readTokenStore, startDeviceFlow, TOKEN_URL, writeTokenStore, } from './oauth2.js';
@@ -17,3 +20,6 @@ export { EmailSettingsBackend, installEmailSettingsWeb, SETTINGS_ROUTE } from '.
 export type { AccountCardData, AccountCardInput } from './web.js';
 export { EmailDraftBackend, installEmailDrafts, EMAIL_DRAFT_ROUTE } from './draft-web.js';
 export { DraftStore, DraftError } from './draft-store.js';
+export { AgentMailClient } from './agentmail.js';
+export { EmailService } from './mail-service.js';
+export { EmailMailboxBackend, installEmailMailbox, MAILBOX_ROUTE } from './mailbox-web.js';

@@ -1,7 +1,7 @@
 {
   "name": "dsh-email",
-  "version": "0.17.3",
-  "description": "在 DSH 中收发、搜索和整理邮件，支持多个邮箱账号。",
+  "version": "0.18.0",
+  "description": "在 DSH 中浏览、收发、搜索和整理邮件，支持 IMAP/SMTP 与 AgentMail 多账号。",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -34,7 +34,8 @@
     "dsh",
     "email",
     "imap",
-    "smtp"
+    "smtp",
+    "agentmail"
   ],
   "author": "stardustlc",
   "repository": {

@@ -37,6 +37,7 @@ import type {
 /** 单次工具调用的 deadline：普通查询 60s，正文扫描/watch 这类整批操作 120s。 */
 const QUERY_TIMEOUT_MS = 60000
 const BATCH_TIMEOUT_MS = 120000
+function validUid(uid: unknown): boolean { return typeof uid === 'number' ? Number.isSafeInteger(uid) && uid > 0 : typeof uid === 'string' && uid.length > 0 && uid.length <= 998 && !/[\r\n\0]/.test(uid) }
 
 function attachmentPaths(value: unknown, exec?: unknown): string[] | undefined {
   const context = exec as { agent?: { session?: { header?: { cwd?: string } } } } | undefined
@@ -98,8 +99,8 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
       timeoutMs: QUERY_TIMEOUT_MS,
       async execute(rawArgs: unknown, exec: unknown) {
         const args = rawArgs as EmailReadArgs
-        if (typeof args.uid !== 'number' || !Number.isInteger(args.uid) || args.uid <= 0) {
-          throw new Error('uid 必须是正整数（用 email_list 获取）')
+        if (!validUid(args.uid)) {
+          throw new Error('uid 必须是正整数（IMAP）或 email_list 返回的字符串邮件标识（AgentMail）')
         }
         return await getPool().read(args.account, args.uid, args.folder?.trim() || '', executionSignal(exec))
       }
@@ -115,8 +116,8 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
       timeoutMs: QUERY_TIMEOUT_MS,
       async execute(rawArgs: unknown, exec: unknown) {
         const args = rawArgs as EmailMarkArgs
-        if (typeof args.uid !== 'number' || !Number.isInteger(args.uid) || args.uid <= 0) {
-          throw new Error('uid 必须是正整数（用 email_list 获取）')
+        if (!validUid(args.uid)) {
+          throw new Error('uid 必须是正整数（IMAP）或 email_list 返回的字符串邮件标识（AgentMail）')
         }
         const action = (typeof args.action === 'string' ? args.action.trim().toLowerCase() : '') as EmailMarkAction
         if (!MARK_ACTIONS.includes(action)) {
@@ -182,8 +183,8 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
       timeoutMs: QUERY_TIMEOUT_MS,
       async execute(rawArgs: unknown, exec: unknown) {
         const args = rawArgs as EmailReplyArgs
-        if (typeof args.uid !== 'number' || !Number.isInteger(args.uid) || args.uid <= 0) {
-          throw new Error('uid 必须是正整数（用 email_list 获取）')
+        if (!validUid(args.uid)) {
+          throw new Error('uid 必须是正整数（IMAP）或 email_list 返回的字符串邮件标识（AgentMail）')
         }
         if (typeof args.text !== 'string' || args.text.trim() === '') throw new Error('text 不能为空')
         const mode = ((typeof args.mode === 'string' && args.mode.trim() !== '' ? args.mode.trim().toLowerCase() : 'reply')) as EmailReplyMode
@@ -227,7 +228,7 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
             const provider = Object.entries(PROVIDER_PRESETS).find(([, preset]) => (
               preset.imap.host === account.imap.host && preset.smtp.host === account.smtp.host
             ))?.[0] ?? 'custom'
-            const base = provider + ' / ' + account.user + ' / IMAP ' + account.imap.host + ' / SMTP ' + account.smtp.host
+            const base = account.transport === 'agentmail' ? 'AgentMail / ' + account.user + ' / ' + account.apiBase : provider + ' / ' + account.user + ' / IMAP ' + account.imap.host + ' / SMTP ' + account.smtp.host
             // An OAuth2 account with no token is configured, not broken: the
             // missing piece is a browser login, and saying so is the whole
             // point of this check.
@@ -265,8 +266,8 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
       timeoutMs: QUERY_TIMEOUT_MS,
       async execute(rawArgs: unknown, exec: any) {
         const args = rawArgs as EmailAttachmentArgs
-        if (typeof args.uid !== 'number' || !Number.isInteger(args.uid) || args.uid <= 0) {
-          throw new Error('uid 必须是正整数（用 email_list 获取）')
+        if (!validUid(args.uid)) {
+          throw new Error('uid 必须是正整数（IMAP）或 email_list 返回的字符串邮件标识（AgentMail）')
         }
         const index = clampInt(args.index, 0, 0, 999)
         const workspaceHint = typeof exec?.agent?.session?.header?.cwd === 'string' ? exec.agent.session.header.cwd : undefined

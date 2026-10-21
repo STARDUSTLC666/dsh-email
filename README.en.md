@@ -4,18 +4,20 @@
 
 ![dsh-email whale girl plugin cover](https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/cover-whale-girl.png)
 
-Read, send, search and organize email from DSH with multiple accounts.
+Browse, send, search and organize email from DSH with IMAP/SMTP and AgentMail accounts.
 
 [![npm](https://img.shields.io/npm/v/dsh-email)](https://www.npmjs.com/package/dsh-email) [![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-downloads.svg)](https://www.npmjs.com/package/dsh-email)
 
 Feedback and contributions are welcome: report [issues](https://github.com/STARDUSTLC666/dsh-email/issues) or submit [pull requests](https://github.com/STARDUSTLC666/dsh-email/pulls).
 
 
-See the [0.16.3 validation record](docs/validation/0.16.3.md) for DSH `0.2.1-alpha.5` browser checks and the remaining limits.
+See the [0.18.0 validation record](docs/validation/0.18.0.md) for browser and simulated mailbox protocol checks on official DSH `0.2.1-rc.2` and the remaining limits.
 
 ## What it does
 
 - Read, send, reply and forward using IMAP and SMTP.
+- Add AgentMail US/EU inboxes with an email address and API key, without IMAP/SMTP setup.
+- Browse Inbox/Sent, page/search messages, read plain text, download attachments and set read/star flags in Mailbox.
 - Manage attachments, search results and mailbox organization.
 - Scan headers in batches when server search is unreliable, report coverage and continue into older mail.
 - Configure multiple accounts, Outlook OAuth2, encrypted Windows login tokens and send approval.
@@ -35,13 +37,13 @@ For the web version, replace `desktop` with `web`. Restart DSH after installatio
 
 ## Start using it
 
-Add an account and test it in Settings → Email. Ask to list recent unread messages or prepare a reply; review recipients and content before sending.
+Add and test an account in Settings → Email, then open Mailbox. Ask to list unread messages or prepare a reply. Reply buttons create drafts for review before sending.
 
 To edit before sending, ask: “Prepare a message with email_draft; do not send yet.” Open Drafts to save edits, inspect attachments and confirm. See [drafts and recipient rules](docs/DRAFTS.en.md).
 
 ## Requirements and configuration
 
-Requires mail credentials, an app password or provider OAuth authorization. Mail authentication is separate from the DSH model API key.
+IMAP accounts require mail credentials, an app password or provider OAuth authorization. AgentMail requires its regional inbox address and API key; see [AgentMail setup](docs/AGENTMAIL.en.md). Mail authentication is separate from the DSH model API key.
 
 Detailed configuration, tool arguments and troubleshooting are in the [usage guide](docs/USAGE.en.md). For standalone development, follow the Node requirement in [package.json](package.json).
 

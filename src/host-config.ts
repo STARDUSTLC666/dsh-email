@@ -9,6 +9,7 @@ const endpoint = () => z.object({
 export const Config: z = z.object({
   provider: z.string().volatile(), user: z.string().volatile(),
   password: z.string().role('secret').volatile(),
+  apiKey: z.string().role('secret').volatile(),
   senderName: z.string().volatile(), authUser: z.string().volatile(),
   authPassword: z.string().role('secret').volatile(),
   clientId: z.string().volatile(), authKind: z.union(['password', 'oauth2']).volatile(),

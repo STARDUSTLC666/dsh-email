@@ -44,7 +44,7 @@ export function executionSignal(exec: unknown): AbortSignal | undefined {
 }
 
 interface ParameterProperty {
-  type?: string
+  type?: string | string[]
   required?: boolean
   description?: string
   items?: { type?: string } | null
@@ -57,6 +57,7 @@ export function compileParameters(spec: Record<string, ParameterProperty>): Reco
     if (prop?.required === true) required.push(key)
     const node: Record<string, unknown> = {}
     if (typeof prop?.type === 'string') node.type = prop.type
+    else if (Array.isArray(prop?.type)) node.oneOf = prop.type.map(type => ({ type }))
     if (typeof prop?.description === 'string') node.description = prop.description
     if (prop?.type === 'array' && prop.items !== null && typeof prop.items === 'object') {
       const items: Record<string, unknown> = { type: 'string' }
@@ -81,7 +82,7 @@ export const strArray = { type: 'array', items: { type: 'string' } }
 export const addrArray = { type: 'array', items: { type: 'object', additionalProperties: true } }
 
 export const messageShape = {
-  uid: { type: 'integer' },
+  uid: { oneOf: [{ type: 'integer' }, { type: 'string' }] },
   date: { type: 'string' },
   from: addrArray,
   subject: { type: 'string' },
@@ -96,6 +97,10 @@ export const listSchema = {
   properties: {
     account: { type: 'string' },
     count: { type: 'integer' },
+    countExact: { type: 'boolean' },
+    hasMore: { type: 'boolean' },
+    order: { type: 'string' },
+    searchSource: { type: 'string' },
     folder: { type: 'string' },
     messages: { type: 'array', items: { type: 'object', properties: messageShape, additionalProperties: true } },
   },
@@ -106,7 +111,7 @@ export const readSchema = {
   type: 'object',
   properties: {
     account: { type: 'string' },
-    uid: { type: 'integer' },
+    uid: { oneOf: [{ type: 'integer' }, { type: 'string' }] },
     folder: { type: 'string' },
     date: { type: 'string' },
     from: addrArray,
@@ -157,7 +162,7 @@ export const attachmentSchema = {
   type: 'object',
   properties: {
     account: { type: 'string' },
-    uid: { type: 'integer' },
+    uid: { oneOf: [{ type: 'integer' }, { type: 'string' }] },
     filename: { type: 'string' },
     contentType: { type: 'string' },
     size: { type: 'integer' },
@@ -170,7 +175,7 @@ export const markSchema = {
   type: 'object',
   properties: {
     account: { type: 'string' },
-    uid: { type: 'integer' },
+    uid: { oneOf: [{ type: 'integer' }, { type: 'string' }] },
     folder: { type: 'string' },
     action: { type: 'string' },
     seen: { type: 'boolean' },
@@ -216,6 +221,7 @@ export function describeMessage(message: EmailListResult['messages'][number]): s
 }
 
 export function renderList(value: EmailListResult): TextBlock[] {
+  if (value.countExact !== undefined) return oneText('账号 ' + value.account + '，文件夹 ' + value.folder + '：本页 ' + value.messages.length + ' 封' + (value.hasMore ? '，还有更多' : '') + '（不把 API 页数当作邮箱总数）\n\n' + value.messages.map(describeMessage).join('\n'))
   if (value.messages.length === 0) {
     return oneText('账号 ' + value.account + '，文件夹 "' + value.folder + '" 共 ' + value.count + ' 封邮件，本次没有要列出的邮件。')
   }
@@ -232,6 +238,7 @@ export function renderRead(value: EmailReadResult): TextBlock[] {
 }
 
 export function renderSearch(value: EmailSearchResult): TextBlock[] {
+  if (value.searchSource === 'api') return oneText('AgentMail 搜索（按相关性，服务排除垃圾箱等特殊邮件）：本页 ' + value.messages.length + ' 条' + (value.hasMore ? '，还有更多；可增加 offset 继续' : '') + '\n\n' + value.messages.map(describeMessage).join('\n'))
   if (value.headerScan) {
     const scan = value.headerScan
     const window = scan.scanOffset === 0 ? '最近 ' + scan.scanned : '跳过最新 ' + scan.scanOffset + ' 封后的 ' + scan.scanned
@@ -299,14 +306,15 @@ export function renderReply(value: EmailReplyResult): TextBlock[] {
 }
 
 export function renderWatch(value: EmailWatchResult): TextBlock[] {
+  const unread = (value.totalUnreadExact === false ? '本次扫描至少未读 ' : '当前未读 ') + value.totalUnread + ' 封'
   if (value.reset === true) {
     return oneText('账号 ' + value.account + '：文件夹 "' + value.folder + '" 的 UIDVALIDITY 已变化（服务器重新编号了邮件），已重新建立基线（当前未读 ' + value.totalUnread + ' 封）。这次不报告新邮件，之后照常。')
   }
   if (value.firstRun) {
-    return oneText('账号 ' + value.account + '：已建立新邮件监视基线（当前未读 ' + value.totalUnread + ' 封）。之后调用 email_watch 只会报告新到的邮件。')
+    return oneText('账号 ' + value.account + '：已建立新邮件监视基线（' + unread + '）。之后调用 email_watch 只会报告新到的邮件。')
   }
   if (value.newCount === 0) {
-    return oneText('账号 ' + value.account + '：没有新邮件（当前未读 ' + value.totalUnread + ' 封）。')
+    return oneText('账号 ' + value.account + '：没有新邮件（' + unread + '）。')
   }
   const lines = value.messages.map((m, i) => '#' + (i + 1) + ' ' + describeMessage(m))
   return oneText('账号 ' + value.account + ' 有 ' + value.newCount + ' 封新邮件：\n\n' + lines.join('\n') + '\n\n用 email_read 配合 uid 阅读全文。')
@@ -328,7 +336,7 @@ export const replySchema = {
   properties: {
     account: { type: 'string' },
     mode: { type: 'string' },
-    originalUid: { type: 'integer' },
+    originalUid: { oneOf: [{ type: 'integer' }, { type: 'string' }] },
     messageId: { type: 'string' },
     accepted: strArray,
     rejected: strArray,
@@ -348,21 +356,22 @@ export const watchSchema = {
     reset: { type: 'boolean' },
     newCount: { type: 'integer' },
     totalUnread: { type: 'integer' },
+    totalUnreadExact: { type: 'boolean' },
     messages: { type: 'array', items: { type: 'object', properties: messageShape, additionalProperties: true } },
   },
   additionalProperties: true,
 }
 
 export const descriptions = {
-  "email_list": 'List recent emails in a mailbox folder (newest first). Returns uid, date, sender, subject and flags without message bodies; use email_read with a uid to fetch the full text. Optional since/until (dates like 2026-08-01) filter by received date.',
+  "email_list": 'IMAP uid is a positive integer; AgentMail uid is an opaque string message_id. AgentMail returns page counts: inspect hasMore/countExact instead of assuming mailbox totals. List recent emails in a mailbox folder (newest first). Returns uid, date, sender, subject and flags without message bodies; use email_read with a uid to fetch the full text. Optional since/until (dates like 2026-08-01) filter by received date.',
   "email_read": 'Read one full email message by its uid (from email_list or email_search). Returns the plain-text body (HTML mail is converted; oversized bodies are truncated) plus attachment metadata; use email_attachment to download one.',
-  "email_mark": 'Change an existing message: mark it read/unread, star/unstar it, or move it to another folder. Use after email_list/email_search when the user wants to tidy the mailbox (archive, clear unread, flag important mail). Moving uses the server MOVE/COPY so the uid changes; the new uid is reported when the server provides it.',
-  "email_search": 'Search sender, recipients and subject; verify server candidates against envelopes and arrival dates. If server SEARCH is empty, fails, or has no confirmed matches, scan local headers in batches without downloading bodies/attachments (default newest 5000, max 20000). headerScanOffset/Limit select an older header window; use headerScan.nextScanOffset to continue. offset pages MATCHES within that window. If no headers match and headerScanOffset=0, optional body fallback scans only bodySearchLimit recent arrivals. Inspect searchSource/headerScan/bodyScan: partial or zero results never prove the whole mailbox has no match. Results use descending mailbox UID arrival order, not Date-header or INTERNALDATE sorting. since/until filter INTERNALDATE (Date header only if unavailable).',
-  "email_send": 'Send an email from a configured account, optionally with file attachments (absolute paths, or relative to the current session workspace; process cwd is the fallback without a session). Saved blocked-address/domain rules reject To/Cc recipients even when sendApproval is off. Plugin confirmation is required by default, unless sendApproval is disabled or every To/Cc recipient matches saved trust rules with skipApproval enabled. Host permissions still apply. Full Access refuses a send that still requires plugin confirmation; use email_draft for human review and explicit sending. Never invent recipients or content without the user\'s instruction.',
-  "email_reply": 'Reply to, reply-all to, or forward an existing message (mode: reply | reply-all | forward). Recipients come from the original message (your own address is excluded automatically), the subject gets a single Re:/Fwd: prefix, the original text is quoted underneath, and In-Reply-To/References headers keep mail clients threading correctly. mode=forward needs the to parameter. Plugin confirmation is required unless sendApproval is disabled; trusted-recipient skipping only applies to email_send. Blocked recipients still stop delivery before SMTP and host permissions remain in effect. Never invent recipients or content without the user\'s instruction.',
+  "email_mark": 'AgentMail supports flags and only INBOX-to-Archive label archiving; arbitrary IMAP moves are not supported there. Change an existing message: mark it read/unread, star/unstar it, or move it to another folder. Use after email_list/email_search when the user wants to tidy the mailbox (archive, clear unread, flag important mail). Moving uses the server MOVE/COPY so the uid changes; the new uid is reported when the server provides it.',
+  "email_search": 'AgentMail accounts use API relevance search (searchSource=api), exclude spam/trash/blocked/unauthenticated mail, and page with offset; headerScanOffset and IMAP fallbacks do not apply. For IMAP: Search sender, recipients and subject; verify server candidates against envelopes and arrival dates. If server SEARCH is empty, fails, or has no confirmed matches, scan local headers in batches without downloading bodies/attachments (default newest 5000, max 20000). headerScanOffset/Limit select an older header window; use headerScan.nextScanOffset to continue. offset pages MATCHES within that window. If no headers match and headerScanOffset=0, optional body fallback scans only bodySearchLimit recent arrivals. Inspect searchSource/headerScan/bodyScan: partial or zero results never prove the whole mailbox has no match. Results use descending mailbox UID arrival order, not Date-header or INTERNALDATE sorting. since/until filter INTERNALDATE (Date header only if unavailable).',
+  "email_send": 'AgentMail has a plugin limit of 10 attachments / 4 MiB total and uses its inbox API; a receipt means submission, not delivery. Send an email from a configured account, optionally with file attachments (absolute paths, or relative to the current session workspace; process cwd is the fallback without a session). Saved blocked-address/domain rules reject To/Cc recipients even when sendApproval is off. Plugin confirmation is required by default, unless sendApproval is disabled or every To/Cc recipient matches saved trust rules with skipApproval enabled. Host permissions still apply. Full Access refuses a send that still requires plugin confirmation; use email_draft for human review and explicit sending. Never invent recipients or content without the user\'s instruction.',
+  "email_reply": 'AgentMail reply/reply-all uses its thread-aware reply API; forwarding creates a new message. Reply to, reply-all to, or forward an existing message (mode: reply | reply-all | forward). Recipients come from the original message (your own address is excluded automatically), the subject gets a single Re:/Fwd: prefix, the original text is quoted underneath, and In-Reply-To/References headers keep mail clients threading correctly. mode=forward needs the to parameter. Plugin confirmation is required unless sendApproval is disabled; trusted-recipient skipping only applies to email_send. Blocked recipients still stop delivery before SMTP and host permissions remain in effect. Never invent recipients or content without the user\'s instruction.',
   "email_folders": 'List the mailbox folders of an account (INBOX, Sent, Trash, custom folders, ...). Use the returned path values as the folder argument of the other email tools.',
-  "email_health": 'Self-check for dsh-email: summarizes configured accounts (provider / IMAP / SMTP hosts) without any network connection and never shows passwords. Run this first when troubleshooting.',
-  "email_attachment": 'Download one attachment of a message to a local file (size capped by maxAttachmentBytes). The index matches the attachments array of email_read. Returns the absolute path of the written file.',
+  "email_health": 'AgentMail accounts show fixed regional API endpoints instead of IMAP/SMTP servers. Self-check for dsh-email: summarizes configured accounts (provider / IMAP / SMTP hosts) without any network connection and never shows passwords. Run this first when troubleshooting.',
+  "email_attachment": 'AgentMail downloads are limited to 20 MiB or the smaller configured maximum. Download one attachment of a message to a local file (size capped by maxAttachmentBytes). The index matches the attachments array of email_read. Returns the absolute path of the written file.',
   "email_watch": 'Check for NEW unread emails since the last check (cursor-based). The first call per account+folder sets the baseline and reports nothing as new; every later call returns only unseen unread messages. Call this periodically (e.g. via a scheduled task) to notify the user about new mail. Returns newCount, the new messages, and totalUnread.'
 }
 
@@ -377,12 +386,12 @@ export const parameters = {
     account: { type: 'string', description: ACCOUNT_HINT },
   }),
   "email_read": compileParameters({
-    uid: { type: 'integer', required: true, description: 'Message uid from email_list or email_search' },
+    uid: { type: ['integer', 'string'], required: true, description: 'IMAP positive integer uid or unchanged AgentMail string message_id from email_list or email_search' },
     folder: { type: 'string', description: 'IMAP folder the uid belongs to; defaults to the account inboxFolder' },
     account: { type: 'string', description: ACCOUNT_HINT },
   }),
   "email_mark": compileParameters({
-    uid: { type: 'integer', required: true, description: 'Message uid from email_list or email_search' },
+    uid: { type: ['integer', 'string'], required: true, description: 'IMAP positive integer uid or unchanged AgentMail string message_id from email_list or email_search' },
     action: { type: 'string', required: true, description: 'What to do: read, unread, star, unstar, or move' },
     toFolder: { type: 'string', description: 'Destination folder path for action=move (see email_folders for valid paths)' },
     folder: { type: 'string', description: 'IMAP folder the uid belongs to; defaults to the account inboxFolder' },
@@ -408,7 +417,7 @@ export const parameters = {
     account: { type: 'string', description: ACCOUNT_HINT },
   }),
   "email_reply": compileParameters({
-    uid: { type: 'integer', required: true, description: 'Message uid to answer/forward, from email_list or email_search' },
+    uid: { type: ['integer', 'string'], required: true, description: 'IMAP positive integer uid or unchanged AgentMail string message_id to answer/forward, from email_list or email_search' },
     text: { type: 'string', required: true, description: 'The new text to write; the original is quoted below it automatically' },
     mode: { type: 'string', description: 'reply (default), reply-all, or forward' },
     to: { type: 'string', description: 'Recipient(s) for mode=forward, comma-separated' },
@@ -422,7 +431,7 @@ export const parameters = {
   }),
   "email_health": compileParameters({}),
   "email_attachment": compileParameters({
-    uid: { type: 'integer', required: true, description: 'Message uid from email_list or email_search' },
+    uid: { type: ['integer', 'string'], required: true, description: 'IMAP positive integer uid or unchanged AgentMail string message_id from email_list or email_search' },
     index: { type: 'integer', description: '0-based attachment index, as listed by email_read; default 0' },
     folder: { type: 'string', description: 'IMAP folder the uid belongs to; defaults to the account inboxFolder' },
     account: { type: 'string', description: ACCOUNT_HINT },

@@ -213,7 +213,11 @@ export declare class EmailPool {
     sendPrepared(accountName: string, to: string, subject: string, text: string, cc: string, attachments: Array<{
         filename: string;
         content: Buffer;
-    }>, signal?: AbortSignal): Promise<EmailSendResult>;
+    }>, signal?: AbortSignal, reply?: {
+        uid: number;
+        folder: string;
+        uidValidity?: number;
+    }): Promise<EmailSendResult>;
     reply(accountName: string | undefined, folder: string, uid: number, mode: EmailReplyMode, text: string, forwardTo: string, cc: string | undefined, signal?: AbortSignal): Promise<EmailReplyResult>;
 }
 /** Stat every attachment path up front; total size must stay under the cap. */

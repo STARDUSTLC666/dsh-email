@@ -1,12 +1,13 @@
 /** Live settings, account-pool ownership, and independent tool/web watch cursors. */
 import { clampInt, mergeAccountDefaults, presetNamesIn, resolveEmailSettings, serializeAccountsYaml, type EmailConfig, type ResolvedEmailSettings } from './config.js'
-import { EmailPool, messageOf } from './mail-client.js'
+import { messageOf } from './mail-client.js'
+import { EmailService } from './mail-service.js'
 import { EmailSettingsSchema, SETTINGS_NAMESPACE, toEmailConfig, toSettingsBase, validateSettingsValue, type EmailSettingsValue } from './settings.js'
 import type { EmailWatchResult } from './types.js'
 import { liveConfig } from './host-config.js'
 
-export type EmailClient = Pick<EmailPool,
-  'list' | 'read' | 'mark' | 'search' | 'send' | 'sendPrepared' | 'reply' | 'folders' | 'downloadAttachment' | 'unseenUids' | 'fetchByUids' | 'startIdleSweep' | 'dispose'>
+export type EmailClient = Pick<EmailService,
+  'list' | 'read' | 'mark' | 'search' | 'send' | 'sendPrepared' | 'reply' | 'folders' | 'downloadAttachment' | 'unseenUids' | 'fetchByUids' | 'startIdleSweep' | 'dispose' | 'watchApi'>
 
 export interface EmailSettingsScope {
   get(): unknown
@@ -56,7 +57,7 @@ function fingerprintSettings(settings: ResolvedEmailSettings): string {
 export function createEmailRuntime(
   ctx: EmailRuntimeContext,
   config: EmailConfig,
-  createPool: (settings: ResolvedEmailSettings) => EmailClient = settings => new EmailPool(settings),
+  createPool: (settings: ResolvedEmailSettings) => EmailClient = settings => new EmailService(settings),
 ): EmailRuntime {
   config = liveConfig(config)
   const legacy = typeof ctx.settings.register === 'function'
@@ -77,7 +78,7 @@ export function createEmailRuntime(
         const account = settings.accounts.get(settings.defaultAccount)
         if (account) endpointDefaults = { imap: account.imap, smtp: account.smtp }
       } catch { /* A fresh installation remains editable before credentials exist. */ }
-      const shared = Object.fromEntries(['provider', 'user', 'password', 'senderName', 'authUser', 'authPassword', 'clientId', 'authKind', 'imap', 'smtp', 'inboxFolder']
+      const shared = Object.fromEntries(['provider', 'user', 'password', 'apiKey', 'senderName', 'authUser', 'authPassword', 'clientId', 'authKind', 'imap', 'smtp', 'inboxFolder']
         .filter(key => (config as any)[key] !== undefined).map(key => [key, (config as any)[key]]))
       const cards = config.accounts && Object.keys(config.accounts).length > 0
         ? Object.fromEntries(Object.entries(config.accounts).map(([key, account]) => [key, mergeAccountDefaults(shared, account)]))
@@ -136,6 +137,8 @@ export function createEmailRuntime(
     const pool = getPool()
     // 先只 SEARCH UNSEEN 拿 uid 列表与 totalUnread，再只为本轮要报告的最旧
     // limit 封取信封：网页弹窗每 30 秒轮询一次，不能因为未读多就整批 FETCH。
+    const apiWatch = await pool.watchApi?.(account, folder, capped, scope, signal)
+    if (apiWatch) return apiWatch
     const index = await pool.unseenUids(account, folder, signal)
     const key = scope + '\u0000' + index.account + '\u0000' + index.folder
     const stored = watchCursors.get(key)

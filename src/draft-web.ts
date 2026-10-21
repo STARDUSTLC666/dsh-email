@@ -31,7 +31,7 @@ export class EmailDraftBackend {
     const settings = this.runtime.getEffectiveSettings(), name = account || settings.defaultAccount, config = settings.accounts.get(name)
     if (!config) throw new DraftError('发件账号不存在，请重新选择账号')
     const value = this.runtime.getSettingsValue(), policies = parseRecipientPolicies(value.trustedRecipientsYaml)
-    return { name, config, cap: Math.min(settings.maxAttachmentBytes, MAX_BYTES), policy: policies.get(name), key: hash({ name, config, cap: settings.maxAttachmentBytes, policies: value.trustedRecipientsYaml ?? '', approval: value.sendApproval }) }
+    return { name, config, cap: Math.min(settings.maxAttachmentBytes, config.transport === 'agentmail' ? 4 * 1024 * 1024 : MAX_BYTES), policy: policies.get(name), key: hash({ name, config, cap: settings.maxAttachmentBytes, policies: value.trustedRecipientsYaml ?? '', approval: value.sendApproval }) }
   }
   private safe(error: unknown): string {
     let message = redactCredentials(messageOf(error, '操作失败，请稍后重试'))
@@ -75,7 +75,9 @@ export class EmailDraftBackend {
     if (body.action === 'list') {
       await this.recover(signal)
       const snapshot = await this.settings.snapshot()
-      return { drafts: (await this.store.list()).map(view), accounts: snapshot.accounts, revision: snapshot.settings.revision, writable: snapshot.writable }
+      const attachmentLimits: Record<string, number> = {}
+      try { for (const name of this.runtime.getEffectiveSettings().accounts.keys()) attachmentLimits[name] = this.connection(name).cap } catch { /* Drafts remain usable before account setup. */ }
+      return { drafts: (await this.store.list()).map(view), accounts: snapshot.accounts, attachmentLimits, revision: snapshot.settings.revision, writable: snapshot.writable }
     }
     if (body.action === 'rules') {
       const snapshot = await this.settings.snapshot()
@@ -100,6 +102,7 @@ export class EmailDraftBackend {
     if (body.action === 'update') {
       editable(draft)
       const fields = draftFields(body), keep = body.attachments ?? draft.attachments.map(file => file.id)
+      if (draft.reply && (fields.account !== draft.account || fields.subject !== draft.subject)) throw new DraftError('回复草稿须保留原发件账号和主题；如需更换请新建邮件')
       if (!Array.isArray(keep) || keep.some(key => !draft.attachments.some(file => file.id === key)) || new Set(keep).size !== keep.length) throw new DraftError('附件列表无效，请重新打开草稿')
       const changed = await this.store.change(id, body.revision, value => { editable(value); Object.assign(value, fields); value.attachments = value.attachments.filter(file => keep.includes(file.id)) }, signal)
       this.invalidate(id); for (const file of draft.attachments) if (!changed.attachments.some(kept => kept.id === file.id)) await this.store.removeOwnedFile(id, file)
@@ -116,7 +119,7 @@ export class EmailDraftBackend {
       const contents = await this.attachments(draft, MAX_BYTES, signal), created = await this.store.create(draftFields(draft), [], signal), files: DraftAttachment[] = []
       try {
         for (const file of contents) { const owned = this.store.uploadPath(created.id, file.filename), stored = { id: randomUUID(), ...owned, owned: true }; files.push(stored); await this.writeUpload(owned.path, file.content, signal) }
-        const changed = await this.store.change(created.id, created.revision, value => { value.attachments = files }, signal); return view(changed)
+        const changed = await this.store.change(created.id, created.revision, value => { value.attachments = files; if (draft.reply) value.reply = { ...draft.reply } }, signal); return view(changed)
       } catch (error) { for (const file of files) await this.store.removeOwnedFile(created.id, file); await this.store.remove(created.id, created.revision).catch(() => {}); throw error }
     }
     if (body.action === 'preview') {
@@ -146,7 +149,7 @@ export class EmailDraftBackend {
           throw new DraftError('账号或规则已改变，邮件未提交；请重新预览', 'draft-conflict')
         }
         let receipt: EmailSendResult
-        try { receipt = await pool.sendPrepared(before.account, before.to, before.subject, before.text, before.cc, plan.attachments.map(({ filename, content }) => ({ filename, content })), current) }
+        try { receipt = await pool.sendPrepared(before.account, before.to, before.subject, before.text, before.cc, plan.attachments.map(({ filename, content }) => ({ filename, content })), current, before.reply) }
         catch (error) {
           if (error instanceof RecipientPolicyError) {
             await this.store.change(id, pending.revision, value => { value.state = 'draft'; delete value.attemptAt })
@@ -156,9 +159,9 @@ export class EmailDraftBackend {
           if (!failed) throw new DraftError('提交结果未确定，且回执未能保存；请先去邮箱核对，不要直接重发', 'draft-storage')
           return { draft: view(failed) }
         }
-        // Once SMTP acknowledges, a disconnected browser must not prevent the receipt from being persisted.
+        // Once the server acknowledges, persist its receipt even if the browser disconnects.
         try { return { draft: view(await this.store.change(id, pending.revision, value => { value.state = 'sent'; value.receipt = receipt })) } }
-        catch { throw new DraftError('SMTP 已返回回执，但本地保存失败；请先核对邮箱，不要再次发送', 'draft-storage') }
+        catch { throw new DraftError('服务器已返回回执，但本地保存失败；请先核对邮箱，不要再次发送', 'draft-storage') }
       }, signal)
     }
     throw new DraftError('不支持此草稿操作')

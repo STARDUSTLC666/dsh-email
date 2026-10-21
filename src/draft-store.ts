@@ -11,6 +11,7 @@ export interface EmailDraft {
   id: string; revision: number; account: string; to: string; cc: string; subject: string; text: string
   attachments: DraftAttachment[]; state: DraftState; createdAt: string; updatedAt: string
   attemptAt?: string; receipt?: EmailSendResult; error?: string
+  reply?: { uid: number | string; folder: string; uidValidity?: number }
 }
 export interface DraftFields { account: string; to: string; cc: string; subject: string; text: string }
 interface Document { version: 1; drafts: EmailDraft[] }
@@ -43,6 +44,8 @@ export class DraftStore {
       for (const draft of doc.drafts) {
         if (!isId(draft.id) || !Number.isSafeInteger(draft.revision) || draft.revision < 1 || !['draft', 'sending', 'sent', 'uncertain'].includes(draft.state)) throw new Error('invalid draft')
         draftFields(draft)
+        if (draft.reply && (!(typeof draft.reply.uid === 'number' && Number.isSafeInteger(draft.reply.uid) && draft.reply.uid > 0 || typeof draft.reply.uid === 'string' && draft.reply.uid.length > 0 && draft.reply.uid.length <= 998 && !/[\r\n\0]/.test(draft.reply.uid)) || typeof draft.reply.folder !== 'string' || draft.reply.folder.length > 1024)) throw new Error('invalid reply reference')
+        if (draft.reply?.uidValidity !== undefined && (!Number.isSafeInteger(draft.reply.uidValidity) || draft.reply.uidValidity <= 0)) throw new Error('invalid reply UIDVALIDITY')
         if (!Array.isArray(draft.attachments) || draft.attachments.length > 10 || draft.attachments.some(file => !isId(file.id) || !isAbsolute(file.path) || typeof file.filename !== 'string' || typeof file.owned !== 'boolean')) throw new Error('invalid attachments')
       }
       return doc

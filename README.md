@@ -4,18 +4,20 @@
 
 ![dsh-email 鲸鱼娘插件封面](https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/cover-whale-girl.png)
 
-在 DSH 中收发、搜索和整理邮件，支持多个邮箱账号。
+在 DSH 中收发、搜索和整理邮件，支持普通邮箱与 AgentMail 多账号。
 
 [![npm](https://img.shields.io/npm/v/dsh-email)](https://www.npmjs.com/package/dsh-email) [![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-downloads.svg)](https://www.npmjs.com/package/dsh-email)
 
 欢迎使用，遇到问题或有改进建议，请提交 [issues](https://github.com/STARDUSTLC666/dsh-email/issues) 和 [PR](https://github.com/STARDUSTLC666/dsh-email/pulls)。
 
 
-DSH `0.2.1-alpha.5` 的本轮检查与未验收范围见 [0.16.3 验收记录](docs/validation/0.16.3.md)。
+本版在官方 DSH `0.2.1-rc.2` 中完成浏览器操作与模拟邮箱协议验收，范围见 [0.18.0 验收记录](docs/validation/0.18.0.md)。
 
 ## 功能
 
 - 通过 IMAP / SMTP 收发、回复和转发邮件。
+- 通过邮箱地址与 API Key 添加 AgentMail US / EU 账号，无需配置 IMAP / SMTP。
+- 在「收发邮件」页浏览收件箱与已发送，搜索、翻页、阅读正文、下载附件、标记已读和星标。
 - 管理附件、搜索结果与邮箱整理操作。
 - 搜索无可信服务端结果时，分批检查邮件信封，并说明覆盖范围；可继续查更早邮件。
 - 多账号设置，支持 Outlook OAuth2、Windows 登录令牌加密和发信审批。
@@ -35,13 +37,13 @@ dsh plugin --profile desktop add dsh-email
 
 ## 开始使用
 
-打开「设置 → 邮件」添加账号并测试连接。可说：“列出最近未读邮件，给这封邮件准备回复。”发送前核对收件人与内容。
+打开「设置 → 邮件」添加账号并测试连接，再到「收发邮件」浏览。可说：“列出最近未读邮件，给这封邮件准备回复。”页面上的回复会先存为草稿，核对后才发送。
 
 要先编辑再发送，可说：“用 email_draft 准备一封邮件，先别发送。”在「草稿」页保存编辑、检查附件并确认。详见[草稿与收件人规则](docs/DRAFTS.md)。
 
 ## 依赖与配置
 
-需要邮箱授权码、应用专用密码或对应 OAuth 授权。DSH 的模型 API Key 与邮箱登录是分别配置的。
+普通邮箱需要授权码、应用专用密码或对应 OAuth 授权；AgentMail 需要对应区域的邮箱与 API Key，见 [AgentMail 配置](docs/AGENTMAIL.md)。DSH 的模型 API Key 与邮箱登录分别配置。
 
 详细配置、工具参数与排错见[使用说明](docs/USAGE.md)。从源码独立开发时，Node 要求以 [package.json](package.json) 为准。
 

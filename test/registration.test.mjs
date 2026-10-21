@@ -63,7 +63,7 @@ test('every registered tool parameters value is a compiled JSON Schema (native w
     assert.equal(def.parameters.type, 'object', def.name + ' parameters root must be type object')
     assert.ok(def.parameters.properties && typeof def.parameters.properties === 'object', def.name + ' must have properties')
     for (const [key, node] of Object.entries(def.parameters.properties)) {
-      assert.ok(typeof node.type === 'string', def.name + '.' + key + ' must declare a type')
+      assert.ok(typeof node.type === 'string' || Array.isArray(node.oneOf) && node.oneOf.every(branch => typeof branch.type === 'string'), def.name + '.' + key + ' must declare a scalar type or native oneOf')
     }
   }
   const read = ctx.tools.defs.find(def => def.name === 'email_read')

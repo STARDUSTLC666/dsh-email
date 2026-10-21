@@ -10,7 +10,7 @@ export declare const ACCOUNT_HINT = "\u8D26\u53F7\u540D\uFF08\u914D\u7F6E\u4E86 
 export declare function parseEmailDay(input: string, label: string, endInclusive?: boolean): Date;
 export declare function executionSignal(exec: unknown): AbortSignal | undefined;
 interface ParameterProperty {
-    type?: string;
+    type?: string | string[];
     required?: boolean;
     description?: string;
     items?: {
@@ -34,7 +34,9 @@ export declare const addrArray: {
 };
 export declare const messageShape: {
     uid: {
-        type: string;
+        oneOf: {
+            type: string;
+        }[];
     };
     date: {
         type: string;
@@ -71,6 +73,18 @@ export declare const listSchema: {
         count: {
             type: string;
         };
+        countExact: {
+            type: string;
+        };
+        hasMore: {
+            type: string;
+        };
+        order: {
+            type: string;
+        };
+        searchSource: {
+            type: string;
+        };
         folder: {
             type: string;
         };
@@ -80,7 +94,9 @@ export declare const listSchema: {
                 type: string;
                 properties: {
                     uid: {
-                        type: string;
+                        oneOf: {
+                            type: string;
+                        }[];
                     };
                     date: {
                         type: string;
@@ -121,7 +137,9 @@ export declare const readSchema: {
             type: string;
         };
         uid: {
-            type: string;
+            oneOf: {
+                type: string;
+            }[];
         };
         folder: {
             type: string;
@@ -233,7 +251,9 @@ export declare const attachmentSchema: {
             type: string;
         };
         uid: {
-            type: string;
+            oneOf: {
+                type: string;
+            }[];
         };
         filename: {
             type: string;
@@ -257,7 +277,9 @@ export declare const markSchema: {
             type: string;
         };
         uid: {
-            type: string;
+            oneOf: {
+                type: string;
+            }[];
         };
         folder: {
             type: string;
@@ -306,7 +328,9 @@ export declare const replySchema: {
             type: string;
         };
         originalUid: {
-            type: string;
+            oneOf: {
+                type: string;
+            }[];
         };
         messageId: {
             type: string;
@@ -359,13 +383,18 @@ export declare const watchSchema: {
         totalUnread: {
             type: string;
         };
+        totalUnreadExact: {
+            type: string;
+        };
         messages: {
             type: string;
             items: {
                 type: string;
                 properties: {
                     uid: {
-                        type: string;
+                        oneOf: {
+                            type: string;
+                        }[];
                     };
                     date: {
                         type: string;

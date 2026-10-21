@@ -216,7 +216,7 @@ export function validateSettingsValue(value: EmailSettingsValue, extraProviders:
     parseRecipientPolicies(draft.trustedRecipientsYaml)
   }
   const provider = draft.provider
-  if (isSet(provider) && provider !== '' && !PROVIDER_NAMES.includes(provider) && !extraProviders.includes(provider)) {
+  if (isSet(provider) && provider !== '' && !['agentmail', 'agentmail-eu', ...PROVIDER_NAMES].includes(provider) && !extraProviders.includes(provider)) {
     const names = [...PROVIDER_NAMES, ...extraProviders]
     throw new Error('未知的邮箱服务商 ' + describeValue(provider) + '，可选：' + names.join('/') + '（或留空手填 IMAP/SMTP 主机）')
   }
