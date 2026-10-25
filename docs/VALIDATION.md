@@ -1,5 +1,7 @@
 # dsh-email 验证记录
 
+[2026-10-26：IMAP 数字字符串 UID 与 AgentMail ID 的入口回归](validation-2026-10-26.md)。运行时代码与 0.19.0 版本保持不变。
+
 [0.18.0 AgentMail 与收发邮件工作台验收](validation/0.18.0.md)。
 
 [0.17.1 发信策略与设置保存验收](validation/0.17.1.md)。
