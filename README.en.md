@@ -13,6 +13,8 @@ Feedback and contributions are welcome: report [issues](https://github.com/STARD
 
 See the [0.18.0 validation record](docs/validation/0.18.0.md) for browser and simulated mailbox protocol checks on official DSH `0.2.1-rc.2` and the remaining limits.
 
+Open the new native sidebar workbench after updating and restarting DSH. Settings remains available. See the [workbench guide and validation boundaries](docs/WORKBENCH.md).
+
 ## What it does
 
 - Read, send, reply and forward using IMAP and SMTP.

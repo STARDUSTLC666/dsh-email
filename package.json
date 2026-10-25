@@ -1,6 +1,6 @@
 {
   "name": "dsh-email",
-  "version": "0.18.1",
+  "version": "0.19.0",
   "description": "在 DSH 中浏览、收发、搜索和整理邮件，支持 IMAP/SMTP 与 AgentMail 多账号。",
   "type": "module",
   "main": "lib/index.js",
@@ -24,7 +24,7 @@
     "docs"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/build-client.mjs",
     "prepublishOnly": "pnpm run build",
     "test": "pnpm run build && node --test \"test/*.test.mjs\""
   },
@@ -57,7 +57,9 @@
     },
     "client": {
       "inject": [
-        "@deepseek-ai/dsh-client-ui-settings"
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar"
       ],
       "platform": "web"
     }
