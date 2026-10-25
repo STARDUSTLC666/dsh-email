@@ -55,9 +55,12 @@ export class EmailService {
     )
   }
   private number(uid: MessageRef) {
-    if (typeof uid !== 'number' || !Number.isSafeInteger(uid) || uid <= 0)
-      throw new Error('IMAP uid 必须是正整数')
-    return uid
+    // Tool/JSON callers can preserve an IMAP UID as a decimal string. Normalize
+    // only after selecting IMAP, so AgentMail IDs remain opaque (including 001).
+    const value = typeof uid === 'string' && /^[0-9]+$/.test(uid) ? Number(uid) : uid
+    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0)
+      throw new Error('IMAP uid 必须是正整数或纯数字字符串；AgentMail 字符串邮件标识仅适用于 AgentMail 账号')
+    return value
   }
   private folder(account: string | undefined, folder: string) {
     return folder || this.settings.accounts.get(this.name(account))!.inboxFolder

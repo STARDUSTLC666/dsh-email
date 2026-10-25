@@ -1,6 +1,6 @@
 {
   "name": "dsh-email",
-  "version": "0.18.0",
+  "version": "0.18.1",
   "description": "在 DSH 中浏览、收发、搜索和整理邮件，支持 IMAP/SMTP 与 AgentMail 多账号。",
   "type": "module",
   "main": "lib/index.js",
