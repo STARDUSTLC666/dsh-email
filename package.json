@@ -1,6 +1,6 @@
 {
   "name": "dsh-email",
-  "version": "0.20.2",
+  "version": "0.20.3",
   "description": "在 DSH 中浏览、收发、搜索和整理邮件，支持 IMAP/SMTP 与 AgentMail 多账号。",
   "type": "module",
   "main": "lib/index.js",
@@ -73,7 +73,7 @@
     "proper-lockfile": "4.1.2",
     "schemastery": "^3.18.0",
     "yaml": "^2.9.0",
-    "@stardustlc/dsh-updates": "0.1.2"
+    "@stardustlc/dsh-updates": "0.1.3"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
