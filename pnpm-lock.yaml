@@ -12,8 +12,8 @@ importers:
         specifier: ^3.18.3
         version: 3.18.3
       '@stardustlc/dsh-updates':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: 0.1.1
+        version: 0.1.1
       imapflow:
         specifier: ^2.2.1
         version: 2.2.1
@@ -62,8 +62,8 @@ packages:
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
-  '@stardustlc/dsh-updates@0.1.0':
-    resolution: {integrity: sha512-lIrrfgrqb53psOgEX+Tvf+yWrwaCyEP5JYaLhmfLWs9XQp4j4Onqirv4f1iF9u258lOt8pTsL0U0XIkF2zo5wQ==}
+  '@stardustlc/dsh-updates@0.1.1':
+    resolution: {integrity: sha512-dqtxwMrKCf+QZe0MiAf1fZH8BPmlwdfBTSlMYCGWW7k6IB0RN/TEcXIUe0EDgaH4tOFdzr7GBqt4eOKk499fRA==}
     engines: {node: ^22.19.0 || >=24.0.0}
 
   '@types/node@26.2.0':
@@ -291,7 +291,7 @@ snapshots:
 
   '@standard-schema/spec@1.1.0': {}
 
-  '@stardustlc/dsh-updates@0.1.0':
+  '@stardustlc/dsh-updates@0.1.1':
     dependencies:
       acorn: 8.15.0
       proper-lockfile: 4.1.2
