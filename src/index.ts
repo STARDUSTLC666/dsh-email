@@ -1,3 +1,4 @@
+import { registerUpdates } from '@stardustlc/dsh-updates'
 import { installSendApproval } from './approval.js'
 import type { EmailConfig } from './config.js'
 import { createEmailRuntime } from './runtime.js'
@@ -17,6 +18,8 @@ export type Config = EmailConfig
 
 /** Compose settings/pool lifecycle, tools, browser routes and the outgoing-mail gate. */
 export function apply(ctx: any, config: Config = {}): void {
+  registerUpdates(ctx, { name: "dsh-email" })
+
   installEmailApplication(ctx,config)
 }
 

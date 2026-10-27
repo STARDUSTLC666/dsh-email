@@ -2287,6 +2287,9 @@ const [showEditor,setShowEditor]=useState(false);const handledCompose=useRef(nul
             const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState(""), [preview, setPreview] = useState(null), [acknowledged, setAcknowledged] = useState(false), [pending, setPending] = useState(null), [remove, setRemove] = useState(false), [copy, setCopy] = useState(false);
             const operation = useRef(false), handledRequested = useRef("");
             const dirty = selected && form && JSON.stringify(form) !== JSON.stringify(draftForm(selected));
+// Update protection: dsh-email.draft
+__stardustUpdatesGuard(React, "dsh-email.draft", { dirty: !!dirty, busy, retainOnClose: true });
+
             useEffect(() => { draftUiCache = { selected, form }; }, [selected, form]);
             const locked = !selected || selected.state !== "draft";
             const attachmentCap = data.attachmentLimits?.[form?.account] ?? 20 * 1024 * 1024;
@@ -2423,6 +2426,9 @@ const fieldId=React.useId();
             const [data, setData] = useState(() => rulesUiCache && rulesUiCache.data), [account, setAccount] = useState(() => rulesUiCache && rulesUiCache.account || ""), [form, setForm] = useState(() => rulesUiCache && rulesUiCache.form || { addresses: "", domains: "", denyAddresses: "", denyDomains: "", skipApproval: false });
             const [base, setBase] = useState(() => rulesUiCache && rulesUiCache.base || ""), [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState(""), [pending, setPending] = useState(null), [to, setTo] = useState(() => rulesUiCache && rulesUiCache.to || ""), [cc, setCc] = useState(() => rulesUiCache && rulesUiCache.cc || ""), [match, setMatch] = useState(null);
             const operation = useRef(false), dirty = data && JSON.stringify(form) !== base;
+// Update protection: dsh-email.rules
+__stardustUpdatesGuard(React, "dsh-email.rules", { dirty: !!dirty, busy, retainOnClose: true });
+
             useEffect(() => { rulesUiCache = { data, account, form, base, to, cc }; }, [data, account, form, base, to, cc]);
             const choose = (next, name) => { const rule = next.policies[name] || { addresses: [], domains: [], skipApproval: false }, fields = { addresses: rule.addresses.join("\n"), domains: rule.domains.join("\n"), denyAddresses: (rule.denyAddresses || []).join("\n"), denyDomains: (rule.denyDomains || []).join("\n"), skipApproval: rule.skipApproval }; setAccount(name); setForm(fields); setBase(JSON.stringify(fields)); setMatch(null); setPending(null); };
             const run = async (fn) => { if (operation.current)
@@ -2500,6 +2506,9 @@ const [,redrawLocale]=useState(0);useEffect(()=>activeLocaleService?.subscribe?.
             const [saveState, setSaveState] = useState(null);
             const [incompleteDrafts, setIncompleteDrafts] = useState({ accounts: false, presets: false });
             const hasIncompleteDraft = incompleteDrafts.accounts || incompleteDrafts.presets;
+// Update protection: dsh-email.settings
+__stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraft || !!saveState && saveState.kind !== "saved", busy: saveState?.kind === "saving" });
+
             /** 卡片级提示（注释丢失、序列化失败…）：走卡片自己的 notice 位，不打断顶部状态。 */
             const [cardsNotice, setCardsNotice] = useState(null);
             /**
