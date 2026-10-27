@@ -5,4 +5,4 @@ minimumReleaseAgeExclude:
   - ip-address@10.7.3
   - "@deepseek-ai/cosmokit@1.8.4"
   - "@deepseek-ai/schemastery@3.18.3"
-  - "@stardustlc/dsh-updates@0.1.0 || 0.1.1"
+  - "@stardustlc/dsh-updates@0.1.0 || 0.1.1 || 0.1.2"
