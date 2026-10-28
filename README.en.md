@@ -4,16 +4,13 @@
 
 ![dsh-email whale girl plugin cover](https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/cover-whale-girl.png)
 
-Browse, send, search and organize email from DSH with IMAP/SMTP and AgentMail accounts.
+Manage IMAP/SMTP and AgentMail accounts in the DSH email workbench. Browse inbox and sent mail, search messages, download attachments and review local drafts before explicitly confirming delivery.
 
 [![npm](https://img.shields.io/npm/v/dsh-email)](https://www.npmjs.com/package/dsh-email) [![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-downloads.svg)](https://www.npmjs.com/package/dsh-email)
 
 Feedback and contributions are welcome: report [issues](https://github.com/STARDUSTLC666/dsh-email/issues) or submit [pull requests](https://github.com/STARDUSTLC666/dsh-email/pulls).
 
-
-See the [0.18.0 validation record](docs/validation/0.18.0.md) for browser and simulated mailbox protocol checks on official DSH `0.2.1-rc.2` and the remaining limits.
-
-Open the new native sidebar workbench after updating and restarting DSH. Settings remains available. See the [workbench guide and validation boundaries](docs/WORKBENCH.md).
+Open the workbench from the native DSH sidebar. See the [workbench guide](docs/WORKBENCH.md) for configuration and operating boundaries.
 
 ## What it does
 

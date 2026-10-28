@@ -4,16 +4,13 @@
 
 ![dsh-email 鲸鱼娘插件封面](https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/cover-whale-girl.png)
 
-在 DSH 中收发、搜索和整理邮件，支持普通邮箱与 AgentMail 多账号。
+在 DSH 邮件工作台管理 IMAP / SMTP 与 AgentMail 多账号。查看收件箱和已发送、搜索邮件、下载附件，并先保存与检查草稿，再明确确认发送。
 
 [![npm](https://img.shields.io/npm/v/dsh-email)](https://www.npmjs.com/package/dsh-email) [![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-downloads.svg)](https://www.npmjs.com/package/dsh-email)
 
 欢迎使用，遇到问题或有改进建议，请提交 [issues](https://github.com/STARDUSTLC666/dsh-email/issues) 和 [PR](https://github.com/STARDUSTLC666/dsh-email/pulls)。
 
-
-本版在官方 DSH `0.2.1-rc.2` 中完成浏览器操作与模拟邮箱协议验收，范围见 [0.18.0 验收记录](docs/validation/0.18.0.md)。
-
-更新并重启 DSH 后，可从原生侧栏打开新版工作台，原设置入口继续保留。详见[工作台说明与验收范围](docs/WORKBENCH.md)。
+从 DSH 原生侧栏打开工作台；配置与操作边界见[工作台说明](docs/WORKBENCH.md)。
 
 ## 功能
 
