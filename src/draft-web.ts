@@ -126,6 +126,7 @@ export class EmailDraftBackend {
       editable(draft); if (draft.revision !== body.revision) throw new DraftError('草稿已改变，请保存后重新预览', 'draft-conflict')
       if (!draft.subject) throw new DraftError('请先填写并保存邮件主题')
       const connection = this.connection(draft.account), matching = await matchRecipients(draft.to, draft.cc, connection.policy), attachments = await this.attachments(draft, connection.cap, signal)
+      if (connection.config.transport === 'pop3' && !connection.config.smtp.host) throw new DraftError('此账号只配置了 POP3 收信；请先补全 SMTP 发信设置。草稿未发送且仍可编辑。', 'smtp-missing')
       if (connection.key !== this.connection(draft.account).key || (await this.store.get(id)).revision !== draft.revision) throw new DraftError('草稿或账号已改变，请重新预览', 'draft-conflict')
       this.invalidate(id); if (this.plans.size >= 3) this.plans.delete(this.plans.keys().next().value!)
       const plan: Plan = { id: randomUUID(), created: this.now(), key: connection.key, draft, attachments }; this.plans.set(plan.id, plan)

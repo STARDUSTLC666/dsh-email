@@ -7,6 +7,16 @@ export declare const SETTINGS_NAMESPACE = "dsh-email";
  * edits named accounts through accountsYaml.
  */
 export declare const EmailSettingsSchema: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+    receiveProtocol: import("@deepseek-ai/schemastery").default<"pop3" | "imap", "pop3" | "imap", Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    pop3: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+        host: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+        port: import("@deepseek-ai/schemastery").default<number, number, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+        secure: import("@deepseek-ai/schemastery").default<boolean, boolean, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    }>>, Schemastery.ObjectT<NoInfer<{
+        host: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+        port: import("@deepseek-ai/schemastery").default<number, number, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+        secure: import("@deepseek-ai/schemastery").default<boolean, boolean, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    }>>, "plain">;
     provider: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
     user: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
     password: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
@@ -37,6 +47,16 @@ export declare const EmailSettingsSchema: import("@deepseek-ai/schemastery").def
         secure: import("@deepseek-ai/schemastery").default<boolean, boolean, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
     }>>, "plain">;
 }>>, Schemastery.ObjectT<NoInfer<{
+    receiveProtocol: import("@deepseek-ai/schemastery").default<"pop3" | "imap", "pop3" | "imap", Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    pop3: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
+        host: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+        port: import("@deepseek-ai/schemastery").default<number, number, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+        secure: import("@deepseek-ai/schemastery").default<boolean, boolean, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    }>>, Schemastery.ObjectT<NoInfer<{
+        host: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+        port: import("@deepseek-ai/schemastery").default<number, number, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+        secure: import("@deepseek-ai/schemastery").default<boolean, boolean, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
+    }>>, "plain">;
     provider: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
     user: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
     password: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
@@ -68,6 +88,12 @@ export declare const EmailSettingsSchema: import("@deepseek-ai/schemastery").def
     }>>, "plain">;
 }>>, "plain">;
 export interface EmailSettingsValue {
+    receiveProtocol?: 'imap' | 'pop3';
+    pop3?: {
+        host: string;
+        port: number;
+        secure: boolean;
+    };
     provider: string;
     user: string;
     password: string;

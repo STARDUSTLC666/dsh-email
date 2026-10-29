@@ -11,6 +11,8 @@ export const SETTINGS_NAMESPACE = 'dsh-email'
  * edits named accounts through accountsYaml.
  */
 export const EmailSettingsSchema = z.object({
+  receiveProtocol: z.union(['imap', 'pop3']).default('imap'),
+  pop3: z.object({ host: z.string().default(''), port: z.number().default(995), secure: z.boolean().default(true) }),
   provider: z.string().default(''),
   user: z.string().default(''),
   password: z.string().role('secret').default(''),
@@ -38,6 +40,8 @@ export const EmailSettingsSchema = z.object({
 })
 
 export interface EmailSettingsValue {
+  receiveProtocol?: 'imap' | 'pop3'
+  pop3?: { host: string; port: number; secure: boolean }
   provider: string
   user: string
   password: string
@@ -56,6 +60,8 @@ export interface EmailSettingsValue {
 /** Project the row config (cordis.patch.yml) into the settings-schema base shape. */
 export function toSettingsBase(config: EmailConfig): Partial<EmailSettingsValue> {
   return {
+    ...(config.receiveProtocol !== undefined ? { receiveProtocol: config.receiveProtocol } : {}),
+    ...(config.pop3 !== undefined ? { pop3: { host: config.pop3.host ?? '', port: config.pop3.port ?? 995, secure: config.pop3.secure ?? true } } : {}),
     ...(config.provider !== undefined ? { provider: config.provider } : {}),
     ...(config.user !== undefined && config.user !== '' ? { user: config.user } : {}),
     ...(config.password !== undefined && config.password !== '' ? { password: config.password } : {}),
@@ -140,6 +146,8 @@ export function toEmailConfig(value: EmailSettingsValue, user?: Partial<EmailSet
     out.provider = draft.provider === '' ? undefined : draft.provider as EmailConfig['provider']
   }
   if (has('user')) set('user', draft.user)
+  if (has('receiveProtocol')) set('receiveProtocol', draft.receiveProtocol)
+  if (has('pop3') && draft.pop3) out.pop3 = { ...draft.pop3 }
   if (has('password')) set('password', draft.password)
   if (has('inboxFolder')) set('inboxFolder', draft.inboxFolder)
   if (has('sendApproval')) set('sendApproval', draft.sendApproval)
@@ -208,6 +216,8 @@ function describeValue(value: unknown): string {
  */
 export function validateSettingsValue(value: EmailSettingsValue, extraProviders: readonly string[] = []): void {
   const draft = (value ?? {}) as Partial<EmailSettingsValue>
+  if (draft.receiveProtocol !== undefined && !['imap', 'pop3'].includes(draft.receiveProtocol)) throw new Error('收信协议只能是 IMAP 或 POP3')
+  if (portOutOfRange(endpointPort(draft.pop3))) throw new Error('POP3 端口必须在 1-65535 之间')
   if (draft.newMailPopup !== undefined && typeof draft.newMailPopup !== 'boolean') {
     throw new Error('新邮件弹窗开关必须为布尔值')
   }

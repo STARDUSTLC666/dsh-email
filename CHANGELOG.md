@@ -1,5 +1,14 @@
 # 更新记录
 
+## 0.21.0 (2026-10-30)
+
+- 新增 POP3 收信账号（[#28](https://github.com/STARDUSTLC666/dsh-email/issues/28)）：原有账号编辑器选择协议与端点，支持连接测试、列表、正文、范围明确的本地搜索和附件下载。
+- 工作台更新区随内容滚动到底部；窄屏账号设置改为单列，修复阅读空间被挤占、表单控件过窄和拉伸的问题。
+- UIDL 重新定位原信，序号变化不会误读邻近邮件；复用 SMTP 回复 / 转发与草稿预览确认流程。服务器不提供的未读、星标、移动和已发送能力明确说明，不显示无效控件。
+- 复用并锁定 MIT 许可的 node-pop3 0.15.3，补齐字节分包、MIME 编码、证书校验、大小限制、期限与取消。自动安装仍默认关闭。
+- HTML 正文转换限制为 2 MiB，超限时提示省略并保留附件，不把省略提示当作搜索结果。
+- Add opt-in POP3 receiving with stable UIDL identity, bounded local search, attachments and existing SMTP draft confirmation. Protocol limitations and validation scope are documented separately.
+
 [返回简介](README.md) · [使用说明](docs/USAGE.md) · [验证记录](docs/VALIDATION.md)
 
 [历史英文记录](docs/CHANGELOG.en.md)

@@ -217,7 +217,7 @@ export declare class EmailPool {
         uid: number;
         folder: string;
         uidValidity?: number;
-    }): Promise<EmailSendResult>;
+    }, pop3Thread?: Pick<BuiltReply, 'inReplyTo' | 'references'>): Promise<EmailSendResult>;
     reply(accountName: string | undefined, folder: string, uid: number, mode: EmailReplyMode, text: string, forwardTo: string, cc: string | undefined, signal?: AbortSignal): Promise<EmailReplyResult>;
 }
 /** Stat every attachment path up front; total size must stay under the cap. */

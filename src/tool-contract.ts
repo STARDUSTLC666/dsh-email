@@ -211,7 +211,7 @@ export function oneText(text: string): TextBlock[] {
 export function describeMessage(message: EmailListResult['messages'][number]): string {
   const from = message.from.map(a => a.name ?? a.address).filter(Boolean).join(', ') || '(未知)'
   const flags = [
-    message.seen ? '' : '未读',
+    message.flagsSupported === false || message.seen ? '' : '未读',
     message.flagged ? '已标星' : '',
     message.hasAttachments ? '含附件' : '',
   ].filter(Boolean)
@@ -221,6 +221,7 @@ export function describeMessage(message: EmailListResult['messages'][number]): s
 }
 
 export function renderList(value: EmailListResult): TextBlock[] {
+  if (value.transport === 'pop3') return oneText('账号 ' + value.account + '，POP3 收件箱：本页 ' + value.messages.length + ' 封，' + (value.countExact ? '邮箱共 ' : '当前扫描匹配 ') + value.count + ' 封。POP3 不提供服务器已读、星标或已发送文件夹。' + (value.headerScan ? ' 本次扫描 ' + value.headerScan.scanned + ' / ' + value.headerScan.mailboxTotal + ' 封的 Date 头；不是服务器接收时间。' : '') + '\n\n' + value.messages.map(describeMessage).join('\n'))
   if (value.countExact !== undefined) return oneText('账号 ' + value.account + '，文件夹 ' + value.folder + '：本页 ' + value.messages.length + ' 封' + (value.hasMore ? '，还有更多' : '') + '（不把 API 页数当作邮箱总数）\n\n' + value.messages.map(describeMessage).join('\n'))
   if (value.messages.length === 0) {
     return oneText('账号 ' + value.account + '，文件夹 "' + value.folder + '" 共 ' + value.count + ' 封邮件，本次没有要列出的邮件。')
@@ -306,7 +307,7 @@ export function renderReply(value: EmailReplyResult): TextBlock[] {
 }
 
 export function renderWatch(value: EmailWatchResult): TextBlock[] {
-  const unread = (value.totalUnreadExact === false ? '本次扫描至少未读 ' : '当前未读 ') + value.totalUnread + ' 封'
+  const unread = value.transport === 'pop3' ? 'POP3 不提供服务器未读总数' : (value.totalUnreadExact === false ? '本次扫描至少未读 ' : '当前未读 ') + value.totalUnread + ' 封'
   if (value.reset === true) {
     return oneText('账号 ' + value.account + '：文件夹 "' + value.folder + '" 的 UIDVALIDITY 已变化（服务器重新编号了邮件），已重新建立基线（当前未读 ' + value.totalUnread + ' 封）。这次不报告新邮件，之后照常。')
   }
@@ -374,6 +375,19 @@ export const descriptions = {
   "email_attachment": 'AgentMail downloads are limited to 20 MiB or the smaller configured maximum. Download one attachment of a message to a local file (size capped by maxAttachmentBytes). The index matches the attachments array of email_read. Returns the absolute path of the written file.',
   "email_watch": 'Check for NEW unread emails since the last check (cursor-based). The first call per account+folder sets the baseline and reports nothing as new; every later call returns only unseen unread messages. Call this periodically (e.g. via a scheduled task) to notify the user about new mail. Returns newCount, the new messages, and totalUnread.'
 }
+
+// Transport boundaries precede generic guidance so models do not request IMAP-only mutations.
+const pop3Descriptions: Partial<Record<keyof typeof descriptions, string>> = {
+  email_list: 'POP3 accounts use opaque pop3: UIDL references and INBOX only. They do not expose server unread/star flags. Date filters scan only the newest 500 Date headers and report coverage. TOP may fall back to bounded RETR. ',
+  email_mark: 'POP3 does not support read/unread/star/move and rejects these operations without changing mail. ',
+  email_search: 'POP3 performs local header search (default newest 100, max 500 per window), continues with headerScan.nextScanOffset, and optionally scans bodySearchLimit bodies when no header matches. Inspect actual scan coverage; it is not server SEARCH. POP3 since/until compare sender Date headers, not server receipt dates. ',
+  email_reply: 'POP3 originals are read by stable UIDL; replies and forwards use the existing SMTP and confirmation flow. ',
+  email_folders: 'POP3 exposes only INBOX; server Sent, Archive and flags are unavailable. ',
+  email_health: 'POP3 accounts report POP3/SMTP configuration; a configuration check is not a network connectivity test. ',
+  email_attachment: 'POP3 downloads the entire source message (max 32 MiB) to parse an attachment (max 20 MiB or configured lower limit). ',
+  email_watch: 'POP3 watches newly appearing UIDLs, not unread flags. Its first call seeds a baseline, and totalUnreadExact=false with transport=pop3 means no server unread total is available. ',
+}
+for (const key of Object.keys(pop3Descriptions) as Array<keyof typeof descriptions>) descriptions[key] = pop3Descriptions[key] + descriptions[key]
 
 export const parameters = {
   "email_list": compileParameters({

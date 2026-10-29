@@ -10,6 +10,7 @@ import {
   parseServerPresets,
   presetNamesIn,
   PROVIDER_PRESETS,
+  POP3_PRESETS,
   resolveEmailSettings,
   serializeAccountsYaml,
   type EmailConfig,
@@ -27,6 +28,7 @@ import {
 } from './oauth2.js'
 import { EmailPool, messageOf, redactCredentials } from './mail-client.js'
 import { AgentMailClient } from './agentmail.js'
+import { Pop3Client } from './pop3.js'
 import type { ResolvedEmailConfig } from './config.js'
 import type { EmailWatchResult } from './types.js'
 
@@ -52,6 +54,8 @@ const FALLBACK_CREDIT = '鲸鱼娘：社区同人形象，版权归原作者，�
  * boundary — the card only needs to know if the field is filled.
  */
 export interface AccountCardData {
+  receiveProtocol?: 'imap' | 'pop3'
+  pop3?: Endpoint
   name: string
   /** undefined = 自定义服务器（无 provider 预设） */
   provider?: string
@@ -124,6 +128,8 @@ interface Endpoint {
 
 /** One account card as the editor sends it back; every field is optional. */
 export interface AccountCardInput {
+  receiveProtocol?: 'imap' | 'pop3'
+  pop3?: { host?: string; port?: number; secure?: boolean }
   name?: string
   /** Persisted account key before a UI rename. */
   originalName?: string
@@ -237,6 +243,8 @@ function buildAccountCards(
     const providerName = typeof account.provider === 'string' && account.provider !== '' ? account.provider : undefined
     const preset = providerName === undefined ? undefined : providerOf(providerName, presets)
     const imap = accountEndpoint(preset?.imap, account.imap, IMAP_FALLBACK)
+    const pop3 = accountEndpoint({ host: POP3_PRESETS[providerName ?? ''] ?? '', port: 995, secure: true }, account.pop3, { host: '', port: 995, secure: true })
+    pop3.host = pop3.host.trim() || POP3_PRESETS[providerName ?? ''] || ''
     // The same verdict resolution reaches: the provider, or the Exchange Online
     // host a custom preset or a hand-written endpoint points at. An account that
     // pins `authKind` in its YAML outranks the derivation, exactly as it does in
@@ -259,6 +267,8 @@ function buildAccountCards(
     const authUser = typeof account.authUser === 'string' ? account.authUser.trim() : ''
     const oauth = authKind === 'oauth2' ? tokens(name, user) : { state: 'none' as OAuth2State }
     list.push({
+      ...(account.receiveProtocol === 'pop3' ? { receiveProtocol: 'pop3' as const } : {}),
+      pop3,
       name,
       provider: providerName,
       ...(preset?.label !== undefined && preset.label !== '' ? { providerLabel: preset.label } : {}),
@@ -516,6 +526,9 @@ function normalizeCardForYaml(
   inheritedAuthPassword?: unknown,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {}
+  if (card.receiveProtocol !== undefined) out.receiveProtocol = card.receiveProtocol
+  if (card.pop3 !== undefined) out.pop3 = card.pop3
+  if (card.receiveProtocol === 'pop3' && card.smtp !== undefined) out.smtp = card.smtp
   const provider = persistedProvider(card.provider, customNames)
   if (provider !== undefined) out.provider = provider
   if (card.user !== undefined) out.user = card.user
@@ -750,6 +763,10 @@ function serializeAccountsDraft(
       writeField(account, 'authKind', String(card.authKind).trim().toLowerCase())
     }
     writeField(account, 'inboxFolder', card.inboxFolder)
+    if (card.receiveProtocol !== undefined) {
+      if (!['imap', 'pop3'].includes(card.receiveProtocol)) throw new Error('收信协议只能是 IMAP 或 POP3')
+      account.set('receiveProtocol', card.receiveProtocol)
+    }
     // Endpoints are never written by a card: they come from the preset, or from
     // what the account already stores. They are washed only when the provider
     // actually changed, because that is the one case where the stored copy is
@@ -759,6 +776,18 @@ function serializeAccountsDraft(
     if (nextProvider !== undefined && nextProvider !== previousProvider) {
       washEndpoint(account, 'imap')
       washEndpoint(account, 'smtp')
+      account.delete('pop3')
+    }
+    if (card.receiveProtocol === 'pop3') for (const key of ['pop3', 'smtp'] as const) {
+      const endpoint = card[key]
+      if (!endpoint) continue
+      const target = ensureMap(doc, account, key)
+      if (endpoint.host !== undefined) target.set('host', endpoint.host.trim())
+      if (endpoint.port !== undefined) {
+        if (!Number.isInteger(endpoint.port) || endpoint.port < 1 || endpoint.port > 65535) throw new Error(key.toUpperCase() + ' 端口必须在 1-65535 之间')
+        target.set('port', endpoint.port)
+      }
+      if (endpoint.secure !== undefined) { if (typeof endpoint.secure !== 'boolean') throw new Error('TLS 开关必须为布尔值'); target.set('secure', endpoint.secure) }
     }
   }
 
@@ -1057,6 +1086,11 @@ export class EmailSettingsBackend {
     if (cfg.transport === 'agentmail') {
       await new AgentMailClient(settings,this.apiFetch).test(name)
       return { ok: true, account: name, apiHost: cfg.apiBase, message: 'AgentMail API 连接成功 / AgentMail API connection successful' }
+    }
+    if (cfg.transport === 'pop3') {
+      const client = new Pop3Client(settings), started = Date.now()
+      try { const result = await client.test(name); return { ok: true, account: name, protocol: 'POP3', imapHost: cfg.pop3!.host, imapPort: cfg.pop3!.port, ms: Date.now() - started, messages: result.messages, message: 'POP3 收信连接成功；发送使用单独的 SMTP 配置 / POP3 connected; sending uses separate SMTP settings' } }
+      finally { client.clear() }
     }
     const target = { account: name, imapHost: cfg.imap.host, imapPort: cfg.imap.port }
     const targetDescription = '账号 "' + name + '" · IMAP ' + cfg.imap.host + ':' + cfg.imap.port

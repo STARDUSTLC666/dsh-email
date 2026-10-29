@@ -22,6 +22,23 @@ const BASE = {
   smtp: { host: '', port: 465, secure: true },
 }
 
+test('POP3 cards persist their explicit endpoints without clearing secrets or advanced budgets',async t=>{
+ const source='# retained comment\nwork:\n  provider: qq\n  user: work@qq.com\n  password: fixture-secret\n  pop3:\n    socketTimeoutMs: 9000\n'
+ const{post}=mount(t,{config:{}}),result=await post({action:'serializeAccounts',accountsYaml:source,accounts:[{name:'work',provider:'qq',user:'work@qq.com',receiveProtocol:'pop3',pop3:{host:'pop.qq.com',port:995,secure:true},smtp:{host:'smtp.qq.com',port:465,secure:true},inboxFolder:'INBOX'}],defaultAccount:'work'})
+ assert.equal(result.body.ok,true);const text=result.body.value.accountsYaml,account=parseAccountsYaml(text).map.work
+ assert.match(text,/retained comment/);assert.equal(account.password,'fixture-secret');assert.equal(account.pop3.socketTimeoutMs,9000);assert.equal(resolveEmailSettings({accountsYaml:text}).accounts.get('work').transport,'pop3')
+ const round=await post({action:'parseAccounts',value:{accountsYaml:text}}),card=round.body.value.list[0]
+ assert.equal(card.receiveProtocol,'pop3');assert.equal(card.pop3.host,'pop.qq.com');assert.equal(card.hasPassword,true);assert.ok(!JSON.stringify(card).includes('fixture-secret'))
+})
+
+test('POP3 cards reject malformed ports and can switch back to IMAP without deleting POP settings',async t=>{
+ const source='work: {provider: qq, user: w@qq.com, password: fixture-secret, receiveProtocol: pop3, pop3: {host: pop.qq.com, port: 995, secure: true}}\n',input={name:'work',provider:'qq',user:'w@qq.com'}
+ const{post}=mount(t,{config:{}}),invalid=await post({action:'serializeAccounts',accountsYaml:source,accounts:[{...input,receiveProtocol:'pop3',pop3:{port:0}}]})
+ assert.equal(invalid.status,400)
+ const valid=await post({action:'serializeAccounts',accountsYaml:source,accounts:[{...input,receiveProtocol:'imap'}]})
+ assert.equal(valid.body.ok,true);const config=parseAccountsYaml(valid.body.value.accountsYaml).map.work;assert.equal(config.receiveProtocol,'imap');assert.equal(config.pop3.host,'pop.qq.com');assert.equal(config.password,'fixture-secret')
+})
+
 test('missing mail credentials direct the settings user to the visible field and connection test', async t => {
   const previous = process.env.DSH_EMAIL_PASSWORD
   delete process.env.DSH_EMAIL_PASSWORD
@@ -1024,7 +1041,7 @@ test('snapshot never leaks a password through the card list', async t => {
   // for a password account, where there is no login to describe.
   assert.deepEqual(
     Object.keys(card).sort(),
-    ['authKind', 'hasPassword', 'imap', 'inboxFolder', 'isDefault', 'name', 'oauthState', 'provider', 'smtp', 'user'],
+    ['authKind', 'hasPassword', 'imap', 'inboxFolder', 'isDefault', 'name', 'oauthState', 'pop3', 'provider', 'smtp', 'user'],
   )
   assert.equal(card.authKind, 'password')
   assert.equal(card.oauthState, 'none')

@@ -5,6 +5,8 @@ export interface AddressEntry {
 }
 /** One listed message: everything cheap to fetch without the body. */
 export interface ListedMessage {
+    /** POP3 does not expose server read/star flags. */
+    flagsSupported?: boolean;
     uid: number | string;
     /** ISO 8601 string, or '' when unknown. */
     date: string;
@@ -36,6 +38,8 @@ export interface ReadMessageBody {
     truncated: boolean;
 }
 export interface EmailListResult {
+    transport?: 'pop3';
+    headerScan?: EmailHeaderScan;
     countExact?: boolean;
     hasMore?: boolean;
     order?: 'relevance';
@@ -209,6 +213,7 @@ export interface EmailReplyResult {
     subject: string;
 }
 export interface EmailWatchResult {
+    transport?: 'pop3';
     totalUnreadExact?: boolean;
     account: string;
     folder: string;

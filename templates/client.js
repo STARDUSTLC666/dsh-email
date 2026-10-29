@@ -780,6 +780,8 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 name: String(card.name || ""),
                 originalName: String(card.name || ""),
                 imap: card.imap,
+                receiveProtocol: card.receiveProtocol === 'pop3' ? 'pop3' : 'imap',
+                pop3: card.pop3 || { host: '', port: 995, secure: true },
                 smtp: card.smtp,
                 provider: card.provider === undefined || card.provider === null ? "" : String(card.provider),
                 user: card.user === undefined || card.user === null ? "" : String(card.user),
@@ -866,7 +868,9 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             const next = provider === undefined || provider === null ? "" : String(provider);
             return Object.assign({}, draft, {
                 provider: next,
+                receiveProtocol: next.startsWith('agentmail') ? 'imap' : draft.receiveProtocol,
                 imap: undefined,
+                pop3: undefined,
                 smtp: undefined,
                 password: "",
                 authKind: undefined,
@@ -890,6 +894,12 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 user: draft.user,
                 inboxFolder: draft.inboxFolder,
             };
+            if (draft.receiveProtocol !== undefined) input.receiveProtocol = draft.receiveProtocol;
+            if (draft.receiveProtocol === 'pop3') {
+                const endpoint = value => ({host:String(value?.host || '').trim(),...(String(value?.port ?? '') !== '' ? {port:Number(value.port)} : {}),secure:value?.secure !== false});
+                input.pop3 = endpoint(draft.pop3);
+                if (draft.smtp) input.smtp = endpoint(draft.smtp);
+            }
             if (draft.provider)
                 input.provider = draft.provider;
             if (!isOauthDraft(draft) && draft.password)
@@ -920,7 +930,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
         function accountIncomplete(draft) {
             return String(draft.name || "").trim() === ""
                 || String(draft.user || "").trim() === ""
-                || (String(draft.provider || "").trim() === "" && !(draft.imap?.host && draft.smtp?.host));
+                || (String(draft.provider || "").trim() === "" && !(draft.receiveProtocol === 'pop3' ? draft.pop3?.host : draft.imap?.host && draft.smtp?.host));
         }
         /** 改过名字后草稿要跟着键走：旧键删掉，整份草稿（含 imap/smtp）搬到新键下。 */
         function renameDrafts(drafts, oldName, nextName) {
@@ -1654,7 +1664,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                     setRowStatus((cur) => Object.assign({}, cur, {
                         [draftName]: {
                             kind: "success",
-                            text: result.apiHost ? dt("API 连接成功 · ", "API connected · ") + result.apiHost : t("card.testOk", { ms: result.ms, host: result.imapHost, port: result.imapPort }),
+                            text: result.apiHost ? dt("API 连接成功 · ", "API connected · ") + result.apiHost : result.protocol === 'POP3' ? dt('POP3 收信连接成功 · ', 'POP3 connected · ') + result.imapHost + ':' + result.imapPort + dt('；本次未测试 SMTP 发信', '; SMTP sending was not tested') : t("card.testOk", { ms: result.ms, host: result.imapHost, port: result.imapPort }),
                         },
                     }));
                 }
@@ -1794,6 +1804,23 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                                         h("label", null, t("card.addressLabel")),
                                         fieldInput("text", draft.user, (v) => patchDraft(name, { user: v }), "you@example.com"),
                                     ]),
+                                    !draft.provider?.startsWith('agentmail') && h('div', {className:'dshe-field'}, [
+                                        h('label', null, dt('收信协议','Incoming protocol')),
+                                        h('select', {'aria-label':dt('收信协议','Incoming protocol'),value:draft.receiveProtocol || 'imap',disabled:busy !== '',onChange:e=>patchDraft(name,{receiveProtocol:e.target.value,inboxFolder:'INBOX',pop3:draft.pop3 || {host:'',port:995,secure:true}})},[
+                                            h('option',{value:'imap'},'IMAP'),h('option',{value:'pop3',disabled:oauthCard},'POP3')]),
+                                        draft.receiveProtocol === 'pop3' && h('p',{className:'dshe-hint',role:'note'},dt('POP3 只读取收件箱，发送使用 SMTP。无服务器已读、星标或已发送文件夹；搜索会说明扫描范围。','POP3 reads the inbox and uses SMTP for sending. Server read/star flags and a Sent folder are unavailable; search shows its scan coverage.')),
+                                    ]),
+                                    draft.receiveProtocol === 'pop3' && h(React.Fragment,null,['pop3','smtp'].map(kind=>{
+                                        const value=draft[kind] || {host:'',port:kind==='pop3'?995:465,secure:true};
+                                        const patch=fields=>patchDraft(name,{[kind]:Object.assign({},value,fields)});
+                                        return h('div',{key:kind,className:'dshe-field'},[
+                                            h('label',null,kind==='pop3'?dt('POP3 收信服务器','POP3 incoming server'):dt('SMTP 发信服务器（可稍后填写）','SMTP outgoing server (optional for receiving)')),
+                                            h('input',{type:'text','aria-label':kind==='pop3'?dt('POP3 主机','POP3 host'):dt('SMTP 主机','SMTP host'),value:value.host || '',onChange:e=>patch({host:e.target.value}),placeholder:kind==='pop3'?'pop.example.com':'smtp.example.com'}),
+                                            h('input',{type:'number',min:1,max:65535,'aria-label':kind==='pop3'?dt('POP3 端口','POP3 port'):dt('SMTP 端口','SMTP port'),value:value.port ?? '',onChange:e=>patch({port:e.target.value})}),
+                                            h('label',{className:'dshe-check'},h('input',{type:'checkbox','aria-label':kind==='pop3'?'POP3 TLS':'SMTP TLS',checked:value.secure !== false,onChange:e=>patch({secure:e.target.checked})}),kind.toUpperCase()+' TLS'),
+                                            kind==='pop3' && value.secure===false ? h('p',{className:'dshe-hint'},dt('未开启 TLS，POP3 登录与内容将以明文传输；仅用于明确允许明文的受信任服务器。此选项不是 STARTTLS。','TLS is off: POP3 login and content use plaintext. Use only with a trusted server where plaintext is intended. This is not STARTTLS.')) : null,
+                                        ]);
+                                    })),
                                     !draft.provider?.startsWith("agentmail") && h("div", { className: "dshe-field" }, [
                                         h("label", null, t("card.senderNameLabel")),
                                         fieldInput("text", draft.senderName, (v) => patchDraft(name, { senderName: v }), t("card.senderNamePlaceholder")),
@@ -1872,7 +1899,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                                                     : t("card.authPasswordHint")),
                                             ]),
                                         ]),
-                                    !draft.provider?.startsWith("agentmail") && h("div", { className: "dshe-field" }, [
+                                    !draft.provider?.startsWith("agentmail") && draft.receiveProtocol !== 'pop3' && h("div", { className: "dshe-field" }, [
                                         h("label", null, t("card.inboxLabel")),
                                         fieldInput("text", draft.inboxFolder, (v) => patchDraft(name, { inboxFolder: v }), "INBOX"),
                                     ]),
@@ -2152,6 +2179,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
 const [accountsLoading,setAccountsLoading]=useState(true),[accountReload,setAccountReload]=useState(0);
 
             const [accounts, setAccounts] = useState([]), [account, setAccount] = useState(""), [folders, setFolders] = useState([]), [folder, setFolder] = useState("");
+            const isPop3 = accounts.find(a=>a.name===account)?.incoming === 'pop3';
 useEffect(()=>{onAccountChange?.(account);},[account,onAccountChange]);
             const [input, setInput] = useState(""), [query, setQuery] = useState(""), [offset, setOffset] = useState(0), [scanOffset, setScanOffset] = useState(0), [unread, setUnread] = useState(false), [refresh, setRefresh] = useState(0);
             const [result, setResult] = useState(null), [selected, setSelected] = useState(null), [detail, setDetail] = useState(null), [loading, setLoading] = useState(false), [reading, setReading] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState("");
@@ -2237,7 +2265,7 @@ setAccountsLoading(true);
  accountsLoading ? h(W.Empty,{title:dt('正在读取邮箱账号…','Loading accounts…'),icon:'mail'}) : !accounts.length ? h(W.Empty,{title:error?dt('暂时无法读取邮箱','Mailbox unavailable'):dt('连接你的邮箱','Connect your mailbox'),icon:'mail',action:h(React.Fragment,null,h(W.Button,{variant:'primary',onClick:onConfigure},dt('邮箱设置','Account settings')),h(W.Button,{onClick:()=>setAccountReload(n=>n+1)},dt('重试','Retry')))},dt('添加并测试邮箱账号后，即可在这里阅读和回复邮件。','Add and test an email account to read and reply here.')) :
  h('div',{className:'email-mailbox-columns'},
  h('aside',{className:'email-folder-rail','aria-label':dt('账号与文件夹','Accounts and folders')},
- h('label',null,dt('邮箱账号','Account'),h('select',{value:account,disabled:busy,onChange:event=>{reset();setInput('');setQuery('');setAccount(event.target.value);}},accounts.map(a=>h('option',{key:a.name,value:a.name},a.name+' · '+a.user)))),
+ h('label',null,dt('邮箱账号','Account'),h('select',{value:account,disabled:busy,onChange:event=>{reset();setInput('');setQuery('');setUnread(false);setAccount(event.target.value);}},accounts.map(a=>h('option',{key:a.name,value:a.name},a.name+' · '+a.user)))),
  h('nav',{'aria-label':dt('邮件文件夹','Mail folders')},folders.filter(f=>f.specialUse === '\\Inbox' || f.specialUse === '\\Sent' || /^(INBOX|sent|sent messages|已发送)$/i.test(f.path)).map(f=>h(W.Button,{key:f.path,className:'email-folder-button',variant:'ghost',icon:f.specialUse === '\\Sent' || /sent|已发送/i.test(f.path)?'reply':'mail',disabled:busy || loading,'aria-pressed':folder === f.path,onClick:()=>changeFolder(f.path)},f.specialUse === '\\Inbox' || f.path === 'INBOX'?dt('收件箱','Inbox'):dt('已发送','Sent')))),
  folders.length>2 || !folders.some(f=>(f.specialUse === '\\Inbox' || f.specialUse === '\\Sent' || /^(INBOX|sent|sent messages|已发送)$/i.test(f.path)) && f.path===folder) ? h('label',{className:'email-custom-folder'},dt('所有文件夹','All folders'),h('select',{value:folder,disabled:busy || !folders.length,onChange:event=>changeFolder(event.target.value)},folders.map(f=>h('option',{key:f.path,value:f.path},f.name)))) : null),
  h(W.Split,{className:'email-message-split',listWidth:330,selected:selected===null?null:String(selected),onBack:()=>setSelected(null),backLabel:dt('返回邮件列表','Back to messages'),
@@ -2246,10 +2274,12 @@ setAccountsLoading(true);
  h(W.Search,{label:dt('搜索当前文件夹','Search current folder'),value:input,maxLength:500,disabled:busy,onChange:event=>setInput(event.target.value)}),
  h(W.Button,{type:'submit',disabled:loading || busy || !folder},dt('搜索','Search')),h(W.IconButton,{icon:'refresh',label:dt('刷新邮件','Refresh mail'),disabled:loading || busy || !account,onClick:()=>setRefresh(n=>n+1)}),
  query ? h(W.Button,{variant:'ghost',disabled:busy,onClick:()=>{reset();setInput('');setQuery('');}},dt('清除搜索','Clear search')) : null,
- h('label',{className:'email-unread-filter'},h('input',{type:'checkbox',checked:unread,disabled:busy || !!query,onChange:event=>{reset();setUnread(event.target.checked);}}),dt('只看未读','Unread only'))),
- rows.length ? rows.map(m=>h(W.Row,{key:String(m.uid),disabled:busy,title:h(React.Fragment,null,!m.seen?h('span',{className:'email-unread-dot',role:'img','aria-label':dt('未读','Unread')}):null,m.flagged?h(W.Icon,{name:'star',size:14}):null,m.subject || dt('（无主题）','(No subject)')),meta:who(m.from),description:date(m.date),active:selected===m.uid,onClick:()=>setSelected(m.uid)})) : h(W.Empty,{title:loading?dt('正在读取邮件…','Loading messages…'):query?dt('当前检索范围内没有结果。','No results in the current search window.'):dt('当前页没有邮件。','No messages on this page.'),icon:'mail'}),
+ !isPop3 && h('label',{className:'email-unread-filter'},h('input',{type:'checkbox',checked:unread,disabled:busy || !!query,onChange:event=>{reset();setUnread(event.target.checked);}}),dt('只看未读','Unread only'))),
+ isPop3 ? h('p',{className:'email-list-note',role:'note'},dt('POP3 收件箱 · 不提供服务器已读、星标或已发送文件夹。回复会进入本地草稿，确认后通过 SMTP 发送。','POP3 inbox · Server read/star flags and a Sent folder are unavailable. Replies open in local Drafts and use SMTP after confirmation.')) : null,
+ rows.length ? rows.map(m=>h(W.Row,{key:String(m.uid),disabled:busy,title:h(React.Fragment,null,m.flagsSupported !== false && !m.seen?h('span',{className:'email-unread-dot',role:'img','aria-label':dt('未读','Unread')}):null,m.flagged?h(W.Icon,{name:'star',size:14}):null,m.subject || dt('（无主题）','(No subject)')),meta:who(m.from),description:date(m.date),active:selected===m.uid,onClick:()=>setSelected(m.uid)})) : h(W.Empty,{title:loading?dt('正在读取邮件…','Loading messages…'):query?dt('当前检索范围内没有结果。','No results in the current search window.'):dt('当前页没有邮件。','No messages on this page.'),icon:'mail'}),
  h('div',{className:'email-list-note'},h("div", { role: "status", "aria-live": "polite", className: "dshe-hint" }, loading ? dt("正在读取邮件…", "Loading messages…") : result ? dt("本页 ", "This page: ") + rows.length + dt(" 封", " messages") + (result.order === "relevance" ? dt(" · 按相关性排序", " · Ranked by relevance") : dt(" · 按邮箱到达序排列", " · Mailbox arrival order")) : dt("在账号设置中添加并测试邮箱后，即可浏览邮件。", "Add and test an account in settings to browse mail.")),
 result?.headerScan ? h("p", { className: "dshe-hint" }, dt("信封实际扫描：", "Headers scanned: ") + result.headerScan.scanned + " / " + result.headerScan.mailboxTotal + (result.headerScan.complete ? dt("，信封覆盖完整；正文另有限制。", "; headers fully covered; body search has a separate limit.") : dt("，尚未覆盖全文件夹。", "; folder coverage is partial."))) : null,
+result?.bodyScan ? h('p',{className:'dshe-hint'},dt('正文实际扫描：','Bodies scanned: ')+result.bodyScan.scanned+dt(' 封；最多 ',' messages; limit ')+result.bodyScan.scanLimit+dt(' 封，受正文显示上限限制。','; bounded by the body display limit.')) : null,
 result?.searchSource === "api" ? h("p", { className: "dshe-hint" }, dt("AgentMail 搜索由服务按相关性返回，垃圾箱等特殊邮件不在其搜索范围。", "AgentMail ranks results by relevance and excludes spam, trash and other protected mail.")) : null),h("div", { className: "dshe-mail-footer" }, [
                     h("button", { type: "button", className: "dshe-btn", disabled: loading || busy || offset === 0, onClick: () => setOffset(n => Math.max(0, n - 20)) }, dt("上一页", "Previous page")), h("span", null, dt("第 ", "Page ") + (Math.floor(offset / 20) + 1) + dt(" 页", "")), h("button", { type: "button", className: "dshe-btn", disabled: loading || busy || !hasMore, onClick: () => setOffset(n => n + 20) }, dt("下一页", "Next page")),
                     result?.headerScan?.nextScanOffset !== undefined ? h("button", { type: "button", className: "dshe-btn", disabled: loading || busy, onClick: () => { setOffset(0); setScanOffset(result.headerScan.nextScanOffset); } }, dt("继续搜索更早邮件", "Search older headers")) : null,

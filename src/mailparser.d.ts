@@ -10,12 +10,15 @@ declare module 'mailparser' {
   }
 
   export interface ParsedAttachment {
+    content: Buffer
     filename?: string
     contentType: string
     size: number
   }
 
   export interface ParsedMail {
+    messageId?: string
+    references?: string | string[]
     subject?: string
     from?: AddressObject
     to?: AddressObject

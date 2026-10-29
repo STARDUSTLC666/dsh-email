@@ -21,5 +21,6 @@ export type { AccountCardData, AccountCardInput } from './web.js';
 export { EmailDraftBackend, installEmailDrafts, EMAIL_DRAFT_ROUTE } from './draft-web.js';
 export { DraftStore, DraftError } from './draft-store.js';
 export { AgentMailClient } from './agentmail.js';
+export { Pop3Client } from './pop3.js';
 export { EmailService } from './mail-service.js';
 export { EmailMailboxBackend, installEmailMailbox, MAILBOX_ROUTE } from './mailbox-web.js';

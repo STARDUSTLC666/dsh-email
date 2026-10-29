@@ -71,6 +71,9 @@ export declare const ENDPOINT_DEFAULTS: {
 export declare function normalizeSettingsEndpoint<T extends SmtpConfig>(value: T, kind: keyof typeof ENDPOINT_DEFAULTS): Omit<T, 'host' | 'port' | 'secure'> & SmtpConfig;
 /** One mailbox account. Top-level shorthand fields act as shared defaults. */
 export interface AccountConfig {
+    /** Incoming protocol only; outgoing messages still use SMTP. */
+    receiveProtocol?: 'imap' | 'pop3';
+    pop3?: ImapConfig;
     /** AgentMail credential; the account editor also accepts it through its secret field. */
     apiKey?: string;
     /** Built-in provider name, or a custom serverPresets name. */
@@ -174,10 +177,17 @@ export interface EndpointPreset {
 }
 export declare const PROVIDER_PRESETS: Record<string, ProviderPreset>;
 export declare const PROVIDER_NAMES: string[];
+/** Documented POP endpoints; unsupported providers require an explicit host. */
+export declare const POP3_PRESETS: Record<string, string>;
 export declare const EMAIL_PASSWORD_ENV = "DSH_EMAIL_PASSWORD";
 /** Fully resolved, validated configuration for one account. */
 export interface ResolvedEmailConfig {
-    transport?: 'agentmail';
+    transport?: 'agentmail' | 'pop3';
+    pop3?: ImapConfig & {
+        host: string;
+        port: number;
+        secure: boolean;
+    };
     apiBase?: 'https://api.agentmail.to' | 'https://api.agentmail.eu';
     user: string;
     /** Display name for the From header, '' when the account does not set one. */

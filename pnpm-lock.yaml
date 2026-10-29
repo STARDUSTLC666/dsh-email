@@ -14,12 +14,18 @@ importers:
       '@stardustlc/dsh-updates':
         specifier: 0.1.3
         version: 0.1.3
+      html-to-text:
+        specifier: 10.0.1
+        version: 10.0.1
       imapflow:
         specifier: ^2.2.1
         version: 2.2.1
       mailparser:
         specifier: ^3.9.33
         version: 3.9.33
+      node-pop3:
+        specifier: 0.15.3
+        version: 0.15.3
       nodemailer:
         specifier: ^10.0.13
         version: 10.0.13
@@ -163,6 +169,11 @@ packages:
   mailparser@3.9.33:
     resolution: {integrity: sha512-+ZYhApN4f7B8+jokb7VZeml8lxYHixVJ3tJTB5iPG9/MJpy8YmBHGdy+AWJ9dmtUX6t0xlu4rxwj1b7eWCvbDA==}
     engines: {node: '>=20.0.0'}
+
+  node-pop3@0.15.3:
+    resolution: {integrity: sha512-n/YTu/4b/SE3yGgMGT2xhj1HzOYTXCqHX4hrsahl8sMoTLvZXjnlzW2mI6XGlRxrQu4w3tuJVbF30AgzvCfyAg==}
+    engines: {node: ^20.11.0 || >= 22.0.0}
+    hasBin: true
 
   nodemailer@10.0.13:
     resolution: {integrity: sha512-SzG86OlvcW/NNhUFC6uROMwRTL4n7MswfQqC/T8mhkmnY1YVa23zUEMYi4ijSeXSl9GLz9ZeTJDUatEDuY5FeQ==}
@@ -410,6 +421,8 @@ snapshots:
       nodemailer: 10.0.13
       punycode.js: 2.3.1
       tlds: 1.261.0
+
+  node-pop3@0.15.3: {}
 
   nodemailer@10.0.13: {}
 

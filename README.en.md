@@ -4,7 +4,7 @@
 
 ![dsh-email whale girl plugin cover](https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/cover-whale-girl.png)
 
-Manage IMAP/SMTP and AgentMail accounts in the DSH email workbench. Browse inbox and sent mail, search messages, download attachments and review local drafts before explicitly confirming delivery.
+Manage IMAP/POP3/SMTP and AgentMail accounts in the DSH email workbench. Browse inbox and sent mail, search messages, download attachments and review local drafts before explicitly confirming delivery.
 
 [![npm](https://img.shields.io/npm/v/dsh-email)](https://www.npmjs.com/package/dsh-email) [![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-downloads.svg)](https://www.npmjs.com/package/dsh-email) [![total downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-total-downloads.svg)](https://www.npmjs.com/package/dsh-email)
 
@@ -37,6 +37,8 @@ dsh plugin --profile desktop add dsh-email
 For the web version, replace `desktop` with `web`. Restart DSH after installation.
 
 ## Start using it
+
+For a POP3 account, choose the incoming protocol in Account settings and test the connection. Read mail, search within reported windows, download attachments and prepare SMTP reply drafts. See the [POP3 workflow and protocol limits](docs/POP3.md#english).
 
 1. Open Email account settings and configure your own IMAP/SMTP, OAuth or AgentMail account.
 2. Test the connection, select an account and browse Inbox and Sent in the mail workbench.

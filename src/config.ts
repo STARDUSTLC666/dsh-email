@@ -90,6 +90,9 @@ export function normalizeSettingsEndpoint<T extends SmtpConfig>(value: T, kind: 
 
 /** One mailbox account. Top-level shorthand fields act as shared defaults. */
 export interface AccountConfig {
+  /** Incoming protocol only; outgoing messages still use SMTP. */
+  receiveProtocol?: 'imap' | 'pop3'
+  pop3?: ImapConfig
   /** AgentMail credential; the account editor also accepts it through its secret field. */
   apiKey?: string
   /** Built-in provider name, or a custom serverPresets name. */
@@ -192,6 +195,11 @@ export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
 
 export const PROVIDER_NAMES = Object.keys(PROVIDER_PRESETS)
 
+/** Documented POP endpoints; unsupported providers require an explicit host. */
+export const POP3_PRESETS: Record<string, string> = {
+  qq: 'pop.qq.com', '163': 'pop.163.com', '126': 'pop.126.com', gmail: 'pop.gmail.com',
+}
+
 export const EMAIL_PASSWORD_ENV = 'DSH_EMAIL_PASSWORD'
 
 const DEFAULT_MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
@@ -199,7 +207,8 @@ const DEFAULT_IDLE_TIMEOUT_MS = 60000
 
 /** Fully resolved, validated configuration for one account. */
 export interface ResolvedEmailConfig {
-  transport?: 'agentmail'
+  transport?: 'agentmail' | 'pop3'
+  pop3?: ImapConfig & { host: string; port: number; secure: boolean }
   apiBase?: 'https://api.agentmail.to' | 'https://api.agentmail.eu'
   user: string
   /** Display name for the From header, '' when the account does not set one. */
@@ -403,6 +412,8 @@ function normalizeAccountForYaml(value: unknown): unknown {
 export function resolveEmailSettings(config: EmailConfig | undefined, onlyAccount?: string): ResolvedEmailSettings {
   const raw = config ?? {}
   const common: AccountConfig = {
+    receiveProtocol: raw.receiveProtocol,
+    pop3: raw.pop3,
     provider: raw.provider,
     user: raw.user,
     password: raw.password, apiKey: raw.apiKey,
@@ -526,7 +537,9 @@ export function mergeAccountDefaults(common: AccountConfig, account: AccountConf
   const sharedSmtp = !ownProvider && common.smtp ? normalizeSettingsEndpoint(common.smtp, 'smtp') : undefined
   const imap = { ...sharedImap, ...(acc.imap && normalizeSettingsEndpoint(acc.imap, 'imap')) }
   const smtp = { ...sharedSmtp, ...(acc.smtp && normalizeSettingsEndpoint(acc.smtp, 'smtp')) }
+  const pop3 = { ...(!ownProvider ? common.pop3 : undefined), ...acc.pop3 }
   return { ...common, ...acc,
+    pop3: Object.keys(pop3).length > 0 ? pop3 : undefined,
     imap: Object.keys(imap).length > 0 ? imap : undefined,
     smtp: Object.keys(smtp).length > 0 ? smtp : undefined,
   }
@@ -583,6 +596,11 @@ function resolveAccount(
     secure: accountSmtp?.secure ?? preset?.smtp.secure,
   }
   const problems: string[] = []
+  const receiveProtocol = acc.receiveProtocol ?? common.receiveProtocol ?? 'imap'
+  if (!['imap', 'pop3'].includes(receiveProtocol)) problems.push('receiveProtocol 只能是 imap 或 pop3')
+  const pop3 = { host: merged.pop3?.host?.trim() || POP3_PRESETS[requested ?? ''] || '',
+    port: merged.pop3?.port ?? 995, secure: merged.pop3?.secure ?? true,
+    connectionTimeoutMs: merged.pop3?.connectionTimeoutMs, socketTimeoutMs: merged.pop3?.socketTimeoutMs }
   if (user === '') problems.push(`账号 "${name}" 的邮箱地址未填写`)
   // An explicit `authKind` outranks the derivation: a tenant that still accepts
   // an app password for Exchange Online, or a mailbox that worked before the
@@ -600,13 +618,21 @@ function resolveAccount(
   if (!oauth2 && authPassword === '') {
     problems.push(`账号 "${name}" 的${authUser === user ? '授权码 / 应用专用密码' : '登录账号的密码'}未填写`)
   }
-  if (imap.host === undefined || imap.host === '') problems.push(`账号 "${name}" 的 imap.host 未填写（可填 provider 预设：${known.join(', ')}）`)
-  if (smtp.host === undefined || smtp.host === '') problems.push(`账号 "${name}" 的 smtp.host 未填写（同上）`)
+  if (receiveProtocol === 'pop3') {
+    if (!pop3.host || /[\s\0]/.test(pop3.host)) problems.push('POP3 主机未填写或无效，请使用服务商提供的 POP3 主机')
+    if (!Number.isInteger(pop3.port) || pop3.port < 1 || pop3.port > 65535) problems.push('POP3 端口必须在 1-65535 之间')
+    if (typeof pop3.secure !== 'boolean') problems.push('POP3 secure 必须为布尔值')
+    if (oauth2) problems.push('POP3 暂支持授权码 / 应用密码；OAuth2 账号请继续使用 IMAP')
+    if (/[\r\n\0]/.test(authUser + authPassword)) problems.push('POP3 登录凭据不能包含换行或空字符')
+    if ((acc.inboxFolder ?? common.inboxFolder ?? 'INBOX').trim() !== 'INBOX') problems.push('POP3 只提供 INBOX 收件箱，不支持自定义文件夹')
+  } else if (imap.host === undefined || imap.host === '') problems.push(`账号 "${name}" 的 imap.host 未填写（可填 provider 预设：${known.join(', ')}）`)
+  if (receiveProtocol !== 'pop3' && (smtp.host === undefined || smtp.host === '')) problems.push(`账号 "${name}" 的 smtp.host 未填写（同上）`)
   if (problems.length > 0) {
     throw new Error(`邮件账号配置不完整：${problems.join('；')}。请在「设置 → 邮件」补全对应账号，再点击「测试连接」。修改会自动保存并立即生效。`)
   }
   const clientId = (acc.clientId ?? common.clientId ?? '').trim()
   return {
+    ...(receiveProtocol === 'pop3' ? { transport: 'pop3' as const, pop3 } : {}),
     user,
     senderName,
     // OAuth2 logs in with the token's own account, so the alias login pair only
@@ -619,7 +645,7 @@ function resolveAccount(
     authKind: oauth2 ? 'oauth2' : 'password',
     ...(clientId !== '' ? { clientId } : {}),
     imap: { ...imap, host: imap.host!, port: imap.port!, secure: imap.secure! },
-    smtp: { ...smtp, host: smtp.host!, port: smtp.port!, secure: smtp.secure! },
+    smtp: { ...smtp, host: smtp.host ?? '', port: smtp.port ?? 465, secure: smtp.secure ?? true },
     inboxFolder: (acc.inboxFolder ?? common.inboxFolder ?? '').trim() || 'INBOX',
   }
 }

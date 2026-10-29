@@ -732,6 +732,7 @@ export class EmailPool {
    */
   private async sendMail(name: string, cfg: ResolvedEmailConfig, message: any, signal?: AbortSignal): Promise<any> {
     signal?.throwIfAborted()
+    if (cfg.transport === 'pop3' && !cfg.smtp.host) throw new MailError('此 POP3 账号尚未配置 SMTP 发信服务器；请在账号设置中补全 SMTP 后再发送，草稿仍保留')
     // This is shared by chat sends, prepared drafts, replies and forwards. Enforce
     // before token refresh or opening any SMTP connection, even with approval off.
     await assertRecipientsAllowed(message.to ?? '', message.cc ?? '', this.settings.recipientPolicies?.get(name))
@@ -1267,10 +1268,14 @@ export class EmailPool {
   }
 
   /** Send the attachment bytes the human reviewed, without re-reading mutable paths. */
-  async sendPrepared(accountName: string, to: string, subject: string, text: string, cc: string, attachments: Array<{ filename: string; content: Buffer }>, signal?: AbortSignal, reply?: { uid: number; folder: string; uidValidity?: number }): Promise<EmailSendResult> {
+  async sendPrepared(accountName: string, to: string, subject: string, text: string, cc: string, attachments: Array<{ filename: string; content: Buffer }>, signal?: AbortSignal, reply?: { uid: number; folder: string; uidValidity?: number }, pop3Thread?: Pick<BuiltReply, 'inReplyTo' | 'references'>): Promise<EmailSendResult> {
     const name = this.resolveName(accountName), cfg = this.account(name)
     if (attachments.length > 10 || attachments.reduce((sum, file) => sum + file.content.length, 0) > Math.min(this.settings.maxAttachmentBytes, 20 * 1024 * 1024)) throw new MailError('草稿附件超过大小或数量上限')
     const thread: Record<string, unknown> = {}
+    if (cfg.transport === 'pop3' && pop3Thread) {
+      if (pop3Thread.inReplyTo) thread.inReplyTo = '<' + pop3Thread.inReplyTo + '>'
+      if (pop3Thread.references) thread.references = pop3Thread.references.split(' ').filter(Boolean).map(id => '<' + id + '>')
+    }
     if (reply) await this.withImap(name, reply.folder || cfg.inboxFolder, async client => {
       if (reply.uidValidity !== undefined && reply.uidValidity !== this.uidValidityOf(client)) throw new MailError('原文件夹 UIDVALIDITY 已变化，无法关联旧回复草稿；请重新打开邮件准备回复')
       const original = await client.fetchOne(reply.uid, { uid: true, headers: ['message-id', 'references'] }, { uid: true })

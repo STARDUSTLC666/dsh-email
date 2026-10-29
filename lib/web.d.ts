@@ -12,6 +12,8 @@ export declare const WHALE_ASSET_ROUTE = "/_dsh/dsh-email/assets/whale";
  * boundary — the card only needs to know if the field is filled.
  */
 export interface AccountCardData {
+    receiveProtocol?: 'imap' | 'pop3';
+    pop3?: Endpoint;
     name: string;
     /** undefined = 自定义服务器（无 provider 预设） */
     provider?: string;
@@ -71,8 +73,19 @@ export interface AccountCardData {
     inboxFolder: string;
     isDefault: boolean;
 }
+interface Endpoint {
+    host: string;
+    port: number;
+    secure: boolean;
+}
 /** One account card as the editor sends it back; every field is optional. */
 export interface AccountCardInput {
+    receiveProtocol?: 'imap' | 'pop3';
+    pop3?: {
+        host?: string;
+        port?: number;
+        secure?: boolean;
+    };
     name?: string;
     /** Persisted account key before a UI rename. */
     originalName?: string;
@@ -267,6 +280,21 @@ export declare class EmailSettingsBackend {
         account: string;
         apiHost: "https://api.agentmail.to" | "https://api.agentmail.eu" | undefined;
         message: string;
+        protocol?: undefined;
+        imapHost?: undefined;
+        imapPort?: undefined;
+        ms?: undefined;
+        messages?: undefined;
+    } | {
+        ok: boolean;
+        account: string;
+        protocol: string;
+        imapHost: string;
+        imapPort: number;
+        ms: number;
+        messages: number;
+        message: string;
+        apiHost?: undefined;
     } | {
         account: string;
         imapHost: string;
@@ -275,6 +303,8 @@ export declare class EmailSettingsBackend {
         ms: number;
         apiHost?: undefined;
         message?: undefined;
+        protocol?: undefined;
+        messages?: undefined;
     }>;
     /**
      * Resolve one named account of the *stored* settings — the same accounts the
@@ -308,3 +338,4 @@ export declare class EmailSettingsBackend {
 }
 /** Mount the same-origin routes when a webServer service is present. */
 export declare function installEmailSettingsWeb(ctx: any, backend: EmailSettingsBackend): void;
+export {};

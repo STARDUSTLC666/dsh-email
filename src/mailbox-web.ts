@@ -38,6 +38,7 @@ export class EmailMailboxBackend {
           name,
           user: c.user,
           api: c.transport === 'agentmail',
+          incoming: c.transport ?? 'imap',
         })),
         defaultAccount: settings.defaultAccount,
       }

@@ -4,7 +4,7 @@
 
 ![dsh-email 鲸鱼娘插件封面](https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/cover-whale-girl.png)
 
-在 DSH 邮件工作台管理 IMAP / SMTP 与 AgentMail 多账号。查看收件箱和已发送、搜索邮件、下载附件，并先保存与检查草稿，再明确确认发送。
+在 DSH 邮件工作台管理 IMAP / POP3 / SMTP 与 AgentMail 多账号。查看收件箱和已发送、搜索邮件、下载附件，并先保存与检查草稿，再明确确认发送。
 
 [![npm](https://img.shields.io/npm/v/dsh-email)](https://www.npmjs.com/package/dsh-email) [![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-downloads.svg)](https://www.npmjs.com/package/dsh-email) [![total downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-total-downloads.svg)](https://www.npmjs.com/package/dsh-email)
 
@@ -37,6 +37,8 @@ dsh plugin --profile desktop add dsh-email
 网页版把命令中的 `desktop` 改为 `web`。安装后重启 DSH。
 
 ## 开始使用
+
+需要 POP3 的账号，可在「邮箱设置」选择收信协议并测试连接。支持读信、范围明确的本地搜索、附件和 SMTP 回复草稿；服务器状态与协议限制见 [POP3 使用流程](docs/POP3.md)。
 
 1. 打开“邮件”的账号设置，选择自己的 IMAP/SMTP、OAuth 或 AgentMail 账号并填写授权信息。
 2. 测试连接，选择要使用的账号，再从“收发邮件”读取收件箱和已发送。
