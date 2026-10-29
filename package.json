@@ -1,6 +1,6 @@
 {
   "name": "dsh-email",
-  "version": "0.20.4",
+  "version": "0.20.5",
   "description": "DSH 邮件工作台：IMAP / SMTP 与 AgentMail 多账号、收件与已发送、搜索附件、草稿预览和确认发送。欢迎提交 issues 和 PR。",
   "type": "module",
   "main": "lib/index.js",

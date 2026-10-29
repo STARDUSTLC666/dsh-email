@@ -6,7 +6,9 @@
 
 Manage IMAP/SMTP and AgentMail accounts in the DSH email workbench. Browse inbox and sent mail, search messages, download attachments and review local drafts before explicitly confirming delivery.
 
-[![npm](https://img.shields.io/npm/v/dsh-email)](https://www.npmjs.com/package/dsh-email) [![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-downloads.svg)](https://www.npmjs.com/package/dsh-email)
+[![npm](https://img.shields.io/npm/v/dsh-email)](https://www.npmjs.com/package/dsh-email) [![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-downloads.svg)](https://www.npmjs.com/package/dsh-email) [![total downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-total-downloads.svg)](https://www.npmjs.com/package/dsh-email)
+
+[Download statistics](https://github.com/STARDUSTLC666/dsh-suite/blob/npm-downloads/README.md)
 
 Feedback and contributions are welcome: report [issues](https://github.com/STARDUSTLC666/dsh-email/issues) or submit [pull requests](https://github.com/STARDUSTLC666/dsh-email/pulls).
 
@@ -36,9 +38,11 @@ For the web version, replace `desktop` with `web`. Restart DSH after installatio
 
 ## Start using it
 
-Add and test an account in Settings → Email, then open Mailbox. Ask to list unread messages or prepare a reply. Reply buttons create drafts for review before sending.
-
-To edit before sending, ask: “Prepare a message with email_draft; do not send yet.” Open Drafts to save edits, inspect attachments and confirm. See [drafts and recipient rules](docs/DRAFTS.en.md).
+1. Open Email account settings and configure your own IMAP/SMTP, OAuth or AgentMail account.
+2. Test the connection, select an account and browse Inbox and Sent in the mail workbench.
+3. Search and open a message, inspect its body and attachments, then ask for a reply draft without sending.
+4. Edit, save and preview the draft; verify To/Cc, attachments and sending account before confirming.
+5. Verify the result in Sent or the original thread. Recipient deny rules continue to take precedence.
 
 ## Requirements and configuration
 

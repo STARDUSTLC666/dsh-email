@@ -6,7 +6,9 @@
 
 在 DSH 邮件工作台管理 IMAP / SMTP 与 AgentMail 多账号。查看收件箱和已发送、搜索邮件、下载附件，并先保存与检查草稿，再明确确认发送。
 
-[![npm](https://img.shields.io/npm/v/dsh-email)](https://www.npmjs.com/package/dsh-email) [![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-downloads.svg)](https://www.npmjs.com/package/dsh-email)
+[![npm](https://img.shields.io/npm/v/dsh-email)](https://www.npmjs.com/package/dsh-email) [![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-downloads.svg)](https://www.npmjs.com/package/dsh-email) [![total downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-total-downloads.svg)](https://www.npmjs.com/package/dsh-email)
+
+[下载统计说明](https://github.com/STARDUSTLC666/dsh-suite/blob/npm-downloads/README.md)
 
 欢迎使用，遇到问题或有改进建议，请提交 [issues](https://github.com/STARDUSTLC666/dsh-email/issues) 和 [PR](https://github.com/STARDUSTLC666/dsh-email/pulls)。
 
@@ -36,9 +38,11 @@ dsh plugin --profile desktop add dsh-email
 
 ## 开始使用
 
-打开「设置 → 邮件」添加账号并测试连接，再到「收发邮件」浏览。可说：“列出最近未读邮件，给这封邮件准备回复。”页面上的回复会先存为草稿，核对后才发送。
-
-要先编辑再发送，可说：“用 email_draft 准备一封邮件，先别发送。”在「草稿」页保存编辑、检查附件并确认。详见[草稿与收件人规则](docs/DRAFTS.md)。
+1. 打开“邮件”的账号设置，选择自己的 IMAP/SMTP、OAuth 或 AgentMail 账号并填写授权信息。
+2. 测试连接，选择要使用的账号，再从“收发邮件”读取收件箱和已发送。
+3. 搜索并打开邮件，核对正文与附件；可让助手“准备回复，先不要发送”。
+4. 到“草稿”编辑、保存和检查预览，核对 To/Cc、附件和发信账号后再确认发送。
+5. 在已发送或原邮件线程中核对结果；收件人禁止规则始终优先。
 
 ## 依赖与配置
 

@@ -4,6 +4,11 @@
 
 [历史英文记录](docs/CHANGELOG.en.md)
 
+## 0.20.5 (2026-10-29)
+
+- 补齐中英文使用流程：准备、入口、具体操作与结果核对；新增累计 npm 下载徽章并保留月统计。
+- Add practical getting-started workflows and lifetime npm download badges alongside monthly counts.
+
 ## 0.20.4 (2026-10-29)
 
 - 同步仓库与 npm 的简明介绍、中英文 README 和反馈入口；本次为文档与包元数据更新。
