@@ -1,6 +1,6 @@
 {
   "name": "dsh-email",
-  "version": "0.21.0",
+  "version": "0.21.1",
   "description": "DSH 邮件工作台：IMAP / POP3 / SMTP 与 AgentMail 多账号、搜索附件、草稿预览和确认发送。欢迎提交 issues 和 PR。",
   "type": "module",
   "main": "lib/index.js",
@@ -21,7 +21,8 @@
     "README.md",
     "README.en.md",
     "CHANGELOG.md",
-    "docs"
+    "docs",
+    "assets/plugin-icon.webp"
   ],
   "scripts": {
     "build": "tsc && node scripts/build-client.mjs && node scripts/build-updates.mjs",
@@ -82,5 +83,6 @@
     "@types/node": "^26.2.0",
     "@types/proper-lockfile": "4.1.4",
     "typescript": "^5.7.3"
-  }
+  },
+  "icon": "./assets/plugin-icon.webp"
 }

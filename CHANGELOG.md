@@ -1,5 +1,11 @@
 # 更新记录
 
+## 0.21.1 (2026-10-30)
+
+- 原生插件列表与详情新增专门生成的鲸鱼娘图标：大头像、独立功能符号、透明留白，适合 30 / 36 px 显示；原封面保留。
+- Add purpose-made whale-girl artwork with a distinct function emblem, transparent padding and small-size readability; preserve the original cover.
+
+
 ## 0.21.0 (2026-10-30)
 
 - 新增 POP3 收信账号（[#28](https://github.com/STARDUSTLC666/dsh-email/issues/28)）：原有账号编辑器选择协议与端点，支持连接测试、列表、正文、范围明确的本地搜索和附件下载。
