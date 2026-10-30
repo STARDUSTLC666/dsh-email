@@ -530,7 +530,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "card.authPasswordSaved": "A login password is stored: leave it empty to keep it, or type to replace it.",
                 "card.authPasswordHint": "Leave empty to reuse the authorization code / app password above; only needed when the login user has a password of its own.",
                 "card.inboxLabel": "Inbox folder (default INBOX)",
-                "card.autoSaveHint": "Changes save automatically.",
+                "card.autoSaveHint": " Changes save automatically.",
                 "card.autoSaveHintNoDefault": " There are several accounts but no default account yet; you must pick one first.",
                 "card.builtinEndpoints": " · {imap} | {smtp}",
                 "card.customEndpoint": " · {endpoint}",
