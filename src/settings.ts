@@ -37,6 +37,10 @@ export const EmailSettingsSchema = z.object({
     port: z.number().default(ENDPOINT_DEFAULTS.smtp.port),
     secure: z.boolean().default(ENDPOINT_DEFAULTS.smtp.secure),
   }),
+  // One proxy for both endpoints: a machine either routes its traffic or not.
+  // Empty means「直连」, with the conventional HTTPS_PROXY / ALL_PROXY variables
+  // still honoured as a fallback.
+  proxy: z.string().default(''),
 })
 
 export interface EmailSettingsValue {
@@ -55,6 +59,7 @@ export interface EmailSettingsValue {
   serverPresets?: string
   imap: { host: string; port: number; secure: boolean }
   smtp: { host: string; port: number; secure: boolean }
+  proxy?: string
 }
 
 /** Project the row config (cordis.patch.yml) into the settings-schema base shape. */
@@ -86,6 +91,7 @@ export function toSettingsBase(config: EmailConfig): Partial<EmailSettingsValue>
         secure: config.smtp.secure ?? ENDPOINT_DEFAULTS.smtp.secure,
       },
     } : {}),
+    ...(config.proxy !== undefined && config.proxy !== '' ? { proxy: config.proxy } : {}),
   }
 }
 
@@ -155,6 +161,7 @@ export function toEmailConfig(value: EmailSettingsValue, user?: Partial<EmailSet
   if (has('maxBodyChars')) set('maxBodyChars', draft.maxBodyChars)
   if (has('downloadDir')) set('downloadDir', draft.downloadDir)
   if (has('accountsYaml')) set('accountsYaml', draft.accountsYaml)
+  if (has('proxy')) set('proxy', draft.proxy)
   // serverPresets is intentionally NOT projected: it is UI-side metadata that
   // resolution never reads, and projecting it would put it into the resolved
   // fingerprint, so saving a preset would dispose every live IMAP connection.

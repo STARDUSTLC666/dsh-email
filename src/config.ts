@@ -2,6 +2,7 @@ import { homedir } from 'node:os'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { join } from 'node:path'
 import { parseRecipientPolicies, type RecipientPolicy } from './recipient-policy.js'
+import { parseProxyUrl } from './proxy.js'
 
 /** The 8 built-in provider ids. A `provider` may also name a custom preset. */
 export type ProviderName = 'qq' | '163' | '126' | 'sina' | 'aliyun' | 'gmail' | 'outlook' | 'icloud'
@@ -130,6 +131,13 @@ export interface AccountConfig {
   authKind?: AuthKind
   imap?: ImapConfig
   smtp?: SmtpConfig
+  /**
+   * Proxy every IMAP/SMTP connection of this account goes through, e.g.
+   * `http://127.0.0.1:7897` or `socks5://127.0.0.1:1080`. Left empty, the
+   * conventional `HTTPS_PROXY` / `ALL_PROXY` variables are consulted, so a
+   * machine whose traffic is already routed needs no per-account setup.
+   */
+  proxy?: string
   inboxFolder?: string
 }
 
@@ -231,6 +239,12 @@ export interface ResolvedEmailConfig {
   clientId?: string
   imap: ImapConfig & { host: string; port: number; secure: boolean }
   smtp: SmtpConfig & { host: string; port: number; secure: boolean }
+  /**
+   * Resolved proxy URL for this account's IMAP/SMTP connections, or undefined
+   * for a direct connection. Already validated here so the transports can hand
+   * it straight to their dialers.
+   */
+  proxy?: string
   inboxFolder: string
 }
 
@@ -424,6 +438,7 @@ export function resolveEmailSettings(config: EmailConfig | undefined, onlyAccoun
     authKind: raw.authKind,
     imap: raw.imap,
     smtp: raw.smtp,
+    proxy: raw.proxy,
     inboxFolder: raw.inboxFolder,
   }
   const parsedYaml = raw.accountsYaml?.trim() ? parseAccountsYaml(raw.accountsYaml) : undefined
@@ -627,6 +642,16 @@ function resolveAccount(
     if ((acc.inboxFolder ?? common.inboxFolder ?? 'INBOX').trim() !== 'INBOX') problems.push('POP3 只提供 INBOX 收件箱，不支持自定义文件夹')
   } else if (imap.host === undefined || imap.host === '') problems.push(`账号 "${name}" 的 imap.host 未填写（可填 provider 预设：${known.join(', ')}）`)
   if (receiveProtocol !== 'pop3' && (smtp.host === undefined || smtp.host === '')) problems.push(`账号 "${name}" 的 smtp.host 未填写（同上）`)
+  // A proxy typo should read as a settings error here, not as an opaque connect
+  // failure minutes later when the account is first used.
+  const proxyValue = String(acc.proxy ?? common.proxy ?? '').trim()
+  if (proxyValue !== '') {
+    try {
+      parseProxyUrl(proxyValue)
+    } catch (error) {
+      problems.push(`账号 "${name}" 的代理地址无效：${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
   if (problems.length > 0) {
     throw new Error(`邮件账号配置不完整：${problems.join('；')}。请在「设置 → 邮件」补全对应账号，再点击「测试连接」。修改会自动保存并立即生效。`)
   }
@@ -644,6 +669,7 @@ function resolveAccount(
     password: oauth2 ? '' : password,
     authKind: oauth2 ? 'oauth2' : 'password',
     ...(clientId !== '' ? { clientId } : {}),
+    ...(proxyValue !== '' ? { proxy: proxyValue } : {}),
     imap: { ...imap, host: imap.host!, port: imap.port!, secure: imap.secure! },
     smtp: { ...smtp, host: smtp.host ?? '', port: smtp.port ?? 465, secure: smtp.secure ?? true },
     inboxFolder: (acc.inboxFolder ?? common.inboxFolder ?? '').trim() || 'INBOX',

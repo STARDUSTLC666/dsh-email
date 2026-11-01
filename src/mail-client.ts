@@ -8,6 +8,7 @@ import type { Readable } from 'node:stream'
 import type { AuthKind, ResolvedEmailConfig, ResolvedEmailSettings } from './config.js'
 import { getFreshAccessToken, OAuth2Error } from './oauth2.js'
 import { assertRecipientsAllowed } from './recipient-policy.js'
+import { openProxiedSocket, resolveProxyUrl } from './proxy.js'
 import { flattenAddresses, parseRawMessage, sanitizeFilename, stripHtml, truncateText } from './parse.js'
 import type {
   AddressEntry,
@@ -507,6 +508,9 @@ export class EmailPool {
   }
 
   private createImap(auth: ImapAuth, cfg: ResolvedEmailConfig): ImapFlow {
+    // ImapFlow negotiates HTTP CONNECT and SOCKS itself, so the resolved URL is
+    // handed over as-is; TLS still validates `host`, the real mail server.
+    const proxy = resolveProxyUrl(cfg.proxy, process.env, cfg.imap.host)
     const client = new ImapFlow({
       host: cfg.imap.host,
       port: cfg.imap.port,
@@ -516,6 +520,7 @@ export class EmailPool {
       connectionTimeout: cfg.imap.connectionTimeoutMs ?? 30000,
       greetingTimeout: 30000,
       socketTimeout: cfg.imap.socketTimeoutMs ?? 60000,
+      ...(proxy !== undefined ? { proxy } : {}),
     })
     // ImapFlow emits 'error' on socket timeouts/drops; without a listener Node
     // escalates it to an uncaught exception and kills the whole DSH process
@@ -681,26 +686,33 @@ export class EmailPool {
    * only the public SMTP transport hook to the cancellation owner.
    */
   private transporter(name: string, cfg: ResolvedEmailConfig, accessToken: string | undefined, signal: AbortSignal | undefined, onSocket: (socket: Socket) => void): Transporter {
+    // nodemailer has no proxy option of its own, so the tunnel is opened in the
+    // socket hook this plugin already owns. `servername` keeps certificate
+    // validation on the configured mail host instead of the proxy that carried
+    // the connection.
+    const proxy = resolveProxyUrl(cfg.proxy, process.env, cfg.smtp.host)
     const transporter = nodemailer.createTransport({
       host: cfg.smtp.host,
       port: cfg.smtp.port,
       secure: cfg.smtp.secure,
+      ...(proxy !== undefined ? { servername: cfg.smtp.host } : {}),
       auth: smtpAuthOf(cfg, accessToken),
       connectionTimeout: 30000,
       greetingTimeout: 10000,
       socketTimeout: 60000,
       getSocket: (options: SMTPTransport.Options, callback: (error: Error | null, socketOptions: any) => void) => {
-        const socket = createConnection({ host: options.host ?? cfg.smtp.host, port: Number(options.port ?? cfg.smtp.port) })
-        onSocket(socket)
+        const targetHost = options.host ?? cfg.smtp.host
+        const targetPort = Number(options.port ?? cfg.smtp.port)
+        let socket: Socket | undefined
         let settled = false
         const finish = (error: Error | null, socketOptions?: any): void => {
           if (settled) return
           settled = true
           clearTimeout(timer)
-          socket.removeListener('connect', onConnect)
-          socket.removeListener('error', onError)
+          socket?.removeListener('connect', onConnect)
+          socket?.removeListener('error', onError)
           signal?.removeEventListener('abort', onAbort)
-          if (error !== null) socket.destroy()
+          if (error !== null) socket?.destroy()
           callback(error, socketOptions)
         }
         const onConnect = (): void => {
@@ -711,9 +723,23 @@ export class EmailPool {
         const onError = (error: Error): void => finish(error)
         const onAbort = (): void => finish(signal?.reason instanceof Error ? signal.reason : new Error('SMTP connection aborted'))
         const timer = setTimeout(() => finish(new Error('SMTP connection timeout')), 30000)
-        socket.once('connect', onConnect)
-        socket.once('error', onError)
         signal?.addEventListener('abort', onAbort, { once: true })
+        if (proxy !== undefined) {
+          // A proxied socket is already connected when it is handed back, so it
+          // takes the same path the direct socket reaches on 'connect'.
+          openProxiedSocket(proxy, targetHost, targetPort, { timeoutMs: 30000 }).then(acquired => {
+            socket = acquired
+            if (signal?.aborted === true) { onAbort(); return }
+            onSocket(acquired)
+            acquired.once('error', onError)
+            onConnect()
+          }, onError)
+        } else {
+          socket = createConnection({ host: targetHost, port: targetPort })
+          onSocket(socket)
+          socket.once('connect', onConnect)
+          socket.once('error', onError)
+        }
         if (signal?.aborted === true) onAbort()
       },
     })

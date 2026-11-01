@@ -1,5 +1,10 @@
 # 更新记录
 
+## 未发布
+
+- 新增连接代理（PR 见下）：账号上的 `proxy` 支持 `http`(CONNECT) / `https` / `socks4` / `socks4a` / `socks5` / `socks5h`，不配置时回退到 `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` 并遵守 `NO_PROXY`；IMAP 走 imapflow 自带代理，SMTP 由插件建立隧道后仍由 nodemailer 起 TLS，证书校验仍针对真实邮箱主机。不做代理时行为完全不变。
+- Add connection proxies: an account-level `proxy` (`http` CONNECT / `https` / `socks4` / `socks4a` / `socks5` / `socks5h`), falling back to `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` with `NO_PROXY` honoured. IMAP uses imapflow's own proxy support; SMTP tunnels through the proxy and lets nodemailer start TLS, so certificates keep validating the real mail host. Direct connections are unchanged.
+
 ## 0.21.2 (2026-10-30)
 
 - 重整中英文首页：用途、三步流程图、安装入口与操作示例；详细配置与边界集中到完整说明。

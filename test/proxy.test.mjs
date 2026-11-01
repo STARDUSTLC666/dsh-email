@@ -1,0 +1,89 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { createServer } from 'node:net'
+import { resolveEmailSettings } from '../lib/index.js'
+import { openProxiedSocket, parseProxyUrl, resolveProxyUrl } from '../lib/proxy.js'
+
+/** A CONNECT proxy that answers with `status`, then echoes whatever it tunnels. */
+async function stubProxy(status = 200) {
+  const seen = []
+  const server = createServer(socket => {
+    let buffered = ''
+    socket.on('data', chunk => {
+      buffered += chunk.toString('latin1')
+      const end = buffered.indexOf('\r\n\r\n')
+      if (end < 0) return
+      const head = buffered.slice(0, end)
+      seen.push(head)
+      const lines = head.split('\r\n')
+      socket.write(`HTTP/1.1 ${status} ${status === 200 ? 'Connection established' : 'Proxy Authentication Required'}\r\n\r\n`, 'latin1')
+      // Whatever the client writes after the handshake comes back, which proves
+      // the socket really became a tunnel rather than a plain connection.
+      socket.removeAllListeners('data')
+      socket.on('data', data => socket.write(data))
+      if (status !== 200) socket.end()
+    })
+  })
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  const { port } = server.address()
+  return { url: `http://127.0.0.1:${port}`, seen, close: () => new Promise(resolve => server.close(resolve)) }
+}
+
+test('a bare host:port is read as an HTTP proxy, and bad input is rejected with the scheme list', () => {
+  assert.equal(parseProxyUrl('127.0.0.1:7897').href, 'http://127.0.0.1:7897/')
+  assert.equal(parseProxyUrl('socks5://127.0.0.1:1080').protocol, 'socks5:')
+  assert.equal(parseProxyUrl('   '), undefined)
+  assert.throws(() => parseProxyUrl('ftp://127.0.0.1:21'), /不支持的代理协议/)
+  assert.throws(() => parseProxyUrl('http://'), /代理地址/)
+})
+
+test('the account proxy wins over the environment, which wins over a direct connection', () => {
+  assert.equal(resolveProxyUrl('http://127.0.0.1:7897', { HTTPS_PROXY: 'http://env.test:8080' }), 'http://127.0.0.1:7897/')
+  assert.equal(resolveProxyUrl('', { HTTPS_PROXY: 'http://env.test:8080' }), 'http://env.test:8080/')
+  assert.equal(resolveProxyUrl(undefined, { https_proxy: 'socks5://env.test:1080' }), 'socks5://env.test:1080')
+  assert.equal(resolveProxyUrl(undefined, {}), undefined)
+  // NO_PROXY bypasses the environment, but never an address the user typed.
+  assert.equal(resolveProxyUrl(undefined, { HTTPS_PROXY: 'http://env.test:8080', NO_PROXY: 'gmail.com' }, 'imap.gmail.com'), undefined)
+  assert.equal(resolveProxyUrl('http://127.0.0.1:7897', { NO_PROXY: '*' }, 'imap.gmail.com'), 'http://127.0.0.1:7897/')
+})
+
+test('openProxiedSocket tunnels through an HTTP CONNECT proxy', async () => {
+  const proxy = await stubProxy()
+  try {
+    const socket = await openProxiedSocket(proxy.url, 'smtp.example.test', 465)
+    assert.equal(proxy.seen.length, 1)
+    assert.match(proxy.seen[0], /^CONNECT smtp\.example\.test:465 HTTP\/1\.1/)
+    socket.write('ping')
+    const echoed = await new Promise(resolve => socket.once('data', data => resolve(data.toString('latin1'))))
+    assert.equal(echoed, 'ping')
+    socket.destroy()
+  } finally {
+    await proxy.close()
+  }
+})
+
+test('a CONNECT proxy that refuses the tunnel fails with the proxy status, not a bare timeout', async () => {
+  const proxy = await stubProxy(407)
+  try {
+    await assert.rejects(openProxiedSocket(proxy.url, 'smtp.example.test', 465), /HTTP 407/)
+  } finally {
+    await proxy.close()
+  }
+})
+
+test('an unreachable proxy reports itself instead of the mail host', async () => {
+  await assert.rejects(openProxiedSocket('http://127.0.0.1:1', 'smtp.example.test', 465), /无法连接代理/)
+})
+
+test('the proxy survives config resolution and is validated there', () => {
+  const base = { provider: 'gmail', user: 'user@gmail.com', password: 'fixture-only' }
+  const settings = resolveEmailSettings({ ...base, proxy: '127.0.0.1:7897' })
+  assert.equal(settings.accounts.get('default').proxy, '127.0.0.1:7897')
+  // Named accounts inherit it from the shared section, and may override it.
+  const named = resolveEmailSettings({ ...base, proxy: 'http://127.0.0.1:7897', accounts: { work: { user: 'work@gmail.com', password: 'fixture-only', provider: 'gmail' } } })
+  assert.equal(named.accounts.get('work').proxy, 'http://127.0.0.1:7897')
+  const overridden = resolveEmailSettings({ ...base, proxy: 'http://127.0.0.1:7897', accounts: { work: { user: 'work@gmail.com', password: 'fixture-only', provider: 'gmail', proxy: 'socks5://127.0.0.1:1080' } } })
+  assert.equal(overridden.accounts.get('work').proxy, 'socks5://127.0.0.1:1080')
+  assert.throws(() => resolveEmailSettings({ ...base, proxy: 'ftp://127.0.0.1:21' }), /代理地址无效/)
+  assert.equal(resolveEmailSettings(base).accounts.get('default').proxy, undefined)
+})

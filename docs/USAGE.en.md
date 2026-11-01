@@ -170,6 +170,25 @@ The settings page's "Server presets" fold-out edits these presets visually, and 
 | `idleTimeoutMs` | `60000` | IMAP idle connection recycle time (connection reuse; consecutive ops are faster) |
 | `bodySearchFallback` | `true` | Fall back to client-side body scan of recent messages when server search returns nothing |
 | `bodySearchLimit` | `30` | Number of messages for the body fallback scan (5–200) |
+| `proxy` | none | Connection proxy such as `http://127.0.0.1:7897`; when omitted, `HTTPS_PROXY`/`ALL_PROXY` and `NO_PROXY` decide — see "Proxy" below |
+
+### Proxy
+
+When the network only reaches a mail server through a proxy (Gmail's SMTP/IMAP do not connect directly on some networks), give the account a `proxy`:
+
+```yaml
+- id: tool-email
+  config:
+    provider: gmail
+    user: you@gmail.com
+    password: app-password
+    proxy: http://127.0.0.1:7897   # no scheme means an HTTP CONNECT proxy
+```
+
+- Supported schemes: `http` (CONNECT), `https`, `socks4`, `socks4a`, `socks5`, `socks5h`. An account-level `proxy` overrides the top-level shorthand, so named accounts may differ.
+- Without `proxy`, the conventional `HTTPS_PROXY`, `HTTP_PROXY` and `ALL_PROXY` variables are read in that order (either case), and `NO_PROXY` is honoured. Neither set means a direct connection.
+- IMAP uses imapflow's own proxy implementation; SMTP opens the CONNECT/SOCKS tunnel first and lets nodemailer start TLS on it. Certificate validation always checks the real mail host, not the proxy.
+- It affects this plugin only — the system proxy is untouched — and POP3 receiving does not take a proxy yet.
 
 ## Getting an authorization code
 

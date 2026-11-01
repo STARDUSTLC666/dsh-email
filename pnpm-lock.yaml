@@ -35,6 +35,9 @@ importers:
       schemastery:
         specifier: ^3.18.0
         version: 3.18.0
+      socks:
+        specifier: ^2.8.10
+        version: 2.8.10
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
