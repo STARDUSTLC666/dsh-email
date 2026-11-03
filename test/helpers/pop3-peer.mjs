@@ -51,5 +51,5 @@ export async function createPop3Peer(options={}) {
   }
   const server=options.tls?createTlsServer({key:readFileSync(new URL('../fixtures/smtp-test-key.pem',import.meta.url)),cert:readFileSync(new URL('../fixtures/smtp-test-ca.pem',import.meta.url))},onSocket):createServer(onSocket)
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve))
-  return{port:server.address().port,messages,commands,sockets,async close(){for(const s of sockets)s.destroy();await new Promise(resolve=>server.close(resolve))}}
+  return{port:server.address().port,messages,commands,sockets,async close(){const closing=[...sockets].map(socket=>new Promise(resolve=>{if(socket.destroyed)return resolve();socket.once('close',resolve);socket.destroy()}));await Promise.all(closing);await new Promise(resolve=>server.close(resolve));await new Promise(resolve=>setTimeout(resolve,25))}}
 }

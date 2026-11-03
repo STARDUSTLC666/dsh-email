@@ -26,8 +26,8 @@
   ],
   "scripts": {
     "build": "tsc && node scripts/build-client.mjs && node scripts/build-updates.mjs",
-    "prepublishOnly": "pnpm run build",
-    "test": "pnpm run build && node --test \"test/*.test.mjs\""
+    "prepublishOnly": "npm run build",
+    "test": "node --test --test-concurrency=2 \"test/*.test.mjs\""
   },
   "keywords": [
     "dsh-plugin",
