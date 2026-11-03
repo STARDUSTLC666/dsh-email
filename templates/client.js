@@ -2182,7 +2182,7 @@ const [accountsLoading,setAccountsLoading]=useState(true),[accountReload,setAcco
             const isPop3 = accounts.find(a=>a.name===account)?.incoming === 'pop3';
 useEffect(()=>{onAccountChange?.(account);},[account,onAccountChange]);
             const [input, setInput] = useState(""), [query, setQuery] = useState(""), [offset, setOffset] = useState(0), [scanOffset, setScanOffset] = useState(0), [unread, setUnread] = useState(false), [refresh, setRefresh] = useState(0);
-            const [result, setResult] = useState(null), [selected, setSelected] = useState(null), [detail, setDetail] = useState(null), [loading, setLoading] = useState(false), [reading, setReading] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState("");
+            const [result, setResult] = useState(null), [selected, setSelected] = useState(null), [detail, setDetail] = useState(null), [loading, setLoading] = useState(false), [reading, setReading] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(""), [readToken, setReadToken] = useState(0);
             const busyRef = useRef(false), context = useRef(0);
 
             useEffect(() => {
@@ -2241,7 +2241,7 @@ setAccountsLoading(true);
                     setError(emailError(e)); }).finally(() => { if (!ctrl.signal.aborted)
                     setReading(false); });
                 return () => ctrl.abort();
-            }, [active, account, folder, selected]);
+            }, [active, account, folder, selected, readToken]);
             const run = async (task) => { if (busyRef.current)
                 return; busyRef.current = true; setBusy(true); setError(""); const generation = context.current; try {
                 await task(() => generation === context.current);
@@ -2254,6 +2254,8 @@ setAccountsLoading(true);
                 busyRef.current = false;
                 setBusy(false);
             } };
+            /** 失败后的一键重试：账号、文件夹、列表、正文按各自依赖重取，不靠用户到处找刷新按钮。 */
+            const retry = () => { setAccountReload(n => n + 1); setRefresh(n => n + 1); setReadToken(n => n + 1); };
             const reset = () => { setOffset(0); setScanOffset(0); setSelected(null); setDetail(null); };
             const changeFolder = value => { reset(); setFolder(value); };
             const who = list => (list || []).map(a => a.name && a.address ? a.name + " <" + a.address + ">" : a.address || a.name).filter(Boolean).join(", ");
@@ -2261,7 +2263,7 @@ setAccountsLoading(true);
             const rows = result?.messages || [], currentRow = rows.find(m => m.uid === selected), hasMore = result?.hasMore ?? (result?.headerScan && result?.searchSource === "local-headers" ? offset + rows.length < result.count : result?.bodyScan ? rows.length === 20 : offset + rows.length < (result?.count || 0));
             const folderButton = (special, zh, en) => { const target = folders.find(f => f.specialUse === special) || folders.find(f => special === "\\Sent" ? /^(sent|sent messages|已发送)$/i.test(f.path) : f.path === "INBOX"); return target ? h("button", { type: "button", className: "dshe-btn", disabled: busy || loading, "aria-pressed": folder === target.path, onClick: () => changeFolder(target.path) }, dt(zh, en)) : null; };
             return h('section',{className:'email-mailbox','aria-label':dt('邮箱工作台','Mailbox workbench')},
- h(W.Status,{tone:'error'},error ? h(React.Fragment,null,error,h(W.Button,{variant:'ghost',onClick:onConfigure},dt('检查账号设置','Check account settings'))) : null),
+ h(W.Status,{tone:'error'},error ? h(React.Fragment,null,[error,h('div',{key:'actions',className:'w-toolbar'},[h(W.Button,{key:'retry',icon:'refresh',variant:'primary',disabled:busy || accountsLoading,onClick:retry},dt('重试','Retry')),h(W.Button,{key:'configure',variant:'ghost',onClick:onConfigure},dt('检查账号设置','Check account settings'))])]) : null),
  accountsLoading ? h(W.Empty,{title:dt('正在读取邮箱账号…','Loading accounts…'),icon:'mail'}) : !accounts.length ? h(W.Empty,{title:error?dt('暂时无法读取邮箱','Mailbox unavailable'):dt('连接你的邮箱','Connect your mailbox'),icon:'mail',action:h(React.Fragment,null,h(W.Button,{variant:'primary',onClick:onConfigure},dt('邮箱设置','Account settings')),h(W.Button,{onClick:()=>setAccountReload(n=>n+1)},dt('重试','Retry')))},dt('添加并测试邮箱账号后，即可在这里阅读和回复邮件。','Add and test an email account to read and reply here.')) :
  h('div',{className:'email-mailbox-columns'},
  h('aside',{className:'email-folder-rail','aria-label':dt('账号与文件夹','Accounts and folders')},
@@ -2276,15 +2278,15 @@ setAccountsLoading(true);
  query ? h(W.Button,{variant:'ghost',disabled:busy,onClick:()=>{reset();setInput('');setQuery('');}},dt('清除搜索','Clear search')) : null,
  !isPop3 && h('label',{className:'email-unread-filter'},h('input',{type:'checkbox',checked:unread,disabled:busy || !!query,onChange:event=>{reset();setUnread(event.target.checked);}}),dt('只看未读','Unread only'))),
  isPop3 ? h('p',{className:'email-list-note',role:'note'},dt('POP3 收件箱 · 不提供服务器已读、星标或已发送文件夹。回复会进入本地草稿，确认后通过 SMTP 发送。','POP3 inbox · Server read/star flags and a Sent folder are unavailable. Replies open in local Drafts and use SMTP after confirmation.')) : null,
- rows.length ? rows.map(m=>h(W.Row,{key:String(m.uid),disabled:busy,title:h(React.Fragment,null,m.flagsSupported !== false && !m.seen?h('span',{className:'email-unread-dot',role:'img','aria-label':dt('未读','Unread')}):null,m.flagged?h(W.Icon,{name:'star',size:14}):null,m.subject || dt('（无主题）','(No subject)')),meta:who(m.from),description:date(m.date),active:selected===m.uid,onClick:()=>setSelected(m.uid)})) : h(W.Empty,{title:loading?dt('正在读取邮件…','Loading messages…'):query?dt('当前检索范围内没有结果。','No results in the current search window.'):dt('当前页没有邮件。','No messages on this page.'),icon:'mail'}),
+ rows.length ? rows.map(m=>h(W.Row,{key:String(m.uid),disabled:busy,title:h(React.Fragment,null,m.flagsSupported !== false && !m.seen?h('span',{className:'email-unread-dot',role:'img','aria-label':dt('未读','Unread')}):null,m.flagged?h(W.Icon,{name:'star',size:14}):null,m.subject || dt('（无主题）','(No subject)')),meta:who(m.from),description:date(m.date),active:selected===m.uid,onClick:()=>setSelected(m.uid)})) : h(W.Empty,{icon:'mail',title:error && !result?dt('邮件列表没有读出来','Messages could not be loaded'):loading?dt('正在读取邮件…','Loading messages…'):query?dt('当前检索范围内没有结果。','No results in the current search window.'):dt('当前页没有邮件。','No messages on this page.'),action:error && !result?h(W.Button,{icon:'refresh',disabled:busy || loading,onClick:retry},dt('重试','Retry')):undefined}),
  h('div',{className:'email-list-note'},h("div", { role: "status", "aria-live": "polite", className: "dshe-hint" }, loading ? dt("正在读取邮件…", "Loading messages…") : result ? dt("本页 ", "This page: ") + rows.length + dt(" 封", " messages") + (result.order === "relevance" ? dt(" · 按相关性排序", " · Ranked by relevance") : dt(" · 按邮箱到达序排列", " · Mailbox arrival order")) : dt("在账号设置中添加并测试邮箱后，即可浏览邮件。", "Add and test an account in settings to browse mail.")),
 result?.headerScan ? h("p", { className: "dshe-hint" }, dt("信封实际扫描：", "Headers scanned: ") + result.headerScan.scanned + " / " + result.headerScan.mailboxTotal + (result.headerScan.complete ? dt("，信封覆盖完整；正文另有限制。", "; headers fully covered; body search has a separate limit.") : dt("，尚未覆盖全文件夹。", "; folder coverage is partial."))) : null,
 result?.bodyScan ? h('p',{className:'dshe-hint'},dt('正文实际扫描：','Bodies scanned: ')+result.bodyScan.scanned+dt(' 封；最多 ',' messages; limit ')+result.bodyScan.scanLimit+dt(' 封，受正文显示上限限制。','; bounded by the body display limit.')) : null,
 result?.searchSource === "api" ? h("p", { className: "dshe-hint" }, dt("AgentMail 搜索由服务按相关性返回，垃圾箱等特殊邮件不在其搜索范围。", "AgentMail ranks results by relevance and excludes spam, trash and other protected mail.")) : null),h("div", { className: "dshe-mail-footer" }, [
-                    h("button", { type: "button", className: "dshe-btn", disabled: loading || busy || offset === 0, onClick: () => setOffset(n => Math.max(0, n - 20)) }, dt("上一页", "Previous page")), h("span", null, dt("第 ", "Page ") + (Math.floor(offset / 20) + 1) + dt(" 页", "")), h("button", { type: "button", className: "dshe-btn", disabled: loading || busy || !hasMore, onClick: () => setOffset(n => n + 20) }, dt("下一页", "Next page")),
-                    result?.headerScan?.nextScanOffset !== undefined ? h("button", { type: "button", className: "dshe-btn", disabled: loading || busy, onClick: () => { setOffset(0); setScanOffset(result.headerScan.nextScanOffset); } }, dt("继续搜索更早邮件", "Search older headers")) : null,
+                    h(W.Button, { icon: 'left', disabled: loading || busy || offset === 0, onClick: () => setOffset(n => Math.max(0, n - 20)) }, dt("上一页", "Previous page")), h("span", { className: 'w-muted' }, dt("第 ", "Page ") + (Math.floor(offset / 20) + 1) + dt(" 页", "")), h(W.Button, { icon: 'right', disabled: loading || busy || !hasMore, onClick: () => setOffset(n => n + 20) }, dt("下一页", "Next page")),
+                    result?.headerScan?.nextScanOffset !== undefined ? h(W.Button, { icon: 'search', disabled: loading || busy, onClick: () => { setOffset(0); setScanOffset(result.headerScan.nextScanOffset); } }, dt("继续搜索更早邮件", "Search older headers")) : null,
                 ])),
- detail:reading && selected!==null ? h(W.Empty,{title:dt('正在读取正文…','Loading message…'),icon:'mail'}) : detail ? h(MailMessage,{detail,currentRow,account,folder,selected,busy,run,who,date,onDraft,onMark:value=>setResult(old=>({...old,messages:old.messages.map(m=>m.uid===selected?{...m,...(value==='read'||value==='unread'?{seen:value==='read'}:{flagged:value==='star'})}:m)}))}) : h(W.Empty,{title:dt('选择一封邮件','Select a message'),icon:'mail'},dt('打开正文后，可以回复到草稿、标记状态或下载附件。','Open a message to reply in drafts, mark its state or download attachments.'))})));
+ detail:reading && selected!==null ? h(W.Empty,{title:dt('正在读取正文…','Loading message…'),icon:'mail'}) : error && selected!==null && !detail ? h(W.Empty,{icon:'mail',title:dt('这封邮件没有读出来','This message could not be loaded'),action:h(W.Button,{icon:'refresh',disabled:busy,onClick:retry},dt('重试','Retry'))}) : detail ? h(MailMessage,{detail,currentRow,account,folder,selected,busy,run,who,date,onDraft,onMark:value=>setResult(old=>({...old,messages:old.messages.map(m=>m.uid===selected?{...m,...(value==='read'||value==='unread'?{seen:value==='read'}:{flagged:value==='star'})}:m)}))}) : h(W.Empty,{title:dt('选择一封邮件','Select a message'),icon:'mail'},dt('打开正文后，可以回复到草稿、标记状态或下载附件。','Open a message to reply in drafts, mark its state or download attachments.'))})));
         }
         const DRAFT_ROUTE = "api/dsh-email/drafts";
         const dt = (zh, en) => UI_LANG === "en" ? en : zh;
