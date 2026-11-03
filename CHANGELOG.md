@@ -1,5 +1,12 @@
 # 更新记录
 
+## 0.21.2 (2026-11-03)
+
+- 邮箱请求失败不再伪装成空文件夹；错误条提供账号/文件夹/列表/正文四类请求的一键重试；分页改用共享 Button。
+- Mailbox failures no longer look like empty folders; one retry refetches accounts, folders, list and body; pagination uses the shared Button.
+- 同步共享 workbench-ui v1.1：Page 外的 Empty / Dialog / Status 自带样式与 `.dshw` 主题作用域，Status 新增 warn 色调。
+- Sync workbench-ui v1.1: Empty / Dialog / Status now carry their own styles and `.dshw` theme scope outside Page, and Status gains a warn tone.
+
 ## 0.21.1 (2026-10-30)
 
 - 原生插件列表与详情新增专门生成的鲸鱼娘图标：大头像、独立功能符号、透明留白，适合 30 / 36 px 显示；原封面保留。
