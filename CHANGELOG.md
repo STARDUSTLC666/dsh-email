@@ -1,11 +1,18 @@
 # 更新记录
 
-## 0.21.2 (2026-11-03)
+## 0.21.3 (2026-11-03)
 
 - 邮箱请求失败不再伪装成空文件夹；错误条提供账号/文件夹/列表/正文四类请求的一键重试；分页改用共享 Button。
 - Mailbox failures no longer look like empty folders; one retry refetches accounts, folders, list and body; pagination uses the shared Button.
 - 同步共享 workbench-ui v1.1：Page 外的 Empty / Dialog / Status 自带样式与 `.dshw` 主题作用域，Status 新增 warn 色调。
 - Sync workbench-ui v1.1: Empty / Dialog / Status now carry their own styles and `.dshw` theme scope outside Page, and Status gains a warn tone.
+
+## 0.21.2 (2026-10-30)
+
+- 重整中英文首页：用途、三步流程图、安装入口与操作示例；详细配置与边界集中到完整说明。
+- 保留下载统计、独立更新选择、问题反馈和贡献入口；原封面与运行功能保留。
+- Refresh bilingual landing pages, workflow artwork, quick starts and reference navigation.
+
 
 ## 0.21.1 (2026-10-30)
 
