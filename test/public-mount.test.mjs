@@ -20,8 +20,9 @@ for (const base of ['https://dsh.example/', 'https://dsh.example/tools/dsh/']) {
     await client.probe.api('save', { value: {}, expectedRevision: 2 })
     await client.probe.api(); await client.probe.apiOauth('oauth2/start', { account: 'fixture' })
     for (const request of requests) {
-      assert.equal(request.url, base + '_dsh/dsh-email/settings')
+      assert.equal(request.url, base + 'api/dsh-email/settings')
       assert.equal(request.init.credentials, 'same-origin')
+      assert.equal(request.init.headers['x-dsh-email-settings'], '1')
     }
     assert.equal(JSON.parse(requests[0].init.body).expectedRevision, 2)
   })

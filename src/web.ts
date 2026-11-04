@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { Readable } from 'node:stream'
 import { isMap, parseDocument, type Document, type YAMLMap } from 'yaml'
 import { SETTINGS_NAMESPACE, toEmailConfig, validateSettingsValue, type EmailSettingsValue } from './settings.js'
 import {
@@ -34,6 +35,25 @@ import type { EmailWatchResult } from './types.js'
 
 /** Same-origin route the browser settings section talks to. */
 export const SETTINGS_ROUTE = '/_dsh/dsh-email/settings'
+export const SETTINGS_API_ROUTE = '/api/dsh-email/settings'
+export const WHALE_API_ROUTE = '/api/dsh-email/whale'
+const AUTHENTICATED_CARRIER = Symbol('DSH authenticated connection')
+
+/** The connection carrier supplies authentication; a header alone never does. */
+function carrierVerdict(request: Request): { status: number; message: string } | undefined {
+  if (!['GET', 'POST'].includes(request.method)) return { status: 405, message: 'Use GET or POST' }
+  if (request.headers.get('x-dsh-email-settings') !== '1') return { status: 403, message: 'Open settings from DSH' }
+  const site = request.headers.get('sec-fetch-site')
+  if (site && !['same-origin', 'none'].includes(site)) return { status: 403, message: 'Open settings from the same DSH session' }
+  const origin = request.headers.get('origin')
+  if (origin && origin !== 'dsh-app://app') {
+    try {
+      const source = new URL(origin)
+      if (!['http:', 'https:'].includes(source.protocol) || source.host !== (request.headers.get('host') || new URL(request.url).host)) throw new Error('origin mismatch')
+    } catch { return { status: 403, message: 'Open settings from the same DSH origin' } }
+  }
+  if (request.method === 'POST' && request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') return { status: 415, message: 'Settings require application/json' }
+}
 
 /** Same-origin route serving the whale-girl courier image to the widget. */
 export const WHALE_ASSET_ROUTE = '/_dsh/dsh-email/assets/whale'
@@ -1231,12 +1251,33 @@ export class EmailSettingsBackend {
     res.end(bytes)
   }
 
-  async handle(req: any, res: any) {
+  /** Only registered authenticated connection routes may use this transport. */
+  async fetch(request: Request, asset = false): Promise<Response> {
+    const verdict = asset ? request.method !== 'GET' ? { status: 405, message: 'Use GET' } : undefined : carrierVerdict(request)
+    if (verdict) return new Response(JSON.stringify({ ok: false, error: { code: 'forbidden', message: verdict.message } }), { status: verdict.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
+    request.signal.throwIfAborted()
+    const req: any = request.body ? Readable.fromWeb(request.body as any) : Readable.from([])
+    req.method = request.method
+    req.headers = Object.fromEntries(request.headers)
+    const headers = new Headers()
+    let status = 200, bytes: Buffer = Buffer.alloc(0)
+    const res = { setHeader: (name: string, value: string) => headers.set(name, value), writeHead: (value: number) => { status = value }, end: (value: Buffer) => { bytes = Buffer.from(value) } }
+    if (asset) this.handleAsset(req, res, AUTHENTICATED_CARRIER)
+    else await this.handle(req, res, AUTHENTICATED_CARRIER)
+    if (!asset && status === 200) {
+      const body = JSON.parse(bytes.toString('utf8'))
+      if (body.value?.whale?.url) { body.value.whale.url = WHALE_API_ROUTE; bytes = Buffer.from(JSON.stringify(body)) }
+    }
+    headers.delete('Content-Length')
+    return new Response(bytes as any, { status, headers })
+  }
+
+  async handle(req: any, res: any, transport?: symbol) {
     // Localhost-only: the snapshot carries the stored authorization code. If a
     // deployment binds the webserver to 0.0.0.0, this route must never leak it
     // to the LAN.
     const remote = String(req.socket?.remoteAddress ?? '')
-    if (remote !== '127.0.0.1' && remote !== '::1' && remote !== '::ffff:127.0.0.1') {
+    if (transport !== AUTHENTICATED_CARRIER && remote !== '127.0.0.1' && remote !== '::1' && remote !== '::ffff:127.0.0.1') {
       this.responseJson(res, 403, { ok: false, error: { code: 'forbidden', message: 'dsh-email settings route is localhost-only' } })
       return
     }
@@ -1244,7 +1285,7 @@ export class EmailSettingsBackend {
     // it reached: a rebound domain resolves to 127.0.0.1 and would otherwise read
     // the snapshot, `accountsYaml` and its plaintext 授权码 included.
     const headers = (req.headers ?? {}) as Record<string, unknown>
-    const host = hostVerdict(headers.host)
+    const host = transport === AUTHENTICATED_CARRIER ? undefined : hostVerdict(headers.host)
     if (host !== undefined) {
       this.responseJson(res, 403, { ok: false, error: { code: 'forbidden', message: host } })
       return
@@ -1253,7 +1294,7 @@ export class EmailSettingsBackend {
       // A page the user visits can POST here cross-origin as a「simple request」
       // and change settings or trigger a dial; these headers are the part of that
       // a page script cannot forge away.
-      const post = postVerdict(headers)
+      const post = transport === AUTHENTICATED_CARRIER ? undefined : postVerdict(headers)
       if (post !== undefined) {
         this.responseJson(res, post.status, {
           ok: false,
@@ -1368,9 +1409,9 @@ export class EmailSettingsBackend {
     }
   }
   /** GET-only localhost route serving the whale-girl courier image. */
-  handleAsset(req: any, res: any) {
+  handleAsset(req: any, res: any, transport?: symbol) {
     const remote = String(req.socket?.remoteAddress ?? '')
-    if (remote !== '127.0.0.1' && remote !== '::1' && remote !== '::ffff:127.0.0.1') {
+    if (transport !== AUTHENTICATED_CARRIER && remote !== '127.0.0.1' && remote !== '::1' && remote !== '::ffff:127.0.0.1') {
       this.responseJson(res, 403, { ok: false, error: { code: 'forbidden', message: 'dsh-email asset route is localhost-only' } })
       return
     }
@@ -1401,6 +1442,10 @@ export class EmailSettingsBackend {
 
 /** Mount the same-origin routes when a webServer service is present. */
 export function installEmailSettingsWeb(ctx: any, backend: EmailSettingsBackend): void {
+  ctx.inject?.(['connection'], (host: any) => {
+    host.connection?.fetch?.register?.({ path: SETTINGS_API_ROUTE, methods: ['GET', 'POST'], requestBody: 'buffered', fetch: (request: Request) => backend.fetch(request) })
+    host.connection?.fetch?.register?.({ path: WHALE_API_ROUTE, methods: ['GET'], requestBody: 'buffered', fetch: (request: Request) => backend.fetch(request, true) })
+  })
   ctx.inject(['webServer'], (webCtx: any) => {
     webCtx.effect(() => {
       const dispose = webCtx.webServer.register({

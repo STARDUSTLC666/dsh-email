@@ -4,6 +4,8 @@ import { type OAuth2State } from './oauth2.js';
 import type { EmailWatchResult } from './types.js';
 /** Same-origin route the browser settings section talks to. */
 export declare const SETTINGS_ROUTE = "/_dsh/dsh-email/settings";
+export declare const SETTINGS_API_ROUTE = "/api/dsh-email/settings";
+export declare const WHALE_API_ROUTE = "/api/dsh-email/whale";
 /** Same-origin route serving the whale-girl courier image to the widget. */
 export declare const WHALE_ASSET_ROUTE = "/_dsh/dsh-email/assets/whale";
 /**
@@ -336,9 +338,11 @@ export declare class EmailSettingsBackend {
      */
     oauthPoll(name: unknown): Promise<Record<string, unknown>>;
     responseJson(res: any, status: number, body: unknown): void;
-    handle(req: any, res: any): Promise<void>;
+    /** Only registered authenticated connection routes may use this transport. */
+    fetch(request: Request, asset?: boolean): Promise<Response>;
+    handle(req: any, res: any, transport?: symbol): Promise<void>;
     /** GET-only localhost route serving the whale-girl courier image. */
-    handleAsset(req: any, res: any): void;
+    handleAsset(req: any, res: any, transport?: symbol): void;
 }
 /** Mount the same-origin routes when a webServer service is present. */
 export declare function installEmailSettingsWeb(ctx: any, backend: EmailSettingsBackend): void;

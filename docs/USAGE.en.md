@@ -262,3 +262,9 @@ MIT. This is a community plugin, not affiliated with DeepSeek; `@deepseek-ai/*` 
 Connection routing offers inherited settings, direct connections and a custom proxy. Direct mode ignores environment proxies. Custom URLs may contain credentials and are not echoed back; blank keeps a saved URL. In YAML, `proxy: direct` forces direct routing, while removing the account override restores inheritance. POP3 receiving is not proxied here; AgentMail uses its own HTTP API.
 
 Trusted-recipient approval skipping applies only to email_send. Replies, reply-all and forwarding still require confirmation; Drafts provide a manual review/send path when Full Access cannot display a prompt.
+
+## LAN and remote settings
+
+When DSH listens on a LAN address, sign in to DSH in your browser and open Settings → Email to add, edit and test accounts. The page uses the official authenticated connection service; there is no need to disable the legacy route guard or enable an unsafe remote switch. Use HTTPS on public or untrusted networks.
+
+The current UI uses `/api/dsh-email/settings`, with host-owned session authentication, same-origin checks and an explicit request marker. The legacy `/_dsh/dsh-email/settings` route remains localhost-only. Manual API calls need a valid DSH session and the `x-dsh-email-settings: 1` header; that header is not an authentication credential.

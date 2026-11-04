@@ -1,5 +1,11 @@
 # 更新记录
 
+## 0.21.5 (2026-11-04)
+
+- 邮件设置改用 DSH 官方认证连接接口，支持已登录的局域网访问（#33）；旧本地接口的限制保留。
+- 账号编辑、OAuth 与新邮件提醒共用新入口；保留请求标记、同源校验、大小限制与不缓存响应。
+- Use the official authenticated connection for LAN settings, OAuth and notifications; keep legacy loopback guards, CSRF checks, body limits and no-store responses.
+
 ## 0.21.4 (2026-11-04)
 
 - 同步共享界面：嵌入设置时继承宿主底色，输入框跟随主题，空状态保持可读宽度；新版 DSH 可显示插件设置图标。

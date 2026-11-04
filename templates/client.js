@@ -9,7 +9,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
         const { useState, useEffect, useCallback, useRef } = React;
         const h = React.createElement;
         // Harness supplies document.baseURI for reverse-proxy mounts and in-page navigation.
-        const ROUTE = "_dsh/dsh-email/settings";
+        const ROUTE = "api/dsh-email/settings";
         function emailError(error) {
             const message = typeof error === 'string' ? error : error?.message || String(error || '');
             if (UI_LANG !== 'en')
@@ -52,11 +52,11 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
         const SAVE_DEBOUNCE_MS = 800;
         async function api(action, payload, signal) {
             const init = action === undefined
-                ? { credentials: "same-origin" }
+                ? { credentials: "same-origin", headers: { "x-dsh-email-settings": "1" } }
                 : {
                     credentials: "same-origin",
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: { "Content-Type": "application/json", "x-dsh-email-settings": "1" },
                     body: JSON.stringify(Object.assign({ action }, payload)),
                 };
             const res = await fetch(ROUTE, { ...init, signal });
@@ -97,7 +97,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             const res = await fetch(ROUTE, {
                 credentials: "same-origin",
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", "x-dsh-email-settings": "1" },
                 body: JSON.stringify(Object.assign({ action }, payload)),
             });
             const body = await res.json();
