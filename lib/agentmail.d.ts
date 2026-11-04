@@ -26,7 +26,7 @@ export declare class AgentMailClient {
         uid: MessageRef;
         folder: string;
     }): Promise<EmailSendResult>;
-    downloadAttachment(name: string, folder: string, uid: MessageRef, index: number, workspace?: string, signal?: AbortSignal): Promise<EmailAttachmentResult>;
+    downloadAttachment(name: string, folder: string, uid: MessageRef, index: number, workspace?: string, signal?: AbortSignal, byteLimit?: number): Promise<EmailAttachmentResult>;
     sendPaths(name: string, to: string, subject: string, text: string, cc: string, paths: string[], signal?: AbortSignal): Promise<EmailSendResult>;
     watch(name: string, folder: string, limit: number, scope: string, signal?: AbortSignal): Promise<EmailWatchResult>;
     clear(): void;

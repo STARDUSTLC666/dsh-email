@@ -30,6 +30,8 @@ Actual interface with controlled validation data; the PPTX image is a rendered s
 
 </details>
 
+Formatted reading, longer quoted replies, and IMAP single/bulk Trash with Undo: see the [mailbox workflow](docs/MAILBOX.en.md). You choose whether to load external images and confirm moves before they run.
+
 ## Install
 
 Open **Plugins** in the DSH desktop app and install `dsh-email`. If the CLI is available:

@@ -28,7 +28,7 @@ export declare class Pop3Client {
     read(name: string, uid: number | string, folder: string, signal?: AbortSignal): Promise<EmailReadResult>;
     original(name: string, uid: number | string, folder: string, signal?: AbortSignal): Promise<OriginalDigest>;
     search(name: string, query: string, folder: string, limit: number, offset: number, since?: Date, until?: Date, signal?: AbortSignal, options?: EmailSearchOptions): Promise<EmailSearchResult>;
-    downloadAttachment(name: string, folder: string, uid: number | string, index: number, workspace?: string, signal?: AbortSignal): Promise<EmailAttachmentResult>;
+    downloadAttachment(name: string, folder: string, uid: number | string, index: number, workspace?: string, signal?: AbortSignal, byteLimit?: number): Promise<EmailAttachmentResult>;
     watch(name: string, folder: string, limit: number, scope: string, signal?: AbortSignal): Promise<EmailWatchResult>;
     clear(): void;
 }

@@ -1,7 +1,7 @@
 {
   "name": "dsh-email",
-  "version": "0.21.5",
-  "description": "DSH 邮件工作台：IMAP / POP3 / SMTP 与 AgentMail 多账号、搜索附件、草稿预览和确认发送。欢迎提交 issues 和 PR。",
+  "version": "0.22.0",
+  "description": "DSH 邮件工作台：多账号收发、图文阅读、IMAP 废纸篓与撤销、草稿预览和确认发送。欢迎提交 issues 和 PR。",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -78,7 +78,8 @@
     "proper-lockfile": "4.1.2",
     "schemastery": "^3.18.0",
     "socks": "^2.8.10",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.0",
+    "htmlparser2": "12.0.0"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

@@ -22,6 +22,8 @@ export declare class EmailService {
     private pop3;
     constructor(settings: ResolvedEmailSettings, dependencies?: MailDependencies);
     get withImap(): EmailPool['withImap'];
+    previewTrash(account: string, folder: string, uids: number[], target?: string, signal?: AbortSignal): Promise<import("./types.js").EmailMovePreview>;
+    moveMessages(account: string, folder: string, uids: number[], target: string, uidValidity: number, signal?: AbortSignal): Promise<import("./types.js").EmailMoveResult>;
     set withImap(run: EmailPool['withImap']);
     private name;
     private usesApi;
@@ -33,7 +35,7 @@ export declare class EmailService {
     search(account: string | undefined, query: string, folder: string, limit: number, offset: number, since?: Date, until?: Date, signal?: AbortSignal, options?: EmailSearchOptions): Promise<import("./types.js").EmailSearchResult>;
     mark(account: string | undefined, folder: string, uid: MessageRef, action: EmailMarkAction, target?: string, signal?: AbortSignal): Promise<import("./types.js").EmailMarkResult>;
     folders(account: string | undefined, subscribed: boolean, signal?: AbortSignal): Promise<EmailFoldersResult>;
-    downloadAttachment(account: string | undefined, folder: string, uid: MessageRef, index: number, workspace?: string, signal?: AbortSignal): Promise<import("./types.js").EmailAttachmentResult>;
+    downloadAttachment(account: string | undefined, folder: string, uid: MessageRef, index: number, workspace?: string, signal?: AbortSignal, byteLimit?: number, expectedValidity?: number): Promise<import("./types.js").EmailAttachmentResult>;
     send(account: string | undefined, to: string, subject: string, text: string | undefined, cc: string | undefined, paths: string[] | undefined, signal?: AbortSignal): Promise<import("./types.js").EmailSendResult>;
     sendPrepared(account: string, to: string, subject: string, text: string, cc: string, attachments: Array<{
         filename: string;

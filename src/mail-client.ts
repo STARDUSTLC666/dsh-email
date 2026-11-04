@@ -1,4 +1,6 @@
 import { ImapFlow } from 'imapflow'
+import { richEmailBody } from './rich-body.js'
+import { previewImapTrash, moveImapMessages } from './imap-trash.js'
 import nodemailer, { type Transporter } from 'nodemailer'
 import type SMTPTransport from 'nodemailer/lib/smtp-transport/index.js'
 import { createConnection, type Socket } from 'node:net'
@@ -132,19 +134,21 @@ interface AttachmentPart {
   filename: string
   contentType: string
   size: number
+  contentId?: string
 }
 
 /** Walk a bodyStructure tree collecting attachment parts (DFS, same order as mailparser). */
 function collectAttachmentParts(node: any, out: AttachmentPart[] = []): AttachmentPart[] {
   if (node === null || node === undefined || typeof node !== 'object') return out
   const isEmbedded = typeof node.type === 'string' && node.type.startsWith('message/rfc822')
-  if (node.part !== undefined && (node.disposition === 'attachment' || (isEmbedded && node.disposition !== 'inline'))) {
+  if (node.part !== undefined && (node.disposition === 'attachment' || (typeof node.type === 'string' && node.type.startsWith('image/')) || (isEmbedded && node.disposition !== 'inline'))) {
     const filename = node.dispositionParameters?.filename ?? node.parameters?.name ?? 'part-' + node.part
     out.push({
       part: String(node.part),
       filename: String(filename),
       contentType: typeof node.type === 'string' ? node.type : 'application/octet-stream',
       size: typeof node.size === 'number' ? node.size : 0,
+      ...(typeof node.id === 'string' ? { contentId: node.id } : {}),
     })
   }
   const children = Array.isArray(node.childNodes) ? node.childNodes : []
@@ -292,7 +296,7 @@ function stripReplyPrefix(subject: string, prefix: RegExp): string {
   return subject.replace(new RegExp('^(?:' + prefix.source + '\\s*)+', 'i'), '').trim()
 }
 
-const QUOTE_MAX_CHARS = 2000
+const QUOTE_MAX_CHARS = 20000
 const FORWARD_MAX_CHARS = 4000
 
 /**
@@ -848,13 +852,17 @@ export class EmailPool {
    * no usable text part or the server refuses the part fetch, so the caller can
    * fall back to the full-source path for that one message.
    */
-  private async bodyTextFromParts(client: ImapFlow, uid: number, structure: any, maxBytes: number, signal?: AbortSignal): Promise<string | undefined> {
+  private async bodyTextFromParts(client: ImapFlow, uid: number, structure: any, maxBytes: number, signal?: AbortSignal, onHtml?: (html: string) => void): Promise<string | undefined> {
     const { plain, html } = selectBodyParts(structure)
     if (plain !== undefined) {
       const text = await this.downloadPartText(client, uid, plain, maxBytes, signal)
       if (text.trim() !== '' || html === undefined) return text
     }
-    if (html !== undefined) return stripHtml(await this.downloadPartText(client, uid, html, maxBytes, signal))
+    if (html !== undefined) {
+      const raw = await this.downloadPartText(client, uid, html, maxBytes, signal)
+      onHtml?.(raw)
+      return stripHtml(raw)
+    }
     return undefined
   }
 
@@ -1109,7 +1117,8 @@ export class EmailPool {
       signal?.throwIfAborted()
       if (message.source === undefined && message.envelope !== undefined && message.bodyStructure !== undefined) {
         try {
-          const text = await this.bodyTextFromParts(client, uid, message.bodyStructure, this.settings.maxBodyChars * 4 + 4096, signal)
+          let rawHtml: string | undefined
+          const text = await this.bodyTextFromParts(client, uid, message.bodyStructure, this.settings.maxBodyChars * 4 + 4096, signal, raw => { rawHtml = raw })
           if (text !== undefined) {
             const limited = truncateText(text, this.settings.maxBodyChars)
             const parts = collectAttachmentParts(message.bodyStructure)
@@ -1118,8 +1127,15 @@ export class EmailPool {
               contentType: part.contentType,
               size: part.size,
               part: part.part,
+              ...(part.contentId ? { contentId: part.contentId } : {}),
             }))
             this.rememberRead(name, folderName, this.uidValidityOf(client), uid, { attachments, parts })
+            let rich
+            const html = selectBodyParts(message.bodyStructure).html
+            if (html !== undefined) {
+              try { rich = richEmailBody(rawHtml ?? await this.downloadPartText(client, uid, html, 256 * 1024, signal), attachments) }
+              catch { signal?.throwIfAborted(); rich = { nodes: [], images: [], limited: true } }
+            }
             const envelopeDate = message.envelope.date
             return {
               account: name,
@@ -1132,6 +1148,7 @@ export class EmailPool {
               cc: flattenAddresses(message.envelope.cc),
               subject: message.envelope.subject ?? '',
               text: limited.text,
+              rich,
               attachments,
               truncated: limited.truncated,
             }
@@ -1154,6 +1171,14 @@ export class EmailPool {
     }, true, signal)
   }
 
+  async previewTrash(accountName: string | undefined, folder: string, uids: number[], target?: string, signal?: AbortSignal) {
+    const name = this.resolveName(accountName), source = folder || this.account(name).inboxFolder
+    return this.withImap(name, source, client => previewImapTrash(client, name, source, uids, target, signal), true, signal)
+  }
+  async moveMessages(accountName: string | undefined, folder: string, uids: number[], target: string, uidValidity: number, signal?: AbortSignal) {
+    const name = this.resolveName(accountName)
+    return this.withImap(name, folder, client => moveImapMessages(client, folder, uids, target, uidValidity, signal), false, signal)
+  }
   async mark(accountName: string | undefined, folder: string, uid: number, action: EmailMarkAction, toFolder?: string, signal?: AbortSignal): Promise<EmailMarkResult> {
     const name = this.resolveName(accountName)
     const cfg = this.account(name)
@@ -1201,7 +1226,7 @@ export class EmailPool {
         signal?.throwIfAborted()
         if (moved === false) throw new MailError('移动 uid=' + uid + ' 到 "' + target + '" 失败（服务器拒绝了 MOVE/COPY）')
         const result: EmailMarkResult = { account: name, uid, folder: folderName, action, seen, flagged, movedTo: target }
-        const destUid = (moved as { destinationUid?: unknown })?.destinationUid
+        const destUid = (moved as { uidMap?: Map<number, number> })?.uidMap?.get(uid) ?? (moved as { destinationUid?: unknown })?.destinationUid
         if (typeof destUid === 'number') result.movedUid = destUid
         return result
       }
@@ -1231,11 +1256,14 @@ export class EmailPool {
     }, true, signal)
   }
 
-  async downloadAttachment(accountName: string | undefined, folder: string, uid: number, index: number, workspaceHint?: string, signal?: AbortSignal): Promise<EmailAttachmentResult> {
+  async downloadAttachment(accountName: string | undefined, folder: string, uid: number, index: number, workspaceHint?: string, signal?: AbortSignal, byteLimit?: number, expectedValidity?: number): Promise<EmailAttachmentResult> {
+    const cap = Math.min(this.settings.maxAttachmentBytes, byteLimit ?? this.settings.maxAttachmentBytes)
+    if (!Number.isSafeInteger(cap) || cap < 1) throw new MailError('无效下载上限')
     const name = this.resolveName(accountName)
     const cfg = this.account(name)
     const folderName = folder || cfg.inboxFolder
     return this.withImap(name, folderName, async (client) => {
+      if (expectedValidity && this.uidValidityOf(client) !== expectedValidity) throw new MailError('UIDVALIDITY 已改变，请重新打开邮件')
       // The mailparser list is authoritative for the index email_read showed and
       // the bodyStructure walk supplies the IMAP part to download. email_read
       // already produced both in the usual read-then-download flow, so reuse that
@@ -1249,13 +1277,13 @@ export class EmailPool {
       if (att === undefined) {
         throw new MailError('附件 #' + index + '（' + attachments[index].filename + '）无法在邮件结构中定位（可能是内嵌图片，暂不支持下载）')
       }
-      if (att.size > this.settings.maxAttachmentBytes) {
-        throw new MailError('附件 "' + att.filename + '" 大小 ' + att.size + ' 字节，超过上限 maxAttachmentBytes=' + this.settings.maxAttachmentBytes)
+      if (att.size > cap) {
+        throw new MailError('附件 "' + att.filename + '" 大小 ' + att.size + ' 字节，超过上限 maxAttachmentBytes=' + cap)
       }
-      const dl = await client.download(uid, att.part, { uid: true, maxBytes: this.settings.maxAttachmentBytes })
+      const dl = await client.download(uid, att.part, { uid: true, maxBytes: cap })
       signal?.throwIfAborted()
       if (dl.content === undefined) throw new MailError('附件分段已不存在，请重新读取邮件后再下载')
-      const buf = await collectStream(dl.content, this.settings.maxAttachmentBytes, signal)
+      const buf = await collectStream(dl.content, cap, signal)
       const safeName = sanitizeFilename(dl.meta?.filename ?? att.filename ?? attachments[index].filename)
       // Default the destination to the session workspace so the model can
       // read the file back; an explicit downloadDir always wins.

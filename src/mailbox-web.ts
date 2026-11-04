@@ -1,11 +1,23 @@
 import { readFile, unlink } from 'node:fs/promises'
+import { randomUUID, createHash } from 'node:crypto'
+import { downloadPublicBytes } from './public-download.js'
+import { rasterMime } from './rich-body.js'
+import { moveUids } from './imap-trash.js'
 import { buildReplyMessage } from './mail-client.js'
 import { draftFields } from './draft-store.js'
 import type { EmailRuntime } from './runtime.js'
 import type { EmailDraftBackend } from './draft-web.js'
 import { parseEmailDay } from './tool-contract.js'
 import { clampInt } from './config.js'
-import type { EmailMarkAction } from './types.js'
+import type { EmailMarkAction, EmailMovePreview, EmailRichBody, EmailReadResult } from './types.js'
+
+interface MoveTicket { kind: 'trash' | 'undo'; account: string; folder: string; target: string; uids: number[]; uidValidity: number; fingerprint: string; expires: number }
+interface ImageTicket { account: string; folder: string; uid: string | number; uidValidity?: number; image: EmailRichBody['images'][number]; fingerprint: string; expires: number }
+function boundedSet<T extends { expires: number }>(map: Map<string, T>, id: string, value: T, max: number) {
+  for (const [key, row] of map) if (row.expires < Date.now()) map.delete(key)
+  while (map.size >= max) map.delete(map.keys().next().value!)
+  map.set(id, value)
+}
 
 export const MAILBOX_ROUTE = '/api/dsh-email/mailbox'
 const json = (status: number, value: unknown) =>
@@ -17,10 +29,51 @@ const json = (status: number, value: unknown) =>
     },
   })
 export class EmailMailboxBackend {
+  private moves = new Map<string, MoveTicket>()
+  private images = new Map<string, ImageTicket>()
   constructor(
     private runtime: Pick<EmailRuntime, 'getEffectiveSettings' | 'getPool'>,
     private drafts: EmailDraftBackend,
+    private download: typeof downloadPublicBytes = downloadPublicBytes,
   ) {}
+  private fingerprint(account: string) {
+    return createHash('sha256').update(JSON.stringify(this.runtime.getEffectiveSettings().accounts.get(account))).digest('hex')
+  }
+  private unchanged(account: string, fingerprint: string) {
+    if (this.fingerprint(account) !== fingerprint) throw new Error('账号设置已改变，请刷新后重新操作 / Account changed; refresh before continuing')
+  }
+  private present(message: EmailReadResult, fingerprint: string) {
+    this.unchanged(message.account, fingerprint)
+    if (!message.rich) return message
+    const images = message.rich.images.map(image => {
+      const id = randomUUID()
+      boundedSet(this.images, id, { account: message.account, folder: message.folder, uid: message.uid, uidValidity: message.uidValidity, image, fingerprint, expires: Date.now() + 10 * 60_000 }, 256)
+      return { id, kind: image.kind, alt: image.alt }
+    })
+    return { ...message, rich: { nodes: message.rich.nodes, limited: message.rich.limited, images } }
+  }
+  private async imageBytes(body: Record<string, unknown>, signal: AbortSignal) {
+    const ticket = typeof body.image === 'string' ? this.images.get(body.image) : undefined
+    if (!ticket || ticket.expires < Date.now() || ticket.account !== body.account || ticket.folder !== body.folder || ticket.uid !== body.uid || ticket.fingerprint !== this.fingerprint(ticket.account)) throw new Error('图片已过期，请重新打开邮件 / Image expired; reopen the message')
+    const { image } = ticket
+    let bytes: Buffer
+    try {
+      if (image.kind === 'remote') {
+        if (body.allowRemote !== true) throw new Error('consent required')
+        bytes = await this.download(image.source, 2 * 1024 * 1024, signal)
+      } else if (image.attachment !== undefined) {
+        const pool = this.runtime.getPool(), current = await pool.read(ticket.account, ticket.uid, ticket.folder, signal)
+        if (ticket.uidValidity && current.uidValidity !== ticket.uidValidity) throw new Error('mailbox changed')
+        const file = await pool.downloadAttachment(ticket.account, ticket.folder, ticket.uid, image.attachment, undefined, signal, 2 * 1024 * 1024, ticket.uidValidity)
+        try { bytes = await readFile(file.path) } finally { await unlink(file.path).catch(() => {}) }
+      } else bytes = Buffer.from(image.source.slice(image.source.indexOf(',') + 1), 'base64')
+      const mime = rasterMime(bytes)
+      if (!mime) throw new Error('unsupported image')
+      return new Response(new Uint8Array(bytes), { headers: { 'content-type': mime, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; sandbox" } })
+    } catch {
+      throw new Error('图片未能显示：可能是连接失败、超过 2 MiB 或格式不支持。可重试或下载原附件 / Image unavailable: connection, size (2 MiB) or format; retry or download the attachment')
+    }
+  }
   async action(
     body: Record<string, unknown>,
     signal?: AbortSignal,
@@ -32,6 +85,7 @@ export class EmailMailboxBackend {
           : settings.defaultAccount,
       cfg = settings.accounts.get(account)
     if (!cfg) throw new Error('账号不存在，请重新选择')
+    const accountFingerprint = this.fingerprint(account)
     if (body.action === 'accounts')
       return {
         accounts: [...settings.accounts].map(([name, c]) => ({
@@ -39,6 +93,7 @@ export class EmailMailboxBackend {
           user: c.user,
           api: c.transport === 'agentmail',
           incoming: c.transport ?? 'imap',
+          trashSupported: !c.transport,
         })),
         defaultAccount: settings.defaultAccount,
       }
@@ -50,6 +105,26 @@ export class EmailMailboxBackend {
     if (folder.length > 1024 || /[\r\n\0]/.test(folder))
       throw new Error('无效文件夹')
     if (body.action === 'folders') return pool.folders(account, false, signal)
+    if (body.action === 'trashPreview') {
+      const preview: EmailMovePreview = await pool.previewTrash(account, folder, moveUids(body.uids), typeof body.target === 'string' ? body.target : undefined, signal)
+      this.unchanged(account, accountFingerprint)
+      if (body.uidValidity && body.uidValidity !== preview.uidValidity) throw new Error('UIDVALIDITY 已改变，请刷新列表 / Mailbox changed; refresh the list')
+      const id = randomUUID(), expires = Date.now() + 90_000
+      boundedSet(this.moves, id, { kind: 'trash', account, folder, target: preview.target, uids: preview.messages.map(m => m.uid), uidValidity: preview.uidValidity, fingerprint: accountFingerprint, expires }, 64)
+      return { ...preview, id, expires }
+    }
+    if (body.action === 'trashConfirm' || body.action === 'undoTrash') {
+      const id = String(body.receipt || ''), ticket = this.moves.get(id), kind = body.action === 'trashConfirm' ? 'trash' : 'undo'
+      if (!ticket || ticket.kind !== kind || ticket.account !== account || ticket.folder !== folder || ticket.expires < Date.now() || body.confirmed !== true || ticket.fingerprint !== this.fingerprint(account)) throw new Error('确认已过期或账号已改变，请刷新后重新确认 / Confirmation expired or account changed; refresh')
+      this.moves.delete(id)
+      const moved = await pool.moveMessages(account, folder, ticket.uids, ticket.target, ticket.uidValidity, signal)
+      if (kind === 'trash' && moved.destinationUids && moved.destinationValidity) {
+        const undo = randomUUID(), undoExpires = Date.now() + 5 * 60_000
+        boundedSet(this.moves, undo, { kind: 'undo', account, folder: ticket.target, target: folder, uids: moved.destinationUids, uidValidity: moved.destinationValidity, fingerprint: ticket.fingerprint, expires: undoExpires }, 64)
+        return { count: moved.count, target: ticket.target, undo, undoExpires }
+      }
+      return { count: moved.count, target: ticket.target }
+    }
     if (body.action === 'list') {
       const limit = clampInt(body.limit as number, 20, 1, 100),
         offset = clampInt(body.offset as number, 0, 0, 10000)
@@ -104,7 +179,7 @@ export class EmailMailboxBackend {
       )
     )
       throw new Error('请从邮件列表重新选择邮件')
-    if (body.action === 'read') return pool.read(account, uid, folder, signal)
+    if (body.action === 'read') return this.present(await pool.read(account, uid, folder, signal), accountFingerprint)
     if (body.action === 'mark') {
       if (!['read', 'unread', 'star', 'unstar'].includes(String(body.mark)))
         throw new Error('不支持的邮件状态操作')
@@ -120,6 +195,7 @@ export class EmailMailboxBackend {
     if (body.action === 'replyDraft') {
       const original = await pool.read(account, uid, folder, signal),
         mode = body.replyAll === true ? 'reply-all' : 'reply'
+      this.unchanged(account, accountFingerprint)
       const built = buildReplyMessage(
         { ...original, messageId: '', references: '' },
         mode,
@@ -179,9 +255,9 @@ export class EmailMailboxBackend {
       try {
         const source = new URL(origin)
         if (
-          !['http:', 'https:'].includes(source.protocol) ||
+          origin !== 'dsh-app://app' && (!['http:', 'https:'].includes(source.protocol) ||
           source.host !==
-            (request.headers.get('host') || new URL(request.url).host)
+            (request.headers.get('host') || new URL(request.url).host))
         )
           return fail(403)
       } catch {
@@ -210,6 +286,7 @@ export class EmailMailboxBackend {
         request.signal,
         AbortSignal.timeout(120000),
       ])
+      if (body.action === 'image') return await this.imageBytes(body, signal)
       if (body.action === 'download') {
         // The authenticated file action owns only the copy created by this call.
         const settings = this.runtime.getEffectiveSettings(),

@@ -76,7 +76,7 @@ test('no Message-ID means no thread headers, still sends', () => {
 })
 
 test('long original bodies are truncated in the quote', () => {
-  const long = { ...original, text: '字'.repeat(5000) }
+  const long = { ...original, text: '字'.repeat(25000) }
   const built = buildReplyMessage(long, 'reply', 'me@qq.com', 'x')
   assert.match(built.text, /已截断/)
 })

@@ -24,6 +24,25 @@ export interface EmailAttachmentMeta {
     size: number;
     /** IMAP body part identifier used by email_attachment. */
     part: string;
+    contentId?: string;
+}
+/** Inert, allowlisted email content. Only the mailbox backend resolves images. */
+export type EmailContentNode = string | {
+    tag: string;
+    children?: EmailContentNode[];
+    href?: string;
+    image?: number;
+    span?: number;
+};
+export interface EmailRichBody {
+    nodes: EmailContentNode[];
+    images: {
+        kind: 'inline' | 'remote';
+        alt: string;
+        source: string;
+        attachment?: number;
+    }[];
+    limited: boolean;
 }
 /** One fully read message body. */
 export interface ReadMessageBody {
@@ -36,6 +55,22 @@ export interface ReadMessageBody {
     text: string;
     attachments: EmailAttachmentMeta[];
     truncated: boolean;
+    rich?: EmailRichBody;
+}
+export interface EmailMovePreview {
+    account: string;
+    folder: string;
+    target: string;
+    uidValidity: number;
+    messages: {
+        uid: number;
+        subject: string;
+    }[];
+}
+export interface EmailMoveResult {
+    count: number;
+    destinationUids?: number[];
+    destinationValidity?: number;
 }
 export interface EmailListResult {
     transport?: 'pop3';

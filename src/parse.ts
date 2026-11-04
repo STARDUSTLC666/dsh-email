@@ -1,4 +1,5 @@
 import { simpleParser } from 'mailparser'
+import { richEmailBody } from './rich-body.js'
 import type { AddressEntry, EmailAttachmentMeta, ReadMessageBody } from './types.js'
 
 export function flattenAddresses(input: unknown): AddressEntry[] {
@@ -61,7 +62,7 @@ export function sanitizeFilename(raw: unknown, fallback = 'attachment.bin'): str
 
 /** Parse a raw RFC822 message source into the read-result body. */
 export async function parseRawMessage(source: Buffer, maxBodyChars: number): Promise<ReadMessageBody> {
-  const parsed = await simpleParser(source)
+  const parsed = await simpleParser(source, { skipImageLinks: true, keepCidLinks: true, skipHtmlToText: false })
   let text = parsed.text ?? ''
   if (text.trim() === '' && typeof parsed.html === 'string' && parsed.html.trim() !== '') {
     text = stripHtml(parsed.html)
@@ -72,6 +73,7 @@ export async function parseRawMessage(source: Buffer, maxBodyChars: number): Pro
     contentType: att.contentType,
     size: att.size,
     part: 'attachment-' + index,
+    ...(att.contentId ? { contentId: att.contentId } : {}),
   }))
   return {
     date: parsed.date instanceof Date ? parsed.date.toISOString() : '',
@@ -81,6 +83,7 @@ export async function parseRawMessage(source: Buffer, maxBodyChars: number): Pro
     subject: parsed.subject ?? '',
     text: limited.text,
     attachments,
+    rich: richEmailBody(parsed.html, attachments),
     truncated: limited.truncated,
   }
 }

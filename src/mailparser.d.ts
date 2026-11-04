@@ -10,6 +10,7 @@ declare module 'mailparser' {
   }
 
   export interface ParsedAttachment {
+    contentId?: string
     content: Buffer
     filename?: string
     contentType: string

@@ -1,5 +1,7 @@
 # dsh-email usage guide
 
+For 0.22.0, see [formatted mail, threaded replies and Trash](MAILBOX.en.md) for the workflow, privacy controls, protocol support and recovery limits.
+
 [Overview](../README.en.md) · [Changelog](../CHANGELOG.md) · [Validation](VALIDATION.md)
 
 ## Current improvements

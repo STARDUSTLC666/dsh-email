@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, open, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { simpleParser } from 'mailparser'
+import { richEmailBody } from './rich-body.js'
 import { compile as compileHtmlToText } from 'html-to-text'
 import type { ResolvedEmailSettings } from './config.js'
 import { clampInt } from './config.js'
@@ -110,8 +111,9 @@ export class Pop3Client {
       : truncateText(text, this.settings.maxBodyChars)
     if (structureLimited) { body.text += '\n\n[HTML 结构超过转换上限，已省略部分内容；请使用邮箱客户端查看。]'; body.truncated = true }
     const value = { date: parsed.date instanceof Date ? parsed.date.toISOString() : '', from: flattenAddresses(parsed.from), to: flattenAddresses(parsed.to), cc: flattenAddresses(parsed.cc), subject: parsed.subject ?? '', text: body.text,
-      truncated: body.truncated, attachments: (parsed.attachments ?? []).map((a, i) => ({ filename: a.filename ?? '(unnamed)', contentType: a.contentType, size: a.size, part: 'attachment-' + i })) }
-    return { value, parsed, ids: extractMessageIds(bytes), searchText: text.slice(0, this.settings.maxBodyChars) }
+      truncated: body.truncated, attachments: (parsed.attachments ?? []).map((a, i) => ({ filename: a.filename ?? '(unnamed)', contentType: a.contentType, size: a.size, part: 'attachment-' + i, ...(a.contentId ? { contentId: a.contentId } : {}) })) }
+    const rich = richEmailBody(parsed.html, value.attachments)
+    return { value: { ...value, rich }, parsed, ids: extractMessageIds(bytes), searchText: text.slice(0, this.settings.maxBodyChars) }
   }
   test(name: string, signal?: AbortSignal) { return this.session(name, async wire => { const entries = await this.index(wire); return { messages: entries.length } }, signal) }
   list(name: string, folder: string, limit: number, offset: number, unread: boolean, since?: Date, until?: Date, signal?: AbortSignal): Promise<EmailListResult> {
@@ -154,13 +156,13 @@ export class Pop3Client {
         ...(bodyScanned ? { bodyScan: { scanned: bodyScanned, scanLimit: this.settings.bodySearchLimit } } : {}) }
     }, signal)
   }
-  downloadAttachment(name: string, folder: string, uid: number | string, index: number, workspace?: string, signal?: AbortSignal): Promise<EmailAttachmentResult> {
+  downloadAttachment(name: string, folder: string, uid: number | string, index: number, workspace?: string, signal?: AbortSignal, byteLimit?: number): Promise<EmailAttachmentResult> {
     this.folder(folder)
     return this.session(name, async wire => {
       const { parsed } = await this.message(wire, this.entry(await this.index(wire), uid)), attachment = parsed.attachments?.[index]
       if (!Number.isInteger(index) || index < 0 || !attachment) throw new Pop3WireError('附件序号无效，请重新读取邮件查看附件列表')
       const content = attachment.content
-      if (!Buffer.isBuffer(content) || content.length > Math.min(this.settings.maxAttachmentBytes, 20 * 1024 * 1024)) throw new Pop3WireError('附件超过下载上限（POP3 最多 20 MiB，整封邮件最多 32 MiB）')
+      if (!Buffer.isBuffer(content) || content.length > Math.min(this.settings.maxAttachmentBytes, 20 * 1024 * 1024, byteLimit ?? this.settings.maxAttachmentBytes)) throw new Pop3WireError('附件超过下载上限（POP3 最多 20 MiB，整封邮件最多 32 MiB）')
       const filename = sanitizeFilename(attachment.filename), dir = this.settings.downloadDirExplicit ? this.settings.downloadDir : workspace ? join(workspace, '.dsh-email-downloads') : this.settings.downloadDir
       wire.signal.throwIfAborted(); await mkdir(dir, { recursive: true }); const path = join(dir, randomUUID() + '-' + filename), handle = await open(path, 'wx', 0o600)
       try { wire.signal.throwIfAborted(); await handle.writeFile(content); wire.signal.throwIfAborted() }

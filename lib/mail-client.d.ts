@@ -64,6 +64,7 @@ interface AttachmentPart {
     filename: string;
     contentType: string;
     size: number;
+    contentId?: string;
 }
 /**
  * Map the index in the mailparser attachment list (what email_read showed the
@@ -205,9 +206,11 @@ export declare class EmailPool {
     private searchBodies;
     private fetchListed;
     read(accountName: string | undefined, uid: number, folder: string, signal?: AbortSignal): Promise<EmailReadResult>;
+    previewTrash(accountName: string | undefined, folder: string, uids: number[], target?: string, signal?: AbortSignal): Promise<import("./types.js").EmailMovePreview>;
+    moveMessages(accountName: string | undefined, folder: string, uids: number[], target: string, uidValidity: number, signal?: AbortSignal): Promise<import("./types.js").EmailMoveResult>;
     mark(accountName: string | undefined, folder: string, uid: number, action: EmailMarkAction, toFolder?: string, signal?: AbortSignal): Promise<EmailMarkResult>;
     folders(accountName: string | undefined, subscribedOnly: boolean, signal?: AbortSignal): Promise<EmailFoldersResult>;
-    downloadAttachment(accountName: string | undefined, folder: string, uid: number, index: number, workspaceHint?: string, signal?: AbortSignal): Promise<EmailAttachmentResult>;
+    downloadAttachment(accountName: string | undefined, folder: string, uid: number, index: number, workspaceHint?: string, signal?: AbortSignal, byteLimit?: number, expectedValidity?: number): Promise<EmailAttachmentResult>;
     send(accountName: string | undefined, to: string, subject: string, text: string | undefined, cc: string | undefined, attachmentPaths: string[] | undefined, signal?: AbortSignal): Promise<EmailSendResult>;
     /** Send the attachment bytes the human reviewed, without re-reading mutable paths. */
     sendPrepared(accountName: string, to: string, subject: string, text: string, cc: string, attachments: Array<{

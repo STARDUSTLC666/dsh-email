@@ -4,6 +4,8 @@
 
 ## 本次改进
 
+0.22.0 的[图文阅读、接续回复与废纸篓操作](MAILBOX.md)包含具体流程、隐私选项、协议支持和恢复边界。
+
 新增「收发邮件」页，可直接浏览和搜索收件箱/已发送、读正文、下载附件、标记已读与星标，并把回复保存到草稿后核对发送。支持普通 IMAP / SMTP 与 AgentMail US / EU 多账号；[AgentMail 配置与边界](AGENTMAIL.md)单独说明 API 字符串 UID、相关性搜索、附件上限与模拟验收范围。下文的信封扫描与数字 UID 说明适用于 IMAP。
 
 `email_search` 先复核服务端候选；QQ 等服务器返回空集、报错或无可信命中时，分批扫描信封（From / To / Cc / Subject），默认最近 5000 封、每批 500 封，不下载正文或附件。可用 `headerScanLimit` 调整到 1–20000；按 `headerScan.nextScanOffset` 设置 `headerScanOffset` 继续查更早的信封。`offset` 仍是当前结果窗口内跳过的匹配数，两种 offset 不同。

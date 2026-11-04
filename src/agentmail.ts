@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { richEmailBody } from './rich-body.js'
 import { createReadStream } from 'node:fs'
 import { mkdir, open, unlink } from 'node:fs/promises'
 import { basename, join } from 'node:path'
@@ -295,6 +296,7 @@ export class AgentMailClient {
       account: name,
       uid: this.id(uid),
       folder,
+      rich: richEmailBody(m.html),
       date: m.timestamp ?? '',
       from: parsedAddresses(m.from ?? ''),
       to: parsedAddresses((m.to ?? []).join(', ')),
@@ -413,6 +415,7 @@ export class AgentMailClient {
     index: number,
     workspace?: string,
     signal?: AbortSignal,
+    byteLimit?: number,
   ): Promise<EmailAttachmentResult> {
     const m = await this.original(name, uid, signal),
       attachment = m.attachments?.[index]
@@ -428,7 +431,7 @@ export class AgentMailClient {
       undefined,
       signal,
     )
-    const cap = Math.min(this.settings.maxAttachmentBytes, 20 * 1024 * 1024)
+    const cap = Math.min(this.settings.maxAttachmentBytes, 20 * 1024 * 1024, byteLimit ?? this.settings.maxAttachmentBytes)
     if (Number(meta.size) > cap)
       throw new Error('附件超过下载大小上限（AgentMail 最多 20 MiB）')
     const content = await this.downloader(

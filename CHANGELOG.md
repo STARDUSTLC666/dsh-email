@@ -1,5 +1,13 @@
 # 更新记录
 
+## 0.22.0 (2026-11-05)
+
+- 邮箱工作台新增 IMAP 单封 / 批量移入废纸篓、90 秒明确确认和服务器支持时的 5 分钟一次撤销；核对 UIDVALIDITY，拒绝不安全的全局 EXPUNGE 回退（#34）。
+- 图文阅读支持安全结构化段落、表格与内嵌图片；外部 HTTPS 图片默认阻止、逐封选择加载，限制来源与大小，保留纯文本和重试（#36）。
+- 回复引用上限由 2,000 扩至 20,000 字，草稿明确显示原邮件关联，保留发送前预览与线程头。
+- Add confirmed, scoped IMAP Trash with conditional Undo; inert formatted mail, inline images and per-message remote-image consent; longer quoted replies with preserved threading.
+
+
 ## 0.21.5 (2026-11-04)
 
 - 邮件设置改用 DSH 官方认证连接接口，支持已登录的局域网访问（#33）；旧本地接口的限制保留。

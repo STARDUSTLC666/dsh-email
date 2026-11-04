@@ -46,6 +46,14 @@ export class EmailService {
   get withImap(): EmailPool['withImap'] {
     return this.imap.withImap.bind(this.imap)
   }
+  previewTrash(account: string, folder: string, uids: number[], target?: string, signal?: AbortSignal) {
+    if (this.settings.accounts.get(account)?.transport) throw new Error('移入废纸篓仅支持 IMAP 账号 / Trash is available for IMAP accounts')
+    return this.imap.previewTrash(account, folder, uids, target, signal)
+  }
+  moveMessages(account: string, folder: string, uids: number[], target: string, uidValidity: number, signal?: AbortSignal) {
+    if (this.settings.accounts.get(account)?.transport) throw new Error('移入废纸篓仅支持 IMAP 账号 / Trash is available for IMAP accounts')
+    return this.imap.moveMessages(account, folder, uids, target, uidValidity, signal)
+  }
   set withImap(run: EmailPool['withImap']) {
     this.imap.withImap = run
   }
@@ -218,8 +226,10 @@ export class EmailService {
     index: number,
     workspace?: string,
     signal?: AbortSignal,
+    byteLimit?: number,
+    expectedValidity?: number,
   ) {
-    if (this.usesPop3(account)) return this.pop3.downloadAttachment(this.name(account), this.folder(account, folder), uid, index, workspace, signal)
+    if (this.usesPop3(account)) return this.pop3.downloadAttachment(this.name(account), this.folder(account, folder), uid, index, workspace, signal, byteLimit)
     return this.usesApi(account)
       ? this.api.downloadAttachment(
           this.name(account),
@@ -228,6 +238,7 @@ export class EmailService {
           index,
           workspace,
           signal,
+          byteLimit,
         )
       : this.imap.downloadAttachment(
           account,
@@ -236,6 +247,8 @@ export class EmailService {
           index,
           workspace,
           signal,
+          byteLimit,
+          expectedValidity,
         )
   }
   async send(

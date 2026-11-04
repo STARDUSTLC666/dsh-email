@@ -1,5 +1,7 @@
 # dsh-email 验证记录
 
+[0.22.0 / 图文、回复与废纸篓](validation-2026-11-05-mailbox.md)：三版官方宿主、六组浏览器操作、受控 IMAP/SMTP 与真实账号边界。
+
 [2026-10-26：IMAP 数字字符串 UID 与 AgentMail ID 的入口回归](validation-2026-10-26.md)。运行时代码与 0.19.0 版本保持不变。
 
 [0.18.0 AgentMail 与收发邮件工作台验收](validation/0.18.0.md)。
