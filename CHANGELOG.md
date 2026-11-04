@@ -1,5 +1,15 @@
 # 更新记录
 
+## 0.21.4 (2026-11-04)
+
+- 同步共享界面：嵌入设置时继承宿主底色，输入框跟随主题，空状态保持可读宽度；新版 DSH 可显示插件设置图标。
+- Align embedded surfaces, themed inputs, readable empty states and optional native settings icons.
+- 合并社区深色界面与连接代理改进，补齐直连选择、代理地址保密和取消清理。
+- Integrate community surface/proxy changes with explicit direct routing, secret URL handling and cancellation cleanup.
+- 补齐原生宿主的代理配置声明，避免整份账号表单因不可编辑字段而保存失败；说明可信免审的适用范围。
+- Declare the proxy field in the native live settings schema so complete account forms persist; clarify trusted-send approval scope.
+
+
 ## 0.21.3 (2026-11-03)
 
 - 邮箱请求失败不再伪装成空文件夹；错误条提供账号/文件夹/列表/正文四类请求的一键重试；分页改用共享 Button。

@@ -12,6 +12,8 @@ export declare const WHALE_ASSET_ROUTE = "/_dsh/dsh-email/assets/whale";
  * boundary — the card only needs to know if the field is filled.
  */
 export interface AccountCardData {
+    proxyMode?: 'inherit' | 'direct' | 'custom';
+    hasProxy?: boolean;
     receiveProtocol?: 'imap' | 'pop3';
     pop3?: Endpoint;
     name: string;
@@ -80,6 +82,8 @@ interface Endpoint {
 }
 /** One account card as the editor sends it back; every field is optional. */
 export interface AccountCardInput {
+    /** Empty clears the override; direct disables environment proxies; absent preserves it. */
+    proxy?: string;
     receiveProtocol?: 'imap' | 'pop3';
     pop3?: {
         host?: string;

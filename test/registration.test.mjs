@@ -228,7 +228,18 @@ test('approval "rejected" denies with an actionable message covering Full Access
   )
   assert.equal(decision.kind, 'deny')
   assert.match(decision.reason, /Full Access/)
-  assert.match(decision.reason, /sendApproval/)
+  assert.match(decision.reason, /草稿页.*手动发送/)
+})
+
+test('reply denial explains that trusted skipping only covers email_send and offers Drafts', async () => {
+  const ctx = fakeCtx()
+  ctx.approval.request = async () => 'rejected'
+  apply(ctx, QQ)
+  const gate = ctx.listeners.find(l => l.event === 'tools/pre-execute')
+  const decision = await gate.fn({ name: 'email_reply', arguments: { uid: 1, text: 'fixture reply' } }, async () => assert.fail('must stay denied'))
+  assert.equal(decision.kind, 'deny')
+  assert.match(decision.reason, /免审仅适用于 email_send/)
+  assert.match(decision.reason, /草稿页/)
 })
 
 test('approval "allowed-once" proceeds to the tool', async () => {

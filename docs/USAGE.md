@@ -170,6 +170,25 @@ dsh plugin --profile web remove dsh-email
 | `idleTimeoutMs` | `60000` | IMAP 空闲连接回收时间（连接复用，连续操作更快） |
 | `bodySearchFallback` | `true` | 服务器搜索无结果时，回退到客户端扫描最近邮件的正文 |
 | `bodySearchLimit` | `30` | 正文回退扫描的邮件数量（5-200） |
+| `proxy` | 无 | 连接代理，如 `http://127.0.0.1:7897`；省略时按 `HTTPS_PROXY`/`ALL_PROXY` 与 `NO_PROXY` 判断，见下文「代理」 |
+
+### 代理
+
+网络必须经代理才能连上邮箱服务器时（例如 Gmail 在部分网络下直连不通），在账号上写 `proxy`：
+
+```yaml
+- id: tool-email
+  config:
+    provider: gmail
+    user: you@gmail.com
+    password: 应用专用密码
+    proxy: http://127.0.0.1:7897   # 省略协议即按 http CONNECT 处理
+```
+
+- 支持 `http`（CONNECT）、`https`、`socks4`、`socks4a`、`socks5`、`socks5h`；账号级 `proxy` 覆盖顶层简写，多个账号可以各不相同。
+- 不写 `proxy` 时依次读取环境变量 `HTTPS_PROXY`、`HTTP_PROXY`、`ALL_PROXY`（大小写皆可），并遵守 `NO_PROXY`；都没有就是直连。
+- IMAP 交给 imapflow 自带的代理实现，SMTP 由插件先建立 CONNECT / SOCKS 隧道、再由 nodemailer 起 TLS；证书校验始终针对真实邮箱主机，而不是代理。
+- 只影响本插件的连接，不动系统代理；POP3 收信暂不支持代理。
 
 ## 第一步：拿到授权码
 
@@ -243,3 +262,9 @@ MIT。这是一个社区插件，与 DeepSeek 官方无关；`@deepseek-ai/*` �
 - [dsh-slack](https://github.com/STARDUSTLC666/dsh-slack) — Slack 通知/收件箱
 - [dsh-dingtalk](https://github.com/STARDUSTLC666/dsh-dingtalk) — 钉钉群通知（零依赖）
 - [dsh-email](https://github.com/STARDUSTLC666/dsh-email) — 邮件八件套 + Web 设置页 + 新邮件弹窗
+
+### 在界面选择代理
+
+打开“邮箱账号”的连接方式：跟随全局或环境设置、直接连接、自定义代理。直接连接会忽略代理环境变量；自定义代理地址支持 http/https/SOCKS，保存后不回显，留空可保留已有值。YAML 中 `proxy: direct` 同样表示直连，清除账号 proxy 覆盖则重新继承。POP3 收信不经过这个代理；AgentMail 使用自己的 HTTP API。
+
+可信名单免审只适用于 email_send；回复、回复全部及转发仍需确认。Full Access 无法显示确认框时，可在草稿页核对实际收件人并手动发送。

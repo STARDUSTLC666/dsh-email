@@ -54,6 +54,8 @@ const FALLBACK_CREDIT = '鲸鱼娘：社区同人形象，版权归原作者，�
  * boundary — the card only needs to know if the field is filled.
  */
 export interface AccountCardData {
+  proxyMode?: 'inherit' | 'direct' | 'custom'
+  hasProxy?: boolean
   receiveProtocol?: 'imap' | 'pop3'
   pop3?: Endpoint
   name: string
@@ -128,6 +130,8 @@ interface Endpoint {
 
 /** One account card as the editor sends it back; every field is optional. */
 export interface AccountCardInput {
+  /** Empty clears the override; direct disables environment proxies; absent preserves it. */
+  proxy?: string
   receiveProtocol?: 'imap' | 'pop3'
   pop3?: { host?: string; port?: number; secure?: boolean }
   name?: string
@@ -267,6 +271,8 @@ function buildAccountCards(
     const authUser = typeof account.authUser === 'string' ? account.authUser.trim() : ''
     const oauth = authKind === 'oauth2' ? tokens(name, user) : { state: 'none' as OAuth2State }
     list.push({
+      proxyMode: account.proxy === 'direct' ? 'direct' : typeof account.proxy === 'string' && account.proxy.trim() !== '' ? 'custom' : 'inherit',
+      hasProxy: typeof account.proxy === 'string' && account.proxy.trim() !== '' && account.proxy !== 'direct',
       ...(account.receiveProtocol === 'pop3' ? { receiveProtocol: 'pop3' as const } : {}),
       pop3,
       name,
@@ -524,8 +530,11 @@ function normalizeCardForYaml(
   customNames: ReadonlySet<string>,
   inheritedPassword?: unknown,
   inheritedAuthPassword?: unknown,
+  inheritedProxy?: unknown,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {}
+  if (card.proxy === undefined) { if (inheritedProxy !== undefined) out.proxy = inheritedProxy }
+  else if (card.proxy.trim() !== '') out.proxy = card.proxy.trim()
   if (card.receiveProtocol !== undefined) out.receiveProtocol = card.receiveProtocol
   if (card.pop3 !== undefined) out.pop3 = card.pop3
   if (card.receiveProtocol === 'pop3' && card.smtp !== undefined) out.smtp = card.smtp
@@ -618,6 +627,7 @@ function fallbackSerialize(
     const name = card.name as string
     let inherited: unknown
     let inheritedAuthPassword: unknown
+    let inheritedProxy: unknown
     if (stored === undefined) {
       // Nothing could be read back: a silent card may be losing a real secret.
       if (card.password === undefined) passwordsDropped = true
@@ -626,8 +636,10 @@ function fallbackSerialize(
       if (present) inherited = value
       const auth = storedAuthPasswordOf(stored, name)
       if (auth.present) inheritedAuthPassword = auth.value
+      const proxy = storedSecretOf(stored, name, 'proxy')
+      if (proxy.present) inheritedProxy = proxy.value
     }
-    raw[name] = normalizeCardForYaml(card, customNames, inherited, inheritedAuthPassword)
+    raw[name] = normalizeCardForYaml(card, customNames, inherited, inheritedAuthPassword, inheritedProxy)
   }
   return {
     accountsYaml: serializeAccountsYaml(raw, defaultAccount),
@@ -723,6 +735,10 @@ function serializeAccountsDraft(
     // that as「delete」, so the guard has to live here, not inside it.
     if (card.senderName !== undefined) writeField(account, 'senderName', String(card.senderName).trim())
     if (card.authUser !== undefined) writeField(account, 'authUser', String(card.authUser).trim())
+    if (card.proxy !== undefined) {
+      if (typeof card.proxy !== 'string') throw new Error('代理地址必须是文本')
+      writeField(account, 'proxy', card.proxy.trim())
+    }
     // authPassword is a secret and follows the password contract verbatim: the
     // card never carries the plaintext, so an omitted field must leave the
     // stored key — value, position and comment — untouched.

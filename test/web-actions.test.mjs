@@ -1041,7 +1041,7 @@ test('snapshot never leaks a password through the card list', async t => {
   // for a password account, where there is no login to describe.
   assert.deepEqual(
     Object.keys(card).sort(),
-    ['authKind', 'hasPassword', 'imap', 'inboxFolder', 'isDefault', 'name', 'oauthState', 'pop3', 'provider', 'smtp', 'user'],
+    ['authKind', 'hasPassword', 'hasProxy', 'imap', 'inboxFolder', 'isDefault', 'name', 'oauthState', 'pop3', 'provider', 'proxyMode', 'smtp', 'user'],
   )
   assert.equal(card.authKind, 'password')
   assert.equal(card.oauthState, 'none')
@@ -2029,3 +2029,17 @@ test('the settings editor names the application an empty clientId falls back to'
   assert.match(source, /builtInClientId === ""\s*\n\s*\? h\("div", \{ className: "dshe-alert warn" \}/,
     'the「no application」warning is only for builds without a built-in app')
 })
+
+test('proxy cards preserve stored credentials without echoing them and support direct, custom and inherited routing',async t=>{
+ const secret='http://fixture-user:private-proxy-password@127.0.0.1:7897';
+ const source='work: {provider: qq, user: work@qq.com, password: fixture-mail-password, proxy: '+JSON.stringify(secret)+'}\n';
+ const {post}=mount(t,{config:{}}),card={name:'work',provider:'qq',user:'work@qq.com'};
+ const view=await post({action:'parseAccounts',value:{accountsYaml:source}});
+ assert.equal(view.body.value.list[0].proxyMode,'custom');assert.equal(view.body.value.list[0].hasProxy,true);
+ assert.ok(!JSON.stringify(view.body.value.list).includes('private-proxy-password'));
+ for(const [proxy,expected] of [[undefined,secret],['direct','direct'],['',undefined],['http://127.0.0.1:8899','http://127.0.0.1:8899']]){
+  const write=await post({action:'serializeAccounts',accountsYaml:source,accounts:[{...card,...(proxy===undefined?{}:{proxy})}],defaultAccount:'work'});
+  assert.equal(write.body.ok,true);assert.equal(parseAccountsYaml(write.body.value.accountsYaml).map.work.proxy,expected);
+  assert.equal(parseAccountsYaml(write.body.value.accountsYaml).map.work.password,'fixture-mail-password');
+ }
+});

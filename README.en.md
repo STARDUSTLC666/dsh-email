@@ -54,7 +54,7 @@ Example request：
 
 ## Before you start
 
-Bring your mailbox authorization or AgentMail API key. POP3 has protocol-specific state and search limits.
+Bring your mailbox authorization or AgentMail API key. POP3 has protocol-specific state and search limits. When the network only reaches a mail server through a proxy, add `proxy` to the account (or set `HTTPS_PROXY`); see the [usage guide](https://github.com/STARDUSTLC666/dsh-email/blob/main/docs/USAGE.en.md).
 
 Configuration, detailed tools and troubleshooting: [full reference](https://github.com/STARDUSTLC666/dsh-email/blob/main/docs/REFERENCE.en.md).
 

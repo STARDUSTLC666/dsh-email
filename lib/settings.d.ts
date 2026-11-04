@@ -46,6 +46,7 @@ export declare const EmailSettingsSchema: import("@deepseek-ai/schemastery").def
         port: import("@deepseek-ai/schemastery").default<number, number, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
         secure: import("@deepseek-ai/schemastery").default<boolean, boolean, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
     }>>, "plain">;
+    proxy: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
 }>>, Schemastery.ObjectT<NoInfer<{
     receiveProtocol: import("@deepseek-ai/schemastery").default<"pop3" | "imap", "pop3" | "imap", Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
     pop3: import("@deepseek-ai/schemastery").default<Schemastery.ObjectS<NoInfer<{
@@ -86,6 +87,7 @@ export declare const EmailSettingsSchema: import("@deepseek-ai/schemastery").def
         port: import("@deepseek-ai/schemastery").default<number, number, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
         secure: import("@deepseek-ai/schemastery").default<boolean, boolean, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
     }>>, "plain">;
+    proxy: import("@deepseek-ai/schemastery").default<string, string, Mode extends "volatile" | "volatile-defined" ? "volatile-defined" : "defined">;
 }>>, "plain">;
 export interface EmailSettingsValue {
     receiveProtocol?: 'imap' | 'pop3';
@@ -115,6 +117,7 @@ export interface EmailSettingsValue {
         port: number;
         secure: boolean;
     };
+    proxy?: string;
 }
 /** Project the row config (cordis.patch.yml) into the settings-schema base shape. */
 export declare function toSettingsBase(config: EmailConfig): Partial<EmailSettingsValue>;

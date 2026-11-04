@@ -111,6 +111,13 @@ export interface AccountConfig {
     authKind?: AuthKind;
     imap?: ImapConfig;
     smtp?: SmtpConfig;
+    /**
+     * Proxy every IMAP/SMTP connection of this account goes through, e.g.
+     * `http://127.0.0.1:7897` or `socks5://127.0.0.1:1080`. Left empty, the
+     * conventional `HTTPS_PROXY` / `ALL_PROXY` variables are consulted, so a
+     * machine whose traffic is already routed needs no per-account setup.
+     */
+    proxy?: string;
     inboxFolder?: string;
 }
 export interface EmailConfig extends AccountConfig {
@@ -218,6 +225,12 @@ export interface ResolvedEmailConfig {
         port: number;
         secure: boolean;
     };
+    /**
+     * Resolved proxy URL for this account's IMAP/SMTP connections, or undefined
+     * for a direct connection. Already validated here so the transports can hand
+     * it straight to their dialers.
+     */
+    proxy?: string;
     inboxFolder: string;
 }
 /**

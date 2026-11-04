@@ -54,7 +54,7 @@ dsh plugin --profile desktop add dsh-email
 
 ## 开始前要知道
 
-需要自己的邮箱授权或 AgentMail API Key；POP3 的状态与搜索范围按协议说明。
+需要自己的邮箱授权或 AgentMail API Key；POP3 的状态与搜索范围按协议说明。网络必须经代理才能连上邮箱服务器时，给账号加 `proxy`（或用 `HTTPS_PROXY`），见[使用说明](https://github.com/STARDUSTLC666/dsh-email/blob/main/docs/USAGE.md)。
 
 配置、完整工具与排错见[详细使用说明](https://github.com/STARDUSTLC666/dsh-email/blob/main/docs/REFERENCE.zh.md)。
 

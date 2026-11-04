@@ -749,6 +749,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 provider: "",
                 user: "",
                 password: "",
+                proxy: "", proxyMode: "inherit", hasProxy: false, proxyDirty: false,
                 inboxFolder: "INBOX",
             };
         }
@@ -777,6 +778,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
          */
         function draftFromCard(card) {
             return {
+                proxy: "", proxyMode: card.proxyMode || "inherit", hasProxy: card.hasProxy === true, proxyDirty: false,
                 name: String(card.name || ""),
                 originalName: String(card.name || ""),
                 imap: card.imap,
@@ -911,6 +913,10 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 input.authUser = String(draft.authUser || "").trim();
             if (!isOauthDraft(draft) && draft.authPassword)
                 input.authPassword = draft.authPassword;
+            if (draft.proxyDirty) {
+                if (draft.proxyMode === 'custom' && !draft.proxy.trim() && !draft.hasProxy) throw new Error(dt('请填写自定义代理地址。', 'Enter the custom proxy URL.'));
+                if (draft.proxyMode !== 'custom' || draft.proxy.trim()) input.proxy = draft.proxyMode === 'direct' ? 'direct' : draft.proxyMode === 'custom' ? draft.proxy.trim() : '';
+            }
             // Only an OAuth2 card models the application id; for any other account the
             // field stays undefined, which the backend reads as「没说」and leaves the
             // stored key alone. An empty string here is the user clearing it on purpose.
@@ -1850,6 +1856,14 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                                             h("div", { className: "dshe-hint" }, t("card.authKindHint")),
                                         ])
                                         : null,
+                                    !draft.provider?.startsWith('agentmail') && h('div', { className: 'dshe-field' },
+                                      h('label', null, dt('连接方式', 'Connection routing')),
+                                      h('select', { value: draft.proxyMode || 'inherit', 'aria-label': dt('连接方式', 'Connection routing'), disabled: busy !== '', onChange: e => patchDraft(name, { proxyMode: e.target.value, proxyDirty: true }) },
+                                        h('option', { value: 'inherit' }, dt('跟随全局或环境设置', 'Follow global or environment settings')),
+                                        h('option', { value: 'direct' }, dt('直接连接（不使用代理）', 'Connect directly (ignore proxies)')),
+                                        h('option', { value: 'custom' }, dt('自定义代理', 'Custom proxy'))),
+                                      draft.proxyMode === 'custom' && h('input', { type: 'password', autoComplete: 'new-password', value: draft.proxy || '', 'aria-label': dt('自定义代理地址', 'Custom proxy URL'), placeholder: draft.hasProxy ? dt('已保存，留空保持不变', 'Saved; leave blank to retain') : 'http://127.0.0.1:7897', disabled: busy !== '', onChange: e => patchDraft(name, { proxy: e.target.value, proxyDirty: true }) }),
+                                      h('div', { className: 'dshe-hint' }, dt('用于 IMAP 和 SMTP，支持 HTTP CONNECT / HTTPS / SOCKS。代理地址可能含密码，保存后不会回显。POP3 收信仍直接连接。', 'Applies to IMAP and SMTP. Supports HTTP CONNECT, HTTPS and SOCKS. Saved URLs may contain passwords and are not displayed. POP3 receiving still connects directly.'))),
                                     // OAuth2 的服务商没有密码可填：这一格的凭证就是下面那块登录区。
                                     // 留着密码框只会让人以为「填了密码就能用」，而后端根本不会读它。
                                     oauthCard
@@ -2493,6 +2507,7 @@ __stardustUpdatesGuard(React, "dsh-email.rules", { dirty: !!dirty, busy, retainO
             return h("section", { className: "dshe-panel dshe-rule-panel", "aria-label": dt("可信收件人规则", "Trusted recipients") }, [
                 h("p", { className: "dshe-hint" }, dt("默认每次确认。主动启用后，只有该账号的全部 To/Cc 都匹配时，email_send 才跳过插件确认；宿主权限仍然生效，草稿仍需手动确认。域名规则只匹配指定域名，不包含子域名。", "Approval is the default. When enabled, email_send skips this plugin's approval only if every To/Cc address matches this account's rules. Host permissions still apply, and drafts still need manual confirmation. Domain rules exclude subdomains.")),
                 h("p", { className: "dshe-hint" }, dt("禁止规则优先于可信规则，关闭发信确认也不能绕过；同样适用于草稿、回复与转发。禁止域名也仅精确匹配，不包含子域名。", "Blocked recipients take precedence over trusted rules, even with send approval off. Blocks also apply to drafts, replies and forwards. Blocked domains match exactly and exclude subdomains.")),
+                h('p', { className: 'dshe-hint' }, dt('可信名单的免审只适用于 email_send 新建邮件。email_reply 回复、回复全部和转发仍需确认；Full Access 不会弹确认框时，可在草稿页预览实际收件人并手动发送。', 'Trusted-recipient approval skipping applies only to new mail through email_send. email_reply, reply-all and forwarding still require confirmation. If Full Access cannot show a prompt, review the actual recipients in Drafts and send manually.')),
                 error ? h("div", { className: "dshe-alert error", role: "alert" }, error) : null,
                 notice ? h("div", { className: "dshe-alert success", role: "status" }, notice) : null,
                 data && data.sendApproval === false ? h("div", { className: "dshe-alert info" }, dt("全局发信确认目前已关闭；禁止规则仍然生效。", "Global send approval is off; blocked-recipient rules still apply.")) : null,
