@@ -1,6 +1,6 @@
 import { readFile, unlink } from 'node:fs/promises'
 import { randomUUID, createHash } from 'node:crypto'
-import { downloadPublicBytes } from './public-download.js'
+import { downloadPublicBytes, PublicDownloadError } from './public-download.js'
 import { rasterMime } from './rich-body.js'
 import { moveUids } from './imap-trash.js'
 import { buildReplyMessage } from './mail-client.js'
@@ -70,7 +70,8 @@ export class EmailMailboxBackend {
       const mime = rasterMime(bytes)
       if (!mime) throw new Error('unsupported image')
       return new Response(new Uint8Array(bytes), { headers: { 'content-type': mime, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; sandbox" } })
-    } catch {
+    } catch (error) {
+      if (error instanceof PublicDownloadError) throw error
       throw new Error('图片未能显示：可能是连接失败、超过 2 MiB 或格式不支持。可重试或下载原附件 / Image unavailable: connection, size (2 MiB) or format; retry or download the attachment')
     }
   }

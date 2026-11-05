@@ -29,7 +29,7 @@ function MailContent({ detail, account, folder, selected }) {
           const blob = await mailboxApi('image', { account, folder, uid: selected, image: image.id, allowRemote: remote }, ctrl.signal);
           if (ctrl.signal.aborted) return;
           const url = URL.createObjectURL(blob); urls.push(url); setImages(old => ({ ...old, [image.id]: { url } }));
-        } catch (error) { if (!ctrl.signal.aborted) setImages(old => ({ ...old, [image.id]: { error: true } })); }
+        } catch (error) { if (!ctrl.signal.aborted) setImages(old => ({ ...old, [image.id]: { error: true, message: emailError(error) } })); }
       }
     }
     Promise.all(Array.from({ length: Math.min(4, queue.length) }, worker)).finally(() => { if (!ctrl.signal.aborted) setLoading(false); });
@@ -42,7 +42,7 @@ function MailContent({ detail, account, folder, selected }) {
       if (node.tag === 'img') {
         const image = rich.images[node.image]; if (!image) return null;
         const loaded = images[image.id];
-        return loaded?.url && !loaded.error ? h('img', { key, src: loaded.url, alt: image.alt || dt('邮件图片', 'Email image'), className: 'email-rich-image', onError: () => setImages(old => ({ ...old, [image.id]: { ...old[image.id], error: true } })) }) : h('span', { key, className: 'email-image-placeholder', role: 'status' }, image.alt || dt('邮件图片', 'Email image'), ' · ', loaded?.error ? dt('加载失败，可重试', 'Failed to load; retry available') : image.kind === 'remote' && !remote ? dt('外部图片已阻止', 'External image blocked') : dt('正在加载…', 'Loading…'));
+        return loaded?.url && !loaded.error ? h('img', { key, src: loaded.url, alt: image.alt || dt('邮件图片', 'Email image'), className: 'email-rich-image', onError: () => setImages(old => ({ ...old, [image.id]: { ...old[image.id], error: true } })) }) : h('span', { key, className: 'email-image-placeholder', role: 'status' }, image.alt || dt('邮件图片', 'Email image'), ' · ', loaded?.error ? dt('加载失败，可重试', 'Failed to load; retry available') : image.kind === 'remote' && !remote ? dt('外部图片已阻止', 'External image blocked') : dt('正在加载…', 'Loading…'), loaded?.message ? h('span', { className: 'email-image-error' }, loaded.message) : null);
       }
       const props = { key };
       if (node.tag === 'a' && node.href) Object.assign(props, { href: node.href, target: '_blank', rel: 'noopener noreferrer', referrerPolicy: 'no-referrer' });
@@ -93,6 +93,7 @@ function MailMessage({ detail, currentRow, account, folder, selected, busy, run,
 }
 
 const EMAIL_WORKBENCH_CSS = `
+.email-workbench .email-image-error{display:block;margin-top:6px;font-size:12px;line-height:1.6;overflow-wrap:anywhere}
 .email-workbench .email-content-toolbar,.email-workbench .email-batch-tools,.email-workbench .email-move-notice{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 0}.email-workbench .email-batch-tools{padding:10px 14px;border-bottom:1px solid var(--w-border);font-size:12px}.email-workbench .email-batch-tools label{display:flex;gap:6px;align-items:center}.email-workbench .email-batch-tools input,.email-workbench .w-row-select input{width:16px;height:16px}.email-workbench .email-move-notice{background:var(--w-soft);border:1px solid var(--w-border);border-radius:8px;padding:12px;overflow-wrap:anywhere}.email-workbench .email-rich-body{font:14px/1.8 var(--dsh-font-family-content,system-ui,sans-serif);overflow-wrap:anywhere;overflow-x:auto;max-width:100%;padding:8px 0}.email-workbench .email-rich-body p{margin:0 0 14px}.email-workbench .email-rich-body blockquote{margin:16px 0;padding:4px 16px;border-inline-start:3px solid var(--w-border);color:var(--w-muted)}.email-workbench .email-rich-body table{border-collapse:collapse;max-width:100%;margin-block:12px}.email-workbench .email-rich-body td,.email-workbench .email-rich-body th{border:1px solid var(--w-border);padding:8px}.email-workbench .email-rich-body a{color:var(--w-accent);text-decoration:underline}.email-workbench .email-rich-image{display:block;max-width:100%;height:auto;max-height:600px;object-fit:contain;margin:12px 0}.email-workbench .email-image-placeholder{display:block;border:1px dashed var(--w-border);border-radius:8px;background:var(--w-soft);padding:18px;margin:12px 0;color:var(--w-muted);font-size:13px}.email-trash-preview{max-height:260px;overflow:auto;margin-block:16px}.email-trash-preview li{overflow-wrap:anywhere}
 
 .email-workbench>.w-body{display:block}

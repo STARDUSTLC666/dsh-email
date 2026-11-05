@@ -12,6 +12,10 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
         const ROUTE = "api/dsh-email/settings";
         function emailError(error) {
             const message = typeof error === 'string' ? error : error?.message || String(error || '');
+            if (/^(?:图片或附件|公网图片或附件|当前网络使用虚拟地址|无法解析图片或附件|下载大小上限)/.test(message) && message.includes(' / ')) {
+                const split = message.indexOf(' / ');
+                return UI_LANG === 'en' ? message.slice(split + 3) : message.slice(0, split);
+            }
             if (UI_LANG !== 'en')
                 return message;
             if (error?.status === 401)

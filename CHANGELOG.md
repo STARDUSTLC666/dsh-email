@@ -1,5 +1,11 @@
 # 更新记录
 
+## 0.22.1 (2026-11-05)
+
+- 兼容 VPN 的 Fake-IP 解析：通过加密 DNS 确认真实公网地址，再固定连接；保留 HTTPS、私网地址、跳转和大小限制。
+- 图片失败时显示可理解的原因，中英文提示跟随界面语言；DNS 查询与下载均响应取消和超时。
+- Support Fake-IP networks using verified public DNS answers and pinned connections without weakening private-address checks; show localized image failure reasons.
+
 ## 0.22.0 (2026-11-05)
 
 - 邮箱工作台新增 IMAP 单封 / 批量移入废纸篓、90 秒明确确认和服务器支持时的 5 分钟一次撤销；核对 UIDVALIDITY，拒绝不安全的全局 EXPUNGE 回退（#34）。
