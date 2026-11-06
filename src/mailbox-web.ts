@@ -8,6 +8,7 @@ import { draftFields } from './draft-store.js'
 import type { EmailRuntime } from './runtime.js'
 import type { EmailDraftBackend } from './draft-web.js'
 import { parseEmailDay } from './tool-contract.js'
+import { runEmailTaskSession } from './task-session.js'
 import { clampInt } from './config.js'
 import type { EmailMarkAction, EmailMovePreview, EmailRichBody, EmailReadResult } from './types.js'
 
@@ -31,6 +32,8 @@ const json = (status: number, value: unknown) =>
 export class EmailMailboxBackend {
   private moves = new Map<string, MoveTicket>()
   private images = new Map<string, ImageTicket>()
+  /** Cordis ctx, attached by installEmailMailbox; the task-session action needs host services. */
+  taskCtx?: any
   constructor(
     private runtime: Pick<EmailRuntime, 'getEffectiveSettings' | 'getPool'>,
     private drafts: EmailDraftBackend,
@@ -193,6 +196,8 @@ export class EmailMailboxBackend {
         signal,
       )
     }
+    if (body.action === 'taskSession')
+      return await runEmailTaskSession({ ctx: this.taskCtx, runtime: this.runtime, account, folder, uid, signal })
     if (body.action === 'replyDraft') {
       const original = await pool.read(account, uid, folder, signal),
         mode = body.replyAll === true ? 'reply-all' : 'reply'
@@ -370,6 +375,7 @@ export class EmailMailboxBackend {
   }
 }
 export function installEmailMailbox(ctx: any, backend: EmailMailboxBackend) {
+  backend.taskCtx = ctx
   ctx.inject?.(['connection'], (host: any) =>
     host.connection?.fetch?.register?.({
       path: MAILBOX_ROUTE,

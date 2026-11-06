@@ -144,6 +144,8 @@ export interface AccountConfig {
 export interface EmailConfig extends AccountConfig {
   /** Show browser new-mail notifications. UI policy only; default true. */
   newMailPopup?: boolean
+  /** Workspace for sessions created by the web "handle in session" action; empty = follow the global default. */
+  taskSessionWorkspace?: string
   /** Per-account recipient rules, independent of IMAP/SMTP connection settings. */
   trustedRecipientsYaml?: string
   /** Ask the user for approval before email_send. Default true. */
@@ -272,6 +274,7 @@ export interface ResolvedEmailSettings {
   downloadDir: string
   /** Whether downloadDir was set explicitly (vs. the default). */
   downloadDirExplicit: boolean
+  taskSessionWorkspace: string
   maxAttachmentBytes: number
   idleTimeoutMs: number
   bodySearchFallback: boolean
@@ -495,6 +498,7 @@ export function resolveEmailSettings(config: EmailConfig | undefined, onlyAccoun
     maxBodyChars: clampInt(raw.maxBodyChars, 20000, 1000, 200000),
     downloadDir: raw.downloadDir?.trim() || defaultDownloadDir(),
     downloadDirExplicit: (raw.downloadDir?.trim() ?? '') !== '',
+    taskSessionWorkspace: String(raw.taskSessionWorkspace ?? '').trim(),
     maxAttachmentBytes: clampInt(raw.maxAttachmentBytes, DEFAULT_MAX_ATTACHMENT_BYTES, 1024, 512 * 1024 * 1024),
     idleTimeoutMs: clampInt(raw.idleTimeoutMs, DEFAULT_IDLE_TIMEOUT_MS, 5000, 600000),
     bodySearchFallback: raw.bodySearchFallback !== false,

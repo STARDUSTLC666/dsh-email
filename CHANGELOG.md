@@ -1,5 +1,10 @@
 # 更新记录
 
+## 0.23.0 (2026-11-06)
+
+- 邮箱详情新增「在会话中处理」：一键创建任务会话并按批准格式注入邮件摘要（账号/文件夹/UID 可回查、发件人/时间/主题、正文节选）；同一封邮件按 Message-ID 稳定映射，重复点击复用已有会话；工作区可选，默认跟随全局默认。
+- Add a per-message "Handle in a session" action: creates a task session seeded with an approved email summary (account/folder/UID for re-reading, sender/date/subject, body excerpt); stable Message-ID mapping makes re-clicks reuse the existing session; workspace is an optional setting defaulting to the global one.
+
 ## 0.22.1 (2026-11-05)
 
 - 兼容 VPN 的 Fake-IP 解析：通过加密 DNS 确认真实公网地址，再固定连接；保留 HTTPS、私网地址、跳转和大小限制。

@@ -8,6 +8,8 @@ export declare class EmailMailboxBackend {
     private download;
     private moves;
     private images;
+    /** Cordis ctx, attached by installEmailMailbox; the task-session action needs host services. */
+    taskCtx?: any;
     constructor(runtime: Pick<EmailRuntime, 'getEffectiveSettings' | 'getPool'>, drafts: EmailDraftBackend, download?: typeof downloadPublicBytes);
     private fingerprint;
     private unchanged;

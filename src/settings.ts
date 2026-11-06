@@ -19,6 +19,7 @@ export const EmailSettingsSchema = z.object({
   inboxFolder: z.string().default('INBOX'),
   sendApproval: z.boolean().default(true),
   newMailPopup: z.boolean().default(true),
+  taskSessionWorkspace: z.string().default(''),
   trustedRecipientsYaml: z.string().default(''),
   maxBodyChars: z.number().default(20000),
   downloadDir: z.string().default(''),
@@ -51,6 +52,7 @@ export interface EmailSettingsValue {
   password: string
   inboxFolder: string
   sendApproval: boolean
+  taskSessionWorkspace?: string
   newMailPopup?: boolean
   trustedRecipientsYaml?: string
   maxBodyChars: number
@@ -71,6 +73,7 @@ export function toSettingsBase(config: EmailConfig): Partial<EmailSettingsValue>
     ...(config.user !== undefined && config.user !== '' ? { user: config.user } : {}),
     ...(config.password !== undefined && config.password !== '' ? { password: config.password } : {}),
     ...(config.inboxFolder !== undefined && config.inboxFolder !== '' ? { inboxFolder: config.inboxFolder } : {}),
+    ...(config.taskSessionWorkspace ? { taskSessionWorkspace: config.taskSessionWorkspace } : {}),
     ...(config.sendApproval !== undefined ? { sendApproval: config.sendApproval } : {}),
     ...(config.newMailPopup !== undefined ? { newMailPopup: config.newMailPopup } : {}),
     ...(config.trustedRecipientsYaml !== undefined ? { trustedRecipientsYaml: config.trustedRecipientsYaml } : {}),
