@@ -25,6 +25,8 @@ import {
   oauth2StateOf,
   pollDeviceFlow,
   startDeviceFlow,
+  startGoogleFlow, pollGoogleFlow,
+  cancelOAuthFlow,
   type OAuth2State,
 } from './oauth2.js'
 import { EmailPool, messageOf, redactCredentials } from './mail-client.js'
@@ -106,6 +108,8 @@ export interface AccountCardData {
    * registration below is the application that will be used.
    */
   clientId?: string
+  oauthProvider?: 'google' | 'microsoft'
+  hasClientSecret?: boolean
   /**
    * The application the login falls back to when the account names none: the
    * community registration the plugin ships. Carried on the card so the editor
@@ -172,6 +176,8 @@ export interface AccountCardInput {
    * 写入。留空不等于不能用：内置注册就是默认值，这一栏是把默认值换成自己的应用。
    */
   clientId?: string
+  clientSecret?: string
+  oauthProvider?: 'google' | 'microsoft'
   /**
    * 发件显示名，三态契约同 clientId：undefined = 本卡片没提供（保留已存的
    * senderName 键），'' = 明确清除，非空 = 写入。只改收件人看到的名称，发件地址
@@ -257,7 +263,7 @@ function buildAccountCards(
   raw: Record<string, unknown>,
   defaultAccount: string | undefined,
   presets: Record<string, ServerPreset>,
-  tokens: (name: string, user: string) => { state: OAuth2State; user?: string } = () => ({ state: 'none' }),
+  tokens: (name: string, user: string,clientId?:string,provider?:'google'|'microsoft',secret?:string) => { state: OAuth2State; user?: string } = () => ({ state: 'none' }),
 ): AccountCardData[] {
   const list: AccountCardData[] = []
   for (const [name, value] of Object.entries(raw)) {
@@ -283,13 +289,14 @@ function buildAccountCards(
     // back for the editor to prefill: an account that names no application logs
     // in with the built-in one, and the card has to say which that is.
     const clientId = typeof account.clientId === 'string' ? account.clientId.trim() : ''
-    const oauthDefaultClientId = authKind === 'oauth2' && clientId === '' ? OUTLOOK_OAUTH2_CLIENT_ID : ''
+    const oauthProvider = account.oauthProvider === 'google' || account.oauthProvider === 'microsoft' ? account.oauthProvider : providerName === 'gmail' || imap.host.toLowerCase() === 'imap.gmail.com' ? 'google' : 'microsoft'
+    const oauthDefaultClientId = authKind === 'oauth2' && oauthProvider === 'microsoft' && clientId === '' ? OUTLOOK_OAUTH2_CLIENT_ID : ''
     // The display name and the login user are not secrets, so — like clientId —
     // the card hands them back for the editor to prefill. A separate login
     // password is a secret and only ever reported as a boolean.
     const senderName = typeof account.senderName === 'string' ? account.senderName.trim() : ''
     const authUser = typeof account.authUser === 'string' ? account.authUser.trim() : ''
-    const oauth = authKind === 'oauth2' ? tokens(name, user) : { state: 'none' as OAuth2State }
+    const oauth = authKind === 'oauth2' ? tokens(name, user,clientId,oauthProvider,typeof account.clientSecret==='string'?account.clientSecret:undefined) : { state: 'none' as OAuth2State }
     list.push({
       proxyMode: account.proxy === 'direct' ? 'direct' : typeof account.proxy === 'string' && account.proxy.trim() !== '' ? 'custom' : 'inherit',
       hasProxy: typeof account.proxy === 'string' && account.proxy.trim() !== '' && account.proxy !== 'direct',
@@ -301,6 +308,7 @@ function buildAccountCards(
       user,
       hasPassword: typeof account.password === 'string' && account.password !== '' || typeof account.apiKey === 'string' && account.apiKey !== '',
       authKind,
+      oauthProvider,hasClientSecret: typeof account.clientSecret === 'string' && account.clientSecret !== '',
       ...(pinned === 'oauth2' || pinned === 'password' ? { authKindDeclared: pinned } : {}),
       ...(clientId !== '' ? { clientId } : {}),
       ...(oauthDefaultClientId !== '' ? { oauthDefaultClientId } : {}),
@@ -413,7 +421,7 @@ function readAccountsDraft(
   text: string,
   presets: Record<string, ServerPreset>,
   rowDefault?: string,
-  tokens: (name: string, user: string) => { state: OAuth2State; user?: string } = () => ({ state: 'none' }),
+  tokens: (name: string, user: string,clientId?:string,provider?:'google'|'microsoft',secret?:string) => { state: OAuth2State; user?: string } = () => ({ state: 'none' }),
 ): AccountsDraft {
   if (isBlankAccountsText(text)) {
     const { defaultAccount, error } = adjudicateAccounts({}, undefined, rowDefault)
@@ -442,13 +450,13 @@ function readAccountsDraft(
  * and answered from memory afterwards: the editor calls parseAccounts on every
  * keystroke, and one disk read per card would be paid on each of them.
  */
-function tokenLookup(): (name: string, user: string) => { state: OAuth2State; user?: string } {
+function tokenLookup() {
   const cache = new Map<string, { state: OAuth2State; user?: string }>()
-  return (name, user) => {
-    const key = name + '\u0000' + user
+  return (name:string, user:string,clientId?:string,provider?:'google'|'microsoft',secret?:string) => {
+    const key = JSON.stringify([name,user,clientId,provider,secret])
     const hit = cache.get(key)
     if (hit !== undefined) return hit
-    const fresh = oauth2StateOf(name, user)
+    const fresh = oauth2StateOf(name, user,clientId,provider,secret)
     cache.set(key, fresh)
     return fresh
   }
@@ -659,7 +667,14 @@ function fallbackSerialize(
       const proxy = storedSecretOf(stored, name, 'proxy')
       if (proxy.present) inheritedProxy = proxy.value
     }
-    raw[name] = normalizeCardForYaml(card, customNames, inherited, inheritedAuthPassword, inheritedProxy)
+    const normalized = normalizeCardForYaml(card, customNames, inherited, inheritedAuthPassword, inheritedProxy)
+    raw[name] = normalized
+    const previous = stored?.[card.originalName || name] as Record<string,unknown>|undefined
+    const sameClient = card.clientId === undefined || card.clientId === previous?.clientId
+    const sameIssuer = card.provider === undefined || card.provider === previous?.provider
+    const secret = card.clientSecret ?? (sameClient && sameIssuer ? previous?.clientSecret : undefined)
+    if (typeof secret === 'string' && secret) normalized.clientSecret = secret
+    if (card.oauthProvider) normalized.oauthProvider = card.oauthProvider
   }
   return {
     accountsYaml: serializeAccountsYaml(raw, defaultAccount),
@@ -742,6 +757,13 @@ function serializeAccountsDraft(
     // never written — a stored copy is washed out below instead.
     const previousProvider = account.get('provider')
     const nextProvider = persistedProvider(card.provider, customNames)
+    if (nextProvider !== previousProvider || card.clientId !== undefined && String(card.clientId).trim() !== String(account.get('clientId') || '').trim()) account.delete('clientSecret')
+    if (nextProvider !== previousProvider) account.delete('oauthProvider')
+    if (card.clientSecret !== undefined) writeField(account,'clientSecret',String(card.clientSecret))
+    if (card.oauthProvider !== undefined) {
+      if (!['google','microsoft'].includes(card.oauthProvider)) throw new Error('Invalid OAuth provider')
+      writeField(account,'oauthProvider',card.oauthProvider)
+    }
     const apiProvider = (value: unknown) => value === 'agentmail' || value === 'agentmail-eu'
     if (apiProvider(previousProvider) !== apiProvider(nextProvider)) {
       account.delete('password'); account.delete('apiKey'); account.delete('authPassword'); account.delete('authKind')
@@ -1176,7 +1198,7 @@ export class EmailSettingsBackend {
     if (wanted === '') throw new Error(action + ' 需要 account 参数（账号名）')
     let settings
     try {
-      settings = resolveEmailSettings(this.effectiveStored())
+      settings = resolveEmailSettings(this.effectiveStored(),wanted)
     } catch (error) {
       throw new Error(messageOf(error, '邮箱账号未配置'))
     }
@@ -1187,7 +1209,7 @@ export class EmailSettingsBackend {
     if (cfg.authKind !== 'oauth2') {
       // The card only offers the login button on an OAuth2 account; reaching
       // here means the page is stale or the provider was just changed.
-      throw new Error('账号 "' + wanted + '" 不需要设备码登录：只有 outlook（Exchange Online）账号使用 OAuth2')
+      throw new Error('账号 "' + wanted + '" 未选择 OAuth2 登录 / Select OAuth2 authentication first')
     }
     return { name: wanted, cfg }
   }
@@ -1201,13 +1223,17 @@ export class EmailSettingsBackend {
    * and both interval and expires_in in seconds, which is the unit the page
    * schedules its polling with.
    */
-  async oauthLogin(name: unknown): Promise<Record<string, unknown>> {
+  async oauthLogin(name: unknown,force=false): Promise<Record<string, unknown>> {
     try {
       const { name: account, cfg } = this.oauthAccount(name, 'oauthLogin')
       // Same verdict the card renders: a token belonging to a different
       // address is not a login for this account, so it starts a fresh flow.
-      const state = oauth2StateOf(account, cfg.user, cfg.clientId ?? '')
-      if (state.state === 'logged-in') return { ok: true, status: 'already' }
+      const state = oauth2StateOf(account, cfg.user, cfg.clientId ?? '',cfg.oauthProvider,cfg.clientSecret)
+      if (state.state === 'logged-in'&&!force) return { ok: true, status: 'already' }
+      if (cfg.oauthProvider === 'google') {
+        const start = await startGoogleFlow(account,cfg,()=>{try{return this.oauthAccount(account,'Google sign-in').cfg}catch{return undefined}})
+        return {ok:true,status:'pending',provider:'google',url:start.url,interval:2,expires_in:start.expiresIn}
+      }
       const start = await startDeviceFlow(account, cfg)
       return {
         ok: true,
@@ -1231,8 +1257,8 @@ export class EmailSettingsBackend {
    */
   async oauthPoll(name: unknown): Promise<Record<string, unknown>> {
     try {
-      const { name: account } = this.oauthAccount(name, 'oauthPoll')
-      const result = await pollDeviceFlow(account)
+      const { name: account,cfg } = this.oauthAccount(name, 'oauthPoll')
+      const result = cfg.oauthProvider === 'google' ? pollGoogleFlow(account,cfg) : await pollDeviceFlow(account)
       if (result.status === 'pending') return { ok: true, status: 'pending' }
       return { ok: true, status: 'ok', user: result.user }
     } catch (error) {
@@ -1330,13 +1356,16 @@ export class EmailSettingsBackend {
       return
     }
     try {
-      if (body?.action === 'oauthLogin' || body?.action === 'oauthPoll') {
+      if (body?.action === 'oauthCancel') {
+        if(typeof body.account!=='string'||!body.account.trim())throw new Error('Account required')
+        cancelOAuthFlow(body.account);this.responseJson(res,200,{ok:true})
+      } else if (body?.action === 'oauthLogin' || body?.action === 'oauthPoll') {
         // The two login actions answer with the flat object itself, not the
         // { ok, value } envelope the other actions use: their whole meaning is
         // { ok, status }, and a failure is a flat { ok:false, message } rather
         // than the error envelope. The page reads them straight off the body.
         const answer = body.action === 'oauthLogin'
-          ? await this.oauthLogin(body.account)
+          ? await this.oauthLogin(body.account,body.force===true)
           : await this.oauthPoll(body.account)
         this.responseJson(res, 200, answer)
       } else if (body?.action === 'save') {

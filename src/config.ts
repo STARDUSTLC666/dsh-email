@@ -119,6 +119,8 @@ export interface AccountConfig {
    * OAuth2 account, where it overrides OUTLOOK_OAUTH2_CLIENT_ID.
    */
   clientId?: string
+  clientSecret?: string
+  oauthProvider?: 'google' | 'microsoft'
   /**
    * Escape hatch over the derived authentication scheme. Left unset, an account
    * pointed at the `outlook` provider or the Exchange Online IMAP host is an
@@ -243,6 +245,8 @@ export interface ResolvedEmailConfig {
   authKind: AuthKind
   /** Public-client id for the device-code flow (OAuth2 accounts only). */
   clientId?: string
+  clientSecret?: string
+  oauthProvider?: 'google' | 'microsoft'
   imap: ImapConfig & { host: string; port: number; secure: boolean }
   smtp: SmtpConfig & { host: string; port: number; secure: boolean }
   /**
@@ -441,6 +445,8 @@ export function resolveEmailSettings(config: EmailConfig | undefined, onlyAccoun
     authUser: raw.authUser,
     authPassword: raw.authPassword,
     clientId: raw.clientId,
+    clientSecret: raw.clientSecret,
+    oauthProvider: raw.oauthProvider,
     authKind: raw.authKind,
     imap: raw.imap,
     smtp: raw.smtp,
@@ -666,6 +672,11 @@ function resolveAccount(
     throw new Error(`邮件账号配置不完整：${problems.join('；')}。请在「设置 → 邮件」补全对应账号，再点击「测试连接」。修改会自动保存并立即生效。`)
   }
   const clientId = (acc.clientId ?? common.clientId ?? '').trim()
+  const oauthProvider = acc.oauthProvider ?? common.oauthProvider ?? (requested === 'gmail' || imap.host?.toLowerCase() === 'imap.gmail.com' ? 'google' : 'microsoft')
+  if (!['google','microsoft'].includes(oauthProvider)) throw new Error('oauthProvider 只能是 google 或 microsoft')
+  // Application secrets belong to one registration; a different account-level
+  // client ID must not silently inherit the shared registration's secret.
+  const clientSecret = acc.clientSecret ?? (acc.clientId && acc.clientId.trim() !== (common.clientId ?? '').trim() ? '' : common.clientSecret ?? '')
   return {
     ...(receiveProtocol === 'pop3' ? { transport: 'pop3' as const, pop3 } : {}),
     user,
@@ -679,6 +690,7 @@ function resolveAccount(
     password: oauth2 ? '' : password,
     authKind: oauth2 ? 'oauth2' : 'password',
     ...(clientId !== '' ? { clientId } : {}),
+    ...(oauth2 ? { oauthProvider, ...(clientSecret ? { clientSecret } : {}) } : {}),
     ...(proxyValue !== '' ? { proxy: proxyValue } : {}),
     imap: { ...imap, host: imap.host!, port: imap.port!, secure: imap.secure! },
     smtp: { ...smtp, host: smtp.host ?? '', port: smtp.port ?? 465, secure: smtp.secure ?? true },

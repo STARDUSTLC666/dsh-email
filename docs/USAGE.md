@@ -1,3 +1,5 @@
+相关更新流程：[HTML、Gmail、定时发送与可选邮件任务](OUTGOING-AUTOMATION.md)。
+
 # dsh-email 使用说明
 
 [返回简介](../README.md) · [更新记录](../CHANGELOG.md) · [验证记录](VALIDATION.md)
@@ -88,7 +90,7 @@ dsh plugin --profile web remove dsh-email
 ```yaml
 - id: tool-email
   config:
-    provider: qq          # qq | 163 | 126 | sina | aliyun | gmail | outlook | icloud
+    provider: qq          # qq | exmail | 163 | 126 | sina | aliyun | gmail | outlook | icloud
     user: you@qq.com
     password: 你的授权码   # 强烈建议改用环境变量 DSH_EMAIL_PASSWORD，见下
 ```
@@ -235,7 +237,7 @@ dsh plugin --profile web remove dsh-email
 
 ## 已知限制
 
-- **OAuth2 仅覆盖 Outlook / Exchange Online（开箱即用，也可自带应用 ID）**：设备码登录已支持 IMAP 与 SMTP 双端，默认使用插件内置的社区应用（见上文「Outlook OAuth2」），无需自己注册即可登录；企业策略不接受第三方应用时，在卡片里填自己的 `clientId` 覆盖。Google Workspace 等其它强制 OAuth 的环境仍不可用，只能用服务商的应用专用密码 / 授权码。
+- **OAuth2 支持 Outlook / Exchange Online 与 Gmail**：Outlook 可使用内置社区应用或自己的公共客户端；Gmail 需创建自己的 Google Desktop app 客户端，详见新增功能说明。既有应用密码账号保持兼容，是否可用取决于账号政策。
 - **搜索的匹配数**：服务器命中会先用信封复核（见上文 `email_search`）；复核通过时「共 N 条匹配」沿用服务器给出的条数，而列出的每一行都保证真的带关键词。正文回退扫描只看了最近 `bodySearchLimit` 封，不知道全文件夹匹配数，因此渲染为「本页 N 条（仅扫描最近 N 封）」而不是「共 N 条」。
 - **正文搜索**：服务器端只搜 subject / from / to / cc；多数服务器（如 QQ）的 IMAP `TEXT` / `HEADER` 搜索不可靠，无结果时回退到最近 `bodySearchLimit` 封的正文扫描（较慢，可用 `bodySearchFallback` 关闭）。
 - **附件**：内嵌图片暂不支持单独下载；附件定位失败会直接报错而不是下载错误文件（安全默认）。
@@ -269,7 +271,7 @@ MIT。这是一个社区插件，与 DeepSeek 官方无关；`@deepseek-ai/*` �
 
 打开“邮箱账号”的连接方式：跟随全局或环境设置、直接连接、自定义代理。直接连接会忽略代理环境变量；自定义代理地址支持 http/https/SOCKS，保存后不回显，留空可保留已有值。YAML 中 `proxy: direct` 同样表示直连，清除账号 proxy 覆盖则重新继承。POP3 收信不经过这个代理；AgentMail 使用自己的 HTTP API。
 
-可信名单免审只适用于 email_send；回复、回复全部及转发仍需确认。Full Access 无法显示确认框时，可在草稿页核对实际收件人并手动发送。
+可信回复免审默认关闭；只有主动开启 allowTrustedReply 且全部实际 To/Cc 匹配可信免审规则时才跳过插件确认。禁止规则和宿主权限仍生效；也可使用草稿页手动预览发送。
 
 ## 局域网与远程设置
 

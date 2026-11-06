@@ -1,3 +1,5 @@
+New workflows: [HTML, Gmail, scheduling and optional mail tasks](OUTGOING-AUTOMATION.en.md).
+
 # dsh-email usage guide
 
 For 0.22.0, see [formatted mail, threaded replies and Trash](MAILBOX.en.md) for the workflow, privacy controls, protocol support and recovery limits.
@@ -88,7 +90,7 @@ In your profile's `cordis.patch.yml` (under `$DSH_HOME/profiles/<name>/`), overr
 ```yaml
 - id: tool-email
   config:
-    provider: qq          # qq | 163 | 126 | sina | aliyun | gmail | outlook | icloud
+    provider: qq          # qq | exmail | 163 | 126 | sina | aliyun | gmail | outlook | icloud
     user: you@qq.com
     password: 你的授权码   # 强烈建议改用环境变量 DSH_EMAIL_PASSWORD，见下
 ```
@@ -263,7 +265,7 @@ MIT. This is a community plugin, not affiliated with DeepSeek; `@deepseek-ai/*` 
 
 Connection routing offers inherited settings, direct connections and a custom proxy. Direct mode ignores environment proxies. Custom URLs may contain credentials and are not echoed back; blank keeps a saved URL. In YAML, `proxy: direct` forces direct routing, while removing the account override restores inheritance. POP3 receiving is not proxied here; AgentMail uses its own HTTP API.
 
-Trusted-recipient approval skipping applies only to email_send. Replies, reply-all and forwarding still require confirmation; Drafts provide a manual review/send path when Full Access cannot display a prompt.
+Trusted replies are a separate opt-in, off by default. Enable allowTrustedReply only when every actual To/Cc must match a saved skipApproval policy. Block rules and host permissions remain effective; Drafts also provide explicit manual review and sending.
 
 ## LAN and remote settings
 

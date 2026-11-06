@@ -165,7 +165,7 @@ function mount(t, options = {}) {
 
 // --- snapshot ---------------------------------------------------------------
 
-test('snapshot carries accountsDetail (raw/list/defaultAccount) and the 8 builtin presets', async t => {
+test('snapshot carries accountsDetail (raw/list/defaultAccount) and the builtin presets', async t => {
   const yaml = [
     '# 工作邮箱',
     'work:',
@@ -235,7 +235,7 @@ test('snapshot carries accountsDetail (raw/list/defaultAccount) and the 8 builti
 
   // presets: all 8 builtins, no custom ones configured.
   assert.deepEqual(Object.keys(value.presets.builtin).sort(), Object.keys(PROVIDER_PRESETS).sort())
-  assert.equal(Object.keys(value.presets.builtin).length, 8)
+  assert.equal(Object.keys(value.presets.builtin).length, 9)
   assert.equal(value.presets.builtin.outlook.smtp.port, 587)
   assert.equal(value.presets.builtin.icloud.smtp.secure, false)
   assert.deepEqual(value.presets.custom, {})
@@ -1041,7 +1041,7 @@ test('snapshot never leaks a password through the card list', async t => {
   // for a password account, where there is no login to describe.
   assert.deepEqual(
     Object.keys(card).sort(),
-    ['authKind', 'hasPassword', 'hasProxy', 'imap', 'inboxFolder', 'isDefault', 'name', 'oauthState', 'pop3', 'provider', 'proxyMode', 'smtp', 'user'],
+    ['authKind', 'hasClientSecret', 'hasPassword', 'hasProxy', 'imap', 'inboxFolder', 'isDefault', 'name', 'oauthProvider', 'oauthState', 'pop3', 'provider', 'proxyMode', 'smtp', 'user'],
   )
   assert.equal(card.authKind, 'password')
   assert.equal(card.oauthState, 'none')
@@ -1666,8 +1666,8 @@ test('oauthLogin/oauthPoll: an unknown, missing or non-OAuth account is refused 
   // page is stale or the provider was just changed.
   const password = await post({ action: 'oauthLogin', account: 'home' })
   assert.equal(password.body.ok, false)
-  assert.match(password.body.message, /不需要设备码登录/)
-  assert.match(password.body.message, /outlook/)
+  assert.match(password.body.message, /未选择 OAuth2/)
+  assert.match(password.body.message, /OAuth2/)
 })
 
 test('oauthPoll: pending / ok / failure follow the frozen contract', async t => {

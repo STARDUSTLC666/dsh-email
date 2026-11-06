@@ -22,6 +22,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { clampInt, OUTLOOK_OAUTH2_CLIENT_ID, type ResolvedEmailConfig } from './config.js'
 import { isLegacyOAuth2Document, OAuth2StorageError, readOAuth2Document, writeOAuth2Document } from './oauth2-storage.js'
+import { GoogleOAuth } from './google-oauth.js'
 
 /** The authority that serves both endpoints. `common` accepts any work/school/personal tenant. */
 export const OAUTH2_TENANT = 'common'
@@ -65,6 +66,8 @@ export function oauth2TokenFile(): string {
 }
 
 export interface OAuth2TokenEntry {
+  /** Absent on legacy Microsoft records. Never mix issuers. */
+  provider?: 'google' | 'microsoft'
   /** The mailbox address the token was issued for. */
   user: string
   clientId: string
@@ -80,7 +83,12 @@ export interface OAuth2TokenStore {
 }
 
 /** The part of a resolved account this module needs. */
-export type OAuth2AccountConfig = Pick<ResolvedEmailConfig, 'user' | 'clientId'>
+export type OAuth2AccountConfig = Pick<ResolvedEmailConfig, 'user' | 'clientId' | 'clientSecret' | 'oauthProvider'>
+const google = new GoogleOAuth({ read: readTokenStore, write: writeTokenStore })
+export const startGoogleFlow = (name:string,cfg:OAuth2AccountConfig,current?:()=>OAuth2AccountConfig|undefined)=>google.start(name,cfg,current)
+export const pollGoogleFlow = (name:string,cfg:OAuth2AccountConfig)=>google.poll(name,cfg)
+export const disposeOAuthFlows = ()=>google.dispose()
+export function cancelOAuthFlow(name:string):void { google.cancel(name);pending.delete(name) }
 
 /** Raised for every expected OAuth2 failure; the message is already user-facing Chinese. */
 export class OAuth2Error extends Error {
@@ -232,8 +240,10 @@ export function readTokenStore(): OAuth2TokenStore {
 function tokenEntryOf(value: unknown): OAuth2TokenEntry | undefined {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
   const doc = value as Record<string, unknown>
+  if (doc.provider !== undefined && doc.provider !== 'google' && doc.provider !== 'microsoft') return undefined
   if (typeof doc.refreshToken !== 'string' || doc.refreshToken === '') return undefined
   return {
+    ...(doc.provider === 'google' || doc.provider === 'microsoft' ? { provider: doc.provider } : {}),
     user: typeof doc.user === 'string' ? doc.user : '',
     clientId: typeof doc.clientId === 'string' ? doc.clientId : '',
     refreshToken: doc.refreshToken,
@@ -252,6 +262,8 @@ export function writeTokenStore(store: OAuth2TokenStore): void {
 
 /** Drop one account's tokens (a dead refresh token, or a mailbox that moved). */
 export function clearTokenFor(name: string): boolean {
+  google.cancel(name)
+  pending.delete(name)
   const store = readTokenStore()
   if (!Object.prototype.hasOwnProperty.call(store.accounts, name)) return false
   delete store.accounts[name]
@@ -271,9 +283,10 @@ export type OAuth2State = 'none' | 'pending' | 'logged-in'
  * the verdict is「none」and the user is sent through the flow again. An empty
  * configured address cannot disagree with anything and keeps the token.
  */
-export function oauth2StateOf(name: string, configuredUser?: string, configuredClientId?: string): { state: OAuth2State; user?: string } {
+export function oauth2StateOf(name: string, configuredUser?: string, configuredClientId?: string, provider:'google'|'microsoft'='microsoft',clientSecret?:string): { state: OAuth2State; user?: string } {
+  if (provider === 'google') return google.state(name,{user:configuredUser??'',clientId:configuredClientId,clientSecret})
   const entry = readTokenStore().accounts[name]
-  if (entry !== undefined) {
+  if (entry !== undefined && entry.provider !== 'google') {
     const wanted = (configuredUser ?? '').trim()
     const hasToken = entry.user !== '' && wanted !== '' && entry.user.toLowerCase() !== wanted.toLowerCase()
     const clientMatches = configuredClientId === undefined || entry.clientId === clientIdOf({ clientId: configuredClientId, user: configuredUser ?? '' })
@@ -292,6 +305,7 @@ export function isDeviceFlowPending(name: string): boolean {
 }
 
 export function clientIdOf(cfg: OAuth2AccountConfig): string {
+  if (cfg.oauthProvider === 'google') return cfg.clientId?.trim() || ''
   return (cfg.clientId ?? '').trim() || OUTLOOK_OAUTH2_CLIENT_ID
 }
 
@@ -415,6 +429,7 @@ export async function pollDeviceFlow(name: string): Promise<OAuth2PollResult> {
     device_code: flow.deviceCode,
   })
   const doc = (payload !== null && typeof payload === 'object' ? payload : {}) as Record<string, unknown>
+  if (pending.get(name) !== flow) throw new OAuth2Error('登录已取消或被替换，请重新登录 / Sign-in cancelled or replaced')
   if (status === 200 && typeof doc.access_token === 'string') {
     pending.delete(name)
     storeToken(name, { user: flow.user, clientId: flow.clientId }, doc, '')
@@ -445,8 +460,9 @@ export async function getFreshAccessToken(
   cfg: OAuth2AccountConfig,
   options: { force?: boolean } = {},
 ): Promise<string> {
+  if (cfg.oauthProvider === 'google') return google.accessToken(name,cfg,options.force)
   const entry = readTokenStore().accounts[name]
-  if (entry === undefined) throw new OAuth2Error(NOT_LOGGED_IN_MESSAGE)
+  if (entry === undefined || entry.provider === 'google') throw new OAuth2Error(NOT_LOGGED_IN_MESSAGE)
   const wanted = (cfg.user ?? '').trim()
   const clientId = clientIdOf(cfg)
   if (clientId === '') throw new OAuth2Error(NO_CLIENT_ID_MESSAGE)
@@ -474,6 +490,8 @@ function refreshAccessToken(name: string, cfg: OAuth2AccountConfig, entry: OAuth
       scope: OAUTH2_SCOPE_TEXT,
     })
     const doc = (payload !== null && typeof payload === 'object' ? payload : {}) as Record<string, unknown>
+    const current = readTokenStore().accounts[name]
+    if (!current || current.provider === 'google' || current.refreshToken !== entry.refreshToken || current.clientId !== entry.clientId || current.user !== entry.user) throw new OAuth2Error('登录数据已改变，请重新操作 / Login data changed')
     if (status === 200 && typeof doc.access_token === 'string') {
       return storeToken(name, cfg, doc, entry.refreshToken)
     }

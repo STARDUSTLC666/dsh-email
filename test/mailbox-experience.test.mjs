@@ -66,7 +66,7 @@ test('reply draft quotes long original and actual SMTP message retains its origi
   const preview=await f.drafts.action({action:'preview',id:edited.id,revision:edited.revision});await f.drafts.action({action:'send',id:edited.id,preview:preview.id,confirmed:true});assert.equal(f.peer.sent.length,1);const sent=await simpleParser(f.peer.sent[0]);assert.equal(sent.inReplyTo,'<original@fixture.invalid>');assert.deepEqual(sent.references,['<earlier@fixture.invalid>','<original@fixture.invalid>']);assert.match(sent.text,/END-OF-ORIGINAL/)
 })
 test('reply quote preserves ordinary long bodies but keeps an explicit 20k ceiling',()=>{
-  const original={from:[{address:'from@example.invalid'}],to:[],cc:[],subject:'Subject',date:'',text:originalText,messageId:'original',references:''};assert.match(buildReplyMessage(original,'reply','me@example.invalid','').text,/END-OF-ORIGINAL/);assert.match(buildReplyMessage({...original,text:'字'.repeat(21000)},'reply','me@example.invalid','').text,/已截断/)
+  const original={from:[{address:'from@example.invalid'}],to:[],cc:[],subject:'Subject',date:'',text:originalText,messageId:'original',references:''};assert.match(buildReplyMessage(original,'reply','me@example.invalid','').text,/END-OF-ORIGINAL/);assert.match(buildReplyMessage({...original,text:'字'.repeat(21000)},'reply','me@example.invalid','').text,/truncated/)
 })
 test('inline download enforces its own byte cap and checks UIDVALIDITY under the attachment lock', {timeout:20000},async t=>{
   const f=await fixture(t);await f.pool.read('default',7,'INBOX');

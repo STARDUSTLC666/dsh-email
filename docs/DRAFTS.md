@@ -1,3 +1,5 @@
+相关更新流程：[HTML、Gmail、定时发送与可选邮件任务](OUTGOING-AUTOMATION.md)。
+
 # 草稿与收件人规则
 
 [返回简介](../README.md) · [English](DRAFTS.en.md)

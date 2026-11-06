@@ -1,3 +1,5 @@
+New workflows: [HTML, Gmail, scheduling and optional mail tasks](OUTGOING-AUTOMATION.en.md).
+
 # Drafts and recipient rules
 
 [Overview](../README.en.md) · [中文](DRAFTS.md)

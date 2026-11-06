@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { apply, validateAttachmentPaths, MailError } from '../lib/index.js'
+import { apply, validateAttachmentPaths, MailError, EmailService } from '../lib/index.js'
 
 function fakeCtx(scopeValue = {}) {
   const ctx = {
@@ -52,7 +52,7 @@ test('all tool schemas use the portable Harness supported keyword subset', () =>
   }
   const ctx = fakeCtx()
   apply(ctx, {})
-  assert.equal(ctx.tools.defs.length, 11)
+  assert.equal(ctx.tools.defs.length, 12)
   for (const tool of ctx.tools.defs) { check(tool.parameters, tool.name + '.parameters'); check(tool.output.schema, tool.name + '.output') }
 })
 
@@ -72,11 +72,11 @@ test('every registered tool parameters value is a compiled JSON Schema (native w
   assert.deepEqual(send.parameters.properties.attachments.items, { type: 'string' })
 })
 
-test('apply registers the eleven email tools even without config', () => {
+test('apply registers the twelve email tools even without config', () => {
   const ctx = fakeCtx()
   apply(ctx, {})
   const names = ctx.tools.defs.map(def => def.name).sort()
-  assert.deepEqual(names, ['email_attachment', 'email_draft', 'email_folders', 'email_health', 'email_list', 'email_mark', 'email_read', 'email_reply', 'email_search', 'email_send', 'email_watch'])
+  assert.deepEqual(names, ['email_attachment', 'email_draft', 'email_folders', 'email_health', 'email_list', 'email_mark', 'email_read', 'email_reply', 'email_schedule', 'email_search', 'email_send', 'email_watch'])
 })
 
 test('every tool returns a config hint instead of throwing when unconfigured', async () => {
@@ -108,7 +108,7 @@ test('execute validates args without touching the network', async () => {
   await assert.rejects(() => mark.execute({ uid: 3, action: 'move', toFolder: '  ' }), /toFolder/)
   const reply = ctx.tools.defs.find(def => def.name === 'email_reply')
   await assert.rejects(() => reply.execute({ uid: 0, text: 'hi' }), /uid 必须是正整数/)
-  await assert.rejects(() => reply.execute({ uid: 3, text: '   ' }), /text 不能为空/)
+  await assert.rejects(() => reply.execute({ uid: 3, text: '   ' }), /text 或 html/)
   await assert.rejects(() => reply.execute({ uid: 3, text: 'hi', mode: 'broadcast' }), /mode 必须是/)
   await assert.rejects(() => reply.execute({ uid: 3, text: 'hi', mode: 'forward' }), /to 参数/)
 })
@@ -141,7 +141,8 @@ test('other tools pass through the gate untouched', async () => {
   }
 })
 
-test('email_reply goes through the same approval gate with a mode-aware reason', async () => {
+test('email_reply goes through the same approval gate with actual recipients and a mode-aware reason', async t => {
+  t.mock.method(EmailService.prototype,'prepareReply',async(_a,_f,_uid,mode,_text,to)=>({account:'default',to:mode==='forward'?to:'sender@example.test',cc:'',subject:'fixture',text:'body'}))
   const ctx = fakeCtx()
   const seen = []
   ctx.approval.request = async (req) => { seen.push(req); return 'allowed-once' }
@@ -153,7 +154,7 @@ test('email_reply goes through the same approval gate with a mode-aware reason',
   )
   assert.equal(out, 'PASSED-THROUGH')
   assert.equal(seen.length, 1)
-  assert.equal(seen[0].reason, '转发邮件（原邮件 uid=42），收件人 boss@corp.com')
+  assert.match(seen[0].reason, /转发邮件.*账号 default.*收件人 boss@corp.com.*fixture/)
   const denied = await gate.fn(
     { name: 'email_reply', arguments: { uid: 7, text: 'x' } },
     async () => 'PASSED-THROUGH',
@@ -231,14 +232,15 @@ test('approval "rejected" denies with an actionable message covering Full Access
   assert.match(decision.reason, /草稿页.*手动发送/)
 })
 
-test('reply denial explains that trusted skipping only covers email_send and offers Drafts', async () => {
+test('reply denial explains the default-off trusted reply switch and offers Drafts', async t => {
+  t.mock.method(EmailService.prototype,'prepareReply',async()=>({account:'default',to:'sender@example.test',cc:'',subject:'fixture',text:'body'}))
   const ctx = fakeCtx()
   ctx.approval.request = async () => 'rejected'
   apply(ctx, QQ)
   const gate = ctx.listeners.find(l => l.event === 'tools/pre-execute')
   const decision = await gate.fn({ name: 'email_reply', arguments: { uid: 1, text: 'fixture reply' } }, async () => assert.fail('must stay denied'))
   assert.equal(decision.kind, 'deny')
-  assert.match(decision.reason, /免审仅适用于 email_send/)
+  assert.match(decision.reason, /可信回复免审默认关闭/)
   assert.match(decision.reason, /草稿页/)
 })
 
@@ -271,10 +273,10 @@ test('no approval channel denies with the headless hint', async () => {
 })
 
 
-test('all eleven public tools declare finite timeouts', () => {
+test('all twelve public tools declare finite timeouts', () => {
   const ctx = fakeCtx()
   apply(ctx, {})
-  const readmeTools = ['email_draft', 'email_list', 'email_read', 'email_search', 'email_send', 'email_folders', 'email_attachment', 'email_health', 'email_watch', 'email_mark', 'email_reply']
+  const readmeTools = ['email_draft', 'email_list', 'email_read', 'email_search', 'email_send', 'email_schedule', 'email_folders', 'email_attachment', 'email_health', 'email_watch', 'email_mark', 'email_reply']
   assert.deepEqual(ctx.tools.defs.map(def => def.name).sort(), [...readmeTools].sort())
   const slow = new Set(['email_search', 'email_watch'])
   for (const def of ctx.tools.defs) {

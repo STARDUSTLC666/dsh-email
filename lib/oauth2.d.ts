@@ -26,6 +26,8 @@ export declare const NO_CLIENT_ID_MESSAGE = "\u5C1A\u672A\u914D\u7F6E OAuth2 \u5
 /** Where the refresh/access tokens live. Kept out of the settings namespace on purpose. */
 export declare function oauth2TokenFile(): string;
 export interface OAuth2TokenEntry {
+    /** Absent on legacy Microsoft records. Never mix issuers. */
+    provider?: 'google' | 'microsoft';
     /** The mailbox address the token was issued for. */
     user: string;
     clientId: string;
@@ -39,7 +41,17 @@ export interface OAuth2TokenStore {
     accounts: Record<string, OAuth2TokenEntry>;
 }
 /** The part of a resolved account this module needs. */
-export type OAuth2AccountConfig = Pick<ResolvedEmailConfig, 'user' | 'clientId'>;
+export type OAuth2AccountConfig = Pick<ResolvedEmailConfig, 'user' | 'clientId' | 'clientSecret' | 'oauthProvider'>;
+export declare const startGoogleFlow: (name: string, cfg: OAuth2AccountConfig, current?: () => OAuth2AccountConfig | undefined) => Promise<{
+    url: string;
+    expiresIn: number;
+}>;
+export declare const pollGoogleFlow: (name: string, cfg: OAuth2AccountConfig) => {
+    status: "pending" | "ok";
+    user?: string;
+};
+export declare const disposeOAuthFlows: () => void;
+export declare function cancelOAuthFlow(name: string): void;
 /** Raised for every expected OAuth2 failure; the message is already user-facing Chinese. */
 export declare class OAuth2Error extends Error {
     constructor(message: string);
@@ -88,7 +100,7 @@ export type OAuth2State = 'none' | 'pending' | 'logged-in';
  * the verdict is「none」and the user is sent through the flow again. An empty
  * configured address cannot disagree with anything and keeps the token.
  */
-export declare function oauth2StateOf(name: string, configuredUser?: string, configuredClientId?: string): {
+export declare function oauth2StateOf(name: string, configuredUser?: string, configuredClientId?: string, provider?: 'google' | 'microsoft', clientSecret?: string): {
     state: OAuth2State;
     user?: string;
 };

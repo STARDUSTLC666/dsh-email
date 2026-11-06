@@ -12,6 +12,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
         const ROUTE = "api/dsh-email/settings";
         function emailError(error) {
             const message = typeof error === 'string' ? error : error?.message || String(error || '');
+            if(message.includes(' / ') && /[\u3400-\u9fff]/.test(message)){const split=message.indexOf(' / ');return UI_LANG==='en'?message.slice(split+3):message.slice(0,split);}
             if (/^(?:图片或附件|公网图片或附件|当前网络使用虚拟地址|无法解析图片或附件|下载大小上限)/.test(message) && message.includes(' / ')) {
                 const split = message.indexOf(' / ');
                 return UI_LANG === 'en' ? message.slice(split + 3) : message.slice(0, split);
@@ -804,6 +805,8 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 senderName: card.senderName === undefined || card.senderName === null ? "" : String(card.senderName),
                 authUser: card.authUser === undefined || card.authUser === null ? "" : String(card.authUser),
                 clientId: card.clientId === undefined || card.clientId === null ? "" : String(card.clientId),
+                clientSecret: "", hasClientSecret: card.hasClientSecret === true,
+                oauthProvider: card.oauthProvider || (card.provider === 'gmail' ? 'google' : 'microsoft'),
                 // 卡片只在账号自己的 clientId 为空时报内置值：它是「留空会用哪个应用」的答案，
                 // 不是账号的字段，所以既不进 YAML，也不参与三态写入。
                 defaultClientId: card.oauthDefaultClientId === undefined || card.oauthDefaultClientId === null
@@ -886,6 +889,9 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 smtp: undefined,
                 password: "",
                 authKind: undefined,
+                authKindSetting: '',
+                oauthProvider: next === 'gmail' ? 'google' : 'microsoft',
+                clientId: '', clientSecret: '', hasClientSecret: false,
                 oauthState: "none",
                 oauthUser: "",
             });
@@ -932,6 +938,8 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             // stored key alone. An empty string here is the user clearing it on purpose.
             if (isOauthDraft(draft))
                 input.clientId = String(draft.clientId || "").trim();
+            if (isOauthDraft(draft)) input.oauthProvider = draft.provider === 'gmail' ? 'google' : draft.oauthProvider || 'microsoft';
+            if (isOauthDraft(draft) && draft.clientSecret !== undefined && (draft.clientSecret || draft.clientSecretDirty)) input.clientSecret = draft.clientSecret;
             // '' is a real value here, not an omission: it takes the pin off and returns
             // the account to the derivation. Only a draft that models the selector speaks.
             if (draft.authKindSetting !== undefined)
@@ -1263,6 +1271,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             const state = oauthLoginState(draft, session, view);
             const disabled = props.disabled === true;
             const label = props.providerLabel || draft.provider || "OAuth2";
+            const google = draft.provider === 'gmail' || draft.oauthProvider === 'google';
             // 「用哪个应用登录」是账号自己的配置项，面板是用户唯一的常规入口。它不是机密
             // （公共客户端 ID 每次都随请求发出），因此可以直接回填、直接编辑。留空不是
             // 「没配置」：插件自带一份社区注册，所以这里必须说清生效的到底是哪个应用 ——
@@ -1275,11 +1284,13 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                     value: String(draft.clientId || ""),
                     disabled: disabled,
                     spellcheck: "false",
-                    placeholder: builtInClientId !== "" ? builtInClientId : t("oauth.clientIdPlaceholder"),
+                    placeholder: google ? '…apps.googleusercontent.com' : builtInClientId !== "" ? builtInClientId : t("oauth.clientIdPlaceholder"),
                     onChange: (e) => { if (props.onClientId)
                         props.onClientId(e.target.value); },
                 }),
-                h("div", { className: "dshe-hint" }, t("oauth.clientIdHint")),
+                h("div", { className: "dshe-hint" }, google ? dt('在 Google Cloud 创建「桌面应用」OAuth 客户端，启用 Gmail 邮件授权并将自己的账号加入测试用户。登录会在浏览器完成，再自动回到本机；无需提供邮箱密码。','Create a Desktop app OAuth client in Google Cloud, enable Gmail mail consent and add your account as a test user. Complete sign-in in your browser; no mailbox password is needed.') : t("oauth.clientIdHint")),
+                google ? h('label', null, dt('Google 客户端密钥（如注册信息提供）','Google client secret (if issued)')) : null,
+                google ? h('input',{type:'password',autoComplete:'new-password',value:draft.clientSecret || '',placeholder:draft.hasClientSecret ? dt('已保存；留空保持','Saved; leave unchanged to keep') : '',disabled,onChange:e=>props.onClientSecret?.(e.target.value)}) : null,
                 String(draft.clientId || "").trim() === "" && builtInClientId !== ""
                     ? h("div", { className: "dshe-hint dshe-oauth-builtin" }, t("oauth.clientIdBuiltIn", { id: builtInClientId }))
                     : null,
@@ -1289,7 +1300,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 const code = String(session.code || "");
                 const seconds = oauthIntervalSeconds(session);
                 return h("div", { className: "dshe-oauth" }, [
-                    h("div", { className: "dshe-oauth-head" }, t("oauth.pendingHint")),
+                    h("div", { className: "dshe-oauth-head" }, google ? dt('打开 Google 授权页，完成后此处会自动显示登录状态。','Open Google authorization; this panel updates after sign-in.') : t("oauth.pendingHint")),
                     url === ""
                         ? h("div", { className: "dshe-oauth-url" }, t("oauth.noUrl"))
                         : h("div", { className: "dshe-oauth-url" }, h("a", { href: url, target: "_blank", rel: "noreferrer" }, url)),
@@ -1346,7 +1357,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 h("div", { className: "dshe-oauth-head" }, t("oauth.passwordless", { label: label ? t("oauth.passwordlessLabel", { label }) : "" })),
                 clientIdField(),
                 String(draft.clientId || "").trim() === "" && builtInClientId === ""
-                    ? h("div", { className: "dshe-alert warn" }, t("oauth.clientIdMissing"))
+                    ? h("div", { className: "dshe-alert warn" }, google ? dt('请先填写自己的 Google Desktop app 客户端 ID。也可切换为应用密码（是否可用取决于账号策略）。','Enter your Google Desktop app client ID. App passwords remain available where your account policy permits.') : t("oauth.clientIdMissing"))
                     : null,
                 h("div", { className: "dshe-oauth-actions" }, [
                     h("button", {
@@ -1354,7 +1365,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                         className: "dshe-btn primary",
                         disabled: disabled,
                         onClick: () => props.onStart(),
-                    }, props.starting === true ? t("oauth.requestingCode") : oauthSignInLabel(draft.provider)),
+                    }, props.starting === true ? t("oauth.requestingCode") : google ? dt('使用 Google 登录','Sign in with Google') : oauthSignInLabel(draft.provider)),
                 ]),
             ]);
         }
@@ -1482,6 +1493,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             const cancelOauth = (name) => {
                 bumpOauth(name);
                 setOauthOf(name, null);
+                void apiOauth('oauthCancel',{account:name}).catch(()=>{});
             };
             /**
              * 登录前先把这张卡片落盘：oauthLogin 只认账号名，后端要从已保存的配置里读这个
@@ -1508,7 +1520,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 if (seq !== oauthCurrent(name))
                     return;
                 try {
-                    const body = await apiOauth("oauthLogin", { account: name });
+                    const body = await apiOauth("oauthLogin", { account: name, force: draft.oauthState === 'logged-in' });
                     if (seq !== oauthCurrent(name))
                         return;
                     if (!body.ok) {
@@ -1846,7 +1858,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                                     // 下拉框只是噪音。它是那条逃生舱的唯一面板入口——仍能用应用密码连
                                     // Exchange Online 的租户（混合/本地部署、SMTP AUTH 未关）靠它才不用
                                     // 去手改 YAML。
-                                    (oauthCard || authKindOf(draft.provider) === "oauth2")
+                                    (oauthCard || authKindOf(draft.provider) === "oauth2" || draft.provider === 'gmail')
                                         ? h("div", { className: "dshe-field" }, [
                                             h("label", null, t("card.authKindLabel")),
                                             h("select", {
@@ -1863,7 +1875,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                                                 h("option", { key: "oauth2", value: "oauth2" }, t("card.authKindOAuth2")),
                                                 h("option", { key: "password", value: "password" }, t("card.authKindPassword")),
                                             ]),
-                                            h("div", { className: "dshe-hint" }, t("card.authKindHint")),
+                                            h("div", { className: "dshe-hint" }, draft.provider==='gmail'?dt('Google OAuth 需要自己的桌面应用客户端；应用密码是否可用取决于账号策略。','Google OAuth requires your own Desktop app client; app-password availability depends on account policy.'):t("card.authKindHint")),
                                         ])
                                         : null,
                                     !draft.provider?.startsWith('agentmail') && h('div', { className: 'dshe-field' },
@@ -1888,6 +1900,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                                             onStart: () => startOauth(name),
                                             onCancel: () => cancelOauth(name),
                                             onClientId: (v) => patchDraft(name, { clientId: v }),
+                                            onClientSecret: v=>patchDraft(name,{clientSecret:v,clientSecretDirty:true}),
                                         })
                                         : h(React.Fragment, null, [
                                             h("div", { className: "dshe-field" }, [
@@ -2579,6 +2592,46 @@ __stardustUpdatesGuard(React, "dsh-email.rules", { dirty: !!dirty, busy, retainO
                 match ? h("div", { className: "dshe-review", role: "status" }, [h("p", null, match.blocked ? dt("收件人被禁止，无法发送。", "A recipient is blocked; sending is refused.") : match.skipsApproval ? dt("全部 To/Cc 匹配，可跳过插件确认。", "All To/Cc match; plugin approval can be skipped.") : dt("不会跳过插件确认。", "Plugin approval will remain.")), h("ul", { className: "dshe-match-list" }, match.rows.map((row, index) => h("li", { key: index }, row.field.toUpperCase() + ": " + row.address + " · " + (row.blocked ? dt("禁止：", "Blocked: ") + row.value : row.matched ? dt("匹配：", "Match: ") + row.value : dt("未匹配", "No match")))))]) : null,
             ]);
         }
+        let emailWorkspace=null;
+        async function mailTaskApi(action,payload={}) {
+            const response=await fetch('/api/dsh-email/tasks',{credentials:'same-origin',method:'POST',headers:{'content-type':'application/json','x-dsh-email-tasks':'1'},body:JSON.stringify({action,...payload})});
+            const result=await response.json();if(!response.ok||!result.ok)throw new Error(result.message||dt('任务操作失败','Task operation failed'));return result.value;
+        }
+        function MailTaskWorkbench({active,accounts=[]}) {
+            const [data,setData]=useState(null),[config,setConfig]=useState(null),[aliases,setAliases]=useState(''),[rules,setRules]=useState('[]'),[senders,setSenders]=useState(''),[key,setKey]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
+            const adopt=value=>{setData(value);setConfig(value.config);setAliases(Object.entries(value.config.workspaces||{}).map(([name,path])=>name+' = '+path).join('\n'));setRules(JSON.stringify(value.config.rules||[],null,2));setSenders((value.config.senders||[]).join('\n'));};
+            const run=async fn=>{setBusy(true);setError('');setNotice('');try{await fn()}catch(e){setError(emailError(e))}finally{setBusy(false)}};
+            useEffect(()=>{if(active)run(async()=>adopt(await mailTaskApi('list')));return()=>setKey('')},[active]);
+            if(!config)return h('p',{role:'status'},error||dt('正在加载邮件任务…','Loading mail tasks…'));
+            const change=patch=>setConfig(old=>({...old,...patch}));
+            const field=(label,node)=>h('label',{className:'dshe-field'},h('span',null,label),node);
+            const save=async()=>{const workspaces={};for(const line of aliases.split('\n').filter(x=>x.trim())){const at=line.indexOf('=');if(at<1)throw new Error(dt('每行填写：别名 = 现有文件夹绝对路径','Each line: alias = absolute path to an existing folder'));const name=line.slice(0,at).trim();if(Object.hasOwn(workspaces,name))throw new Error(dt('工作区别名重复','Duplicate workspace alias'));workspaces[name]=line.slice(at+1).trim();}adopt(await mailTaskApi('save',{revision:data.revision,config:{...config,senders:senders.split('\n').map(x=>x.trim()).filter(Boolean),workspaces,rules:JSON.parse(rules)}}));setNotice(dt('已保存。首次检查只建立起点，之后的新邮件才会触发任务。','Saved. The first check establishes a baseline; only later mail can trigger tasks.'));};
+            const states={dispatching:dt('正在创建任务','Starting'),running:dt('执行中','Running'),waiting:dt('等待你在 DSH 中确认','Waiting for your input in DSH'),completed:dt('已完成','Completed'),attention:dt('需要查看','Needs attention'),replying:dt('正在提交回复','Submitting reply'),replied:dt('已回复','Replied'),uncertain:dt('发送结果不确定，请核对','Mail outcome uncertain; check sent mail')};
+            return h('section',{'aria-label':dt('邮件触发任务','Mail-triggered tasks'),className:'dshe-global'},
+                h('h3',null,dt('把邮件变成 DSH 任务','Turn email into a DSH task')),
+                h('p',{className:'dshe-hint'},dt('从自己的邮箱发出任务，在指定工作区执行；可回复同一会话继续。默认关闭。任务使用你的模型，可能产生用量；权限请求仍需在 DSH 中确认。','Send a task from an authorized mailbox to an approved workspace, then continue the same session by email. Off by default. Tasks use your model and may incur usage; DSH permissions still require your input.')),
+                !data.available?h('p',{className:'dshe-alert warn'},dt('当前 DSH 未提供原生任务服务，请升级 DSH 后使用。','Native task services are unavailable; update DSH to use this feature.')):null,
+                error||data.error?h('p',{role:'alert',className:'dshe-alert error'},error||emailError(data.error)):null,
+                notice?h('p',{role:'status'},notice):null,
+                field(dt('接收任务的邮箱','Receiving account'),h('select',{value:config.account,disabled:busy,onChange:e=>change({account:e.target.value})},h('option',{value:''},dt('选择邮箱','Choose an account')),accounts.map(name=>h('option',{key:name,value:name},name)))),
+                field(dt('接收文件夹','Receiving folder'),h('input',{value:config.folder,disabled:busy,onChange:e=>change({folder:e.target.value})})),
+                field(dt('任务主题前缀','Task subject prefix'),h('input',{value:config.prefix||'dsh',disabled:busy,maxLength:32,onChange:e=>change({prefix:e.target.value})})),
+                field(dt('允许的发件人（每行一个；留空仅允许邮箱本人）','Allowed senders (one per line; empty means the mailbox itself)'),h('textarea',{rows:3,value:senders,disabled:busy,placeholder:'you@example.com',onChange:e=>setSenders(e.target.value)})),
+                field(dt('工作区别名（每行：别名 = 文件夹绝对路径）','Workspace aliases (each line: alias = absolute folder path)'),h('textarea',{rows:3,value:aliases,disabled:busy,placeholder:dt('work = E:\\projects\\my-project','work = /home/me/projects/my-project'),onChange:e=>setAliases(e.target.value)})),
+                h('p',{className:'dshe-hint'},dt('任务只能选择这里保存的别名。现有会话也必须属于同一工作区；不会按邮件正文中的任意路径执行。','Tasks can use only saved aliases. Existing sessions must belong to that workspace.')),
+                h('button',{type:'button',className:'dshe-btn',disabled:busy,onClick:()=>run(async()=>{const value=await mailTaskApi('rotateKey',{revision:data.revision});setData(value);setConfig(old=>({...old,enabled:false}));setKey(value.key);setNotice(dt('新口令只显示这一次，旧口令已失效。请保存后再启用。','New key shown once; the old key is invalid. Save your configuration before enabling.'));})},data.hasKey?dt('轮换任务口令（会暂停任务）','Rotate task key (pauses tasks)'):dt('生成任务口令','Generate task key')),
+                key?h('div',{className:'dshe-review'},field(dt('复制以下邮件模板，妥善保存口令','Copy this email template and keep the key private'),h('textarea',{readOnly:true,rows:5,value:'Subject: '+(config.prefix||'dsh')+':'+(aliases.split('\n').find(x=>x.includes('='))?.split('=')[0].trim()||'work')+'\n\nDSH-Key: '+key+'\n'+dt('请在这里填写任务','Write your task here')})),h('button',{type:'button',className:'dshe-btn',onClick:()=>setKey('')},dt('隐藏口令','Hide key'))):null,
+                h('p',{className:'dshe-hint'},dt('邮件主题：dsh:别名，或 dsh:别名:会话ID。正文第一行须为 DSH-Key: 任务口令；下一行起写任务。该口令授予白名单发件人在所选工作区发起任务的能力，请勿转发。','Subject: dsh:alias or dsh:alias:sessionId. Begin the body with DSH-Key: your-task-key, then write the task. The key authorizes whitelisted senders to start tasks in your approved workspace; keep it private.')),
+                h('label',{className:'dshe-check'},h('input',{type:'checkbox',checked:config.autoReply,disabled:busy,onChange:e=>change({autoReply:e.target.checked})}),dt('自动回复最终结果给授权发件人（不抄送；沿用禁止收件人规则）','Automatically email the final result to the authorized sender (no Cc; recipient blocks apply)')),
+                field(dt('检查间隔（秒）','Poll interval (seconds)'),h('input',{type:'number',min:30,max:3600,value:config.pollSeconds,disabled:busy,onChange:e=>change({pollSeconds:Number(e.target.value)})})),
+                h('details',null,h('summary',null,dt('高级匹配与内容提取','Advanced matching and extraction')),h('p',{className:'dshe-hint'},dt('先核对发件人和口令，再匹配规则。支持 all / any、subject / body / from / to / cc、contains / equals / regex。命名分组可在 workspace、session、prompt 中用 ${name}；${body} 为已去除口令和引用的正文。工作区模板的结果仍须匹配允许别名。','Rules run after sender and key checks. Use all / any, fields subject / body / from / to / cc, operators contains / equals / regex. Named captures work as ${name} in workspace, session and prompt; ${body} is the body with the key and quoted history removed. Workspace results must match an allowed alias.')),field(dt('匹配规则（JSON 数组）','Rules (JSON array)'),h('textarea',{rows:8,value:rules,disabled:busy,spellCheck:false,onChange:e=>setRules(e.target.value)}))),
+                h('label',{className:'dshe-check'},h('input',{type:'checkbox',checked:config.enabled,disabled:busy||!data.hasKey||!data.available,onChange:e=>change({enabled:e.target.checked})}),dt('启用邮件任务','Enable mail tasks')),
+                h('div',{className:'dshe-actions'},h('button',{type:'button',className:'dshe-btn primary',disabled:busy,onClick:()=>run(save)},dt('保存任务设置','Save task settings')),h('button',{type:'button',className:'dshe-btn',disabled:busy,onClick:()=>run(async()=>{const value=await mailTaskApi('check');setData(value);setNotice(dt('检查完成；请查看下方任务记录。','Check finished; see task records below.'));})},dt('立即检查','Check now')),h('button',{type:'button',className:'dshe-btn',disabled:busy,onClick:()=>run(async()=>setData(await mailTaskApi('archive',{revision:data.revision})))},dt('清理已结束的任务记录','Clear finished task records'))),
+                h('p',{className:'dshe-hint'},dt('DSH 需保持运行。重启后不重复执行进行中的任务；等待审批、超时或人工接手时请到原会话处理。','Keep DSH running. In-progress tasks are not replayed after restart. Handle approvals, timeouts or manual takeover in the original session.')),
+                h('h4',null,dt('任务记录','Task records')),
+                data.records?.length?h('ul',{className:'dshe-match-list'},data.records.map(row=>h('li',{key:row.id},h('strong',null,states[row.state]||row.state),' · '+row.sender+' · '+row.workspace+' · '+new Date(row.createdAt).toLocaleString(UI_LANG==='zh'?'zh-CN':'en-US'),row.message?h('p',null,emailError(row.message)):null,row.sessionId?h('div',null,field(dt('会话 ID','Session ID'),h('input',{readOnly:true,value:row.sessionId})),emailWorkspace?h('button',{type:'button',className:'dshe-btn',onClick:()=>run(async()=>emailWorkspace.openSession(row.sessionId))},dt('打开 DSH 会话','Open DSH session')):null):null))):h('p',null,dt('暂无任务；首次检查仅建立起点。','No tasks yet. The first check establishes a baseline.'))
+            );
+        }
         function EmailSettingsSection({workbench=false}={}) {
 const [composeAccount,setComposeAccount]=useState(''),[composeRequest,setComposeRequest]=useState(null);
 const [,redrawLocale]=useState(0);useEffect(()=>activeLocaleService?.subscribe?.(()=>redrawLocale(n=>n+1)),[]);
@@ -2875,11 +2928,12 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
             return h(W.Page,{workbench,title:dt('邮件','Email'),subtitle:dt('阅读、回复和管理草稿。','Read, reply and manage drafts.'),className:'dshe-settings email-workbench',actions:h(React.Fragment,null,
  h(W.Button,{variant:'primary',icon:'edit',disabled:!!composeRequest,onClick:()=>{setComposeRequest({id:crypto.randomUUID(),account:composeAccount || accounts[0] || ''});setTab('drafts');}},dt('写邮件','Compose')),
  h(W.Button,{icon:'settings',onClick:()=>setTab('accounts')},dt('邮箱设置','Account settings')))},h('style',null,EMAIL_WORKBENCH_CSS),
- h(W.Tabs,{label:dt('邮件功能','Email features'),value:tab,onChange:setTab,items:[{id:'mailbox',label:dt('收发邮件','Mailbox')},{id:'drafts',label:dt('草稿','Drafts')},{id:'accounts',label:dt('邮箱账号','Accounts')},{id:'rules',label:dt('收件人规则','Recipient rules')}]},
+ h(W.Tabs,{label:dt('邮件功能','Email features'),value:tab,onChange:setTab,items:[{id:'mailbox',label:dt('收发邮件','Mailbox')},{id:'drafts',label:dt('草稿','Drafts')},{id:'accounts',label:dt('邮箱账号','Accounts')},{id:'rules',label:dt('收件人规则','Recipient rules')},{id:'tasks',label:dt('邮件任务','Mail tasks')}]},
  tab === 'accounts' && (saveState !== null || hasIncompleteDraft) ? h('div',{key:hasIncompleteDraft?'draft':saveState?.kind||'idle','data-kind':hasIncompleteDraft?'draft':saveState?.kind||'idle',className:'email-account-status'},status,!hasIncompleteDraft && saveState?.kind==='error'?h(W.Button,{onClick:()=>flushSave()},dt('重试保存','Retry save')):null) : null,
  h("div", { hidden: tab !== "mailbox", className: "dshe-section-hidden" }, h(MailboxWorkbench, { active: tab === "mailbox", onConfigure: () => setTab("accounts"), onDraft: openMailboxDraft, onAccountChange:setComposeAccount })),
 h("div", { hidden: tab !== "drafts", className: "dshe-section-hidden" }, h(DraftWorkbench, { active: tab === "drafts", requestedDraft,composeRequest,onComposeFinished:()=>setComposeRequest(null) })),
 h("div", { hidden: tab !== "rules", className: "dshe-section-hidden" }, h(RecipientRules, { active: tab === "rules", onSaved: revision => { setSnapshot(old => ({ ...old, settings: { ...old.settings, revision } })); } })),
+h('div',{hidden:tab!=='tasks',className:'dshe-section-hidden'},h(MailTaskWorkbench,{active:tab==='tasks',accounts})),
 h("section", { hidden: tab !== "accounts", className: "dshe-panel dshe-section-hidden" }, [
                     // 全局设置：发信确认和下载目录对所有账号一视同仁，不属于任何一张卡片，
                     // 所以摆在卡片列表上方，而不是塞进某一张卡里。
@@ -3131,6 +3185,7 @@ accounts.length > 0
         // 兜不住也不会连带把 settings 段和鲸鱼娘一起拖垮。
         const inject = ["slots", "locale"];
         function apply(ctx) {
+            ctx.inject?.(['uiWorkspace'],host=>{emailWorkspace=host.uiWorkspace;host.effect?.(()=>()=>{emailWorkspace=null})});
 W.register(ctx,{id:'dsh-email.workbench',label:()=>dt('邮件','Email'),icon:'mail',component:EmailSettingsSection,order:54});
 
             // 语言要在任何 t() 之前定下来：槽位的 label thunk 和鲸鱼娘都在挂载时就取文案。

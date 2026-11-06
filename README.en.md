@@ -17,6 +17,8 @@
 
 ## Features
 
+Version 0.23 adds safe HTML send/reply/draft previews, reviewed scheduled sends, explicit Google OAuth, Tencent enterprise mail presets, localized reply quotations and optional mail-triggered DSH tasks. See the [workflow and operating boundaries](docs/OUTGOING-AUTOMATION.en.md). Existing Gmail app-password accounts continue to work. Scheduling requires a running DSH; task execution and automatic result replies are opt-in.
+
 - Use IMAP/POP3/SMTP, Outlook OAuth or AgentMail accounts.
 - Read messages, search and download attachments in the workbench.
 - Review the sender, To/Cc, content and attachments before confirming.

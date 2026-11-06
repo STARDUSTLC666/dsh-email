@@ -46,6 +46,8 @@ export interface AccountCardData {
      * registration below is the application that will be used.
      */
     clientId?: string;
+    oauthProvider?: 'google' | 'microsoft';
+    hasClientSecret?: boolean;
     /**
      * The application the login falls back to when the account names none: the
      * community registration the plugin ships. Carried on the card so the editor
@@ -110,6 +112,8 @@ export interface AccountCardInput {
      * 写入。留空不等于不能用：内置注册就是默认值，这一栏是把默认值换成自己的应用。
      */
     clientId?: string;
+    clientSecret?: string;
+    oauthProvider?: 'google' | 'microsoft';
     /**
      * 发件显示名，三态契约同 clientId：undefined = 本卡片没提供（保留已存的
      * senderName 键），'' = 明确清除，非空 = 写入。只改收件人看到的名称，发件地址
@@ -328,7 +332,7 @@ export declare class EmailSettingsBackend {
      * and both interval and expires_in in seconds, which is the unit the page
      * schedules its polling with.
      */
-    oauthLogin(name: unknown): Promise<Record<string, unknown>>;
+    oauthLogin(name: unknown, force?: boolean): Promise<Record<string, unknown>>;
     /**
      * One poll of an in-flight device-code login.
      *

@@ -91,3 +91,6 @@ Validation host: Harness `0.2.0-rc.2` built from the official release tag (commi
 ## 0.6.2
 
 - server-side search covers `cc` (subject / sender / recipients / CC); the body fallback scan also matches `to` / `cc` and one malformed message no longer aborts the batch; lists are UID-descending (newest first); `email_send` strictly validates attachment paths.
+# 0.23.0 · 2026-11-07
+
+Safe HTML mail/reply/draft previews and MIME alternatives; localized English/Chinese/French quotations; explicitly opted-in trusted replies; confirmed persistent scheduled sends; own-client Google Desktop OAuth with PKCE and protected refresh storage; Tencent enterprise presets; optional authenticated mail-to-native-DSH tasks with bounded rules and separate final-result replies. See [workflows and operating limits](OUTGOING-AUTOMATION.en.md). Google and enterprise live-account testing remains uncompleted; AgentMail uses a simulated account.

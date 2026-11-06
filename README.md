@@ -17,9 +17,12 @@
 
 ## 功能
 
-- 使用 IMAP / POP3 / SMTP、Outlook OAuth 或 AgentMail 账号。
+- 使用 IMAP / POP3 / SMTP、Google / Outlook OAuth 或 AgentMail 账号，提供腾讯企业邮预设。
 - 在工作台浏览邮件、搜索并下载附件。
-- 核对发件账号、To/Cc、正文和附件后确认发送。
+- 编辑 HTML 或纯文本回复与草稿，核对发件账号、To/Cc、正文和附件后立即发送或定时发送。
+- 可选「邮件任务」：从授权邮箱给允许的工作区发起 DSH 任务，并接续原会话；默认关闭。
+
+新增功能的完整流程和边界见[图文邮件、定时发送与邮件任务](docs/OUTGOING-AUTOMATION.md)。Gmail OAuth 需自行创建 Google Desktop app 客户端；应用密码是否可用仍取决于账号策略。定时发送需保持 DSH 运行；自动邮件任务与结果回复均须主动启用。
 
 <details>
 <summary>查看实际示例</summary>

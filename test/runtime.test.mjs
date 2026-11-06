@@ -192,7 +192,7 @@ test('approval controls tool execution and observes live changes to the send pol
   outcome = 'allowed-once'
   assert.deepEqual(await listener(exec, next), { kind: 'allow' })
   assert.equal(state.operations[0].method, 'send')
-  assert.deepEqual(state.operations[0].args, [undefined, 'recipient@example.com', 'test', 'body', undefined, undefined, signal])
+  assert.deepEqual(state.operations[0].args, [undefined, 'recipient@example.com', 'test', 'body', undefined, undefined, signal, undefined])
   assert.equal(requests[1].signal, signal)
   assert.equal(requests[1].agent, agent)
   assert.equal(requests[1].callId, 'call-1')

@@ -47,3 +47,10 @@ The current baseline is Harness **0.2.0-rc.2** built from its official release t
 On 2026-09-10, npm `dsh-email@0.10.6` passed real QQ mailbox folder/list/read/search calls, the settings page's connection test and Save & Apply, and separate SMTP authentication. An empty authorization-code field correctly used `DSH_EMAIL_PASSWORD`. This recheck did not connect to a real mailbox or send, modify or delete mail.
 
 Follows the official [plugin packaging and installation requirements](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.md): an ESM entry point, prebuilt `lib/`, `dsh.bundle.patch` and a `cordis.patch.yml` layer. The plugin explicitly injects its required services and supplies JSON Schema parameters, canonical output and rendering, without importing host-internal services; configuration uses the public `@deepseek-ai/schemastery` package. Use Node 22.19 or later within 22.x, or Node 24 or later. Harness is evolving rapidly; the version above is the tested baseline.
+# 0.23.0 · 2026-11-07
+
+- Windows：完整回归 486 项通过；增加可配置任务前缀与 HTML 结果回复后，相关 12 项专项检查通过（最终 CI 包含新增项）。实际回环 SMTP 解析 MIME，核对 HTML/纯文本替代、回复关联与预览内容一致。
+- 官方 0.2.2-rc.1 桌面程序的隔离 Web profile：加载 12 个邮件工具；未登录接口 401、跨源写入 403。邮件任务通过真实 sessionController/sessionQuery 创建并完成原生会话，沿用标准权限，运行时上下文不会误判成人工插话。
+- 后台 Chrome：真实宿主页面内点击回复全部、编辑 HTML 表格、保存/检查预览、确认定时再取消；1440×1000 与 430×932 查看任务页，无页面异常、窄屏无横向溢出。
+- Gmail：实际账号卡片启动 PKCE 登录、随机回环端口回调、模拟 Google 邮箱身份响应、Windows DPAPI 保存与登录状态更新。Google 服务响应和邮箱账号为模拟，未完成真实 Google 应用端到端授权。
+- 企业邮预设与端点覆盖已验证；未连接真实企业邮箱。AgentMail 使用模拟服务，模型使用本机模拟 Messages 服务；没有向真实收件人发信。没有操作桌面前台窗口。

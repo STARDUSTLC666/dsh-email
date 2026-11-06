@@ -99,6 +99,8 @@ export interface AccountConfig {
      * OAuth2 account, where it overrides OUTLOOK_OAUTH2_CLIENT_ID.
      */
     clientId?: string;
+    clientSecret?: string;
+    oauthProvider?: 'google' | 'microsoft';
     /**
      * Escape hatch over the derived authentication scheme. Left unset, an account
      * pointed at the `outlook` provider or the Exchange Online IMAP host is an
@@ -220,6 +222,8 @@ export interface ResolvedEmailConfig {
     authKind: AuthKind;
     /** Public-client id for the device-code flow (OAuth2 accounts only). */
     clientId?: string;
+    clientSecret?: string;
+    oauthProvider?: 'google' | 'microsoft';
     imap: ImapConfig & {
         host: string;
         port: number;

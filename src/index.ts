@@ -11,6 +11,8 @@ import { EmailDraftBackend, installEmailDrafts } from './draft-web.js'
 import { EmailMailboxBackend, installEmailMailbox } from './mailbox-web.js'
 import { EmailService, type MailDependencies } from './mail-service.js'
 import { installScheduleApproval } from './schedule-tool.js'
+import { disposeOAuthFlows } from './oauth2.js'
+import { MailTaskBackend, installMailTasks } from './mail-tasks.js'
 export const Config = ConfigSchema
 
 export const name = 'tool-email'
@@ -42,8 +44,10 @@ export function installEmailApplication(ctx:any,config:Config={},dependencies:Ma
   const drafts = new EmailDraftBackend(runtime, backend)
   ctx.inject?.(['appReady'],(host:any)=>{if(typeof host.appReady?.onReady==='function')host.appReady.onReady(()=>drafts.startScheduler())})
   ctx.on?.('dispose',()=>drafts.stopScheduler())
+  ctx.on?.('dispose',disposeOAuthFlows)
   installEmailDrafts(ctx, drafts)
   installEmailMailbox(ctx, new EmailMailboxBackend(runtime, drafts))
+  installMailTasks(ctx,new MailTaskBackend(runtime))
   for (const definition of buildEmailTools(runtime, drafts)) ctx.tools.register(definition)
   installSendApproval(ctx, runtime)
   installScheduleApproval(ctx,drafts)

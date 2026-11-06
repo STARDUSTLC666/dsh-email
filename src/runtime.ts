@@ -78,7 +78,7 @@ export function createEmailRuntime(
         const account = settings.accounts.get(settings.defaultAccount)
         if (account) endpointDefaults = { imap: account.imap, smtp: account.smtp }
       } catch { /* A fresh installation remains editable before credentials exist. */ }
-      const shared = Object.fromEntries(['provider', 'user', 'password', 'apiKey', 'senderName', 'authUser', 'authPassword', 'clientId', 'authKind', 'imap', 'smtp', 'inboxFolder']
+      const shared = Object.fromEntries(['provider', 'user', 'password', 'apiKey', 'senderName', 'authUser', 'authPassword', 'clientId', 'clientSecret', 'oauthProvider', 'authKind', 'imap', 'smtp', 'inboxFolder']
         .filter(key => (config as any)[key] !== undefined).map(key => [key, (config as any)[key]]))
       const cards = config.accounts && Object.keys(config.accounts).length > 0
         ? Object.fromEntries(Object.entries(config.accounts).map(([key, account]) => [key, mergeAccountDefaults(shared, account)]))
