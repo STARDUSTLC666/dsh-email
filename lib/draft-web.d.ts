@@ -13,6 +13,12 @@ export declare class EmailDraftBackend {
     private readonly options;
     readonly store: DraftStore;
     private readonly plans;
+    private scheduleTimer?;
+    private scheduleController?;
+    private scheduleWork?;
+    private scheduleGeneration;
+    private scheduleActive;
+    private scheduleError;
     constructor(runtime: Pick<EmailRuntime, 'getEffectiveSettings' | 'getSettingsValue' | 'getPool'>, settings: Pick<EmailSettingsBackend, 'snapshot' | 'saveRecipientRules'>, options?: Options);
     private now;
     private prune;
@@ -24,6 +30,11 @@ export declare class EmailDraftBackend {
     create(input: Record<string, unknown>, signal?: AbortSignal): Promise<EmailDraft>;
     private recover;
     action(body: Record<string, unknown>, signal?: AbortSignal): Promise<unknown>;
+    private sendPlan;
+    runScheduled(signal?: AbortSignal): Promise<void>;
+    private armSchedule;
+    startScheduler(): Promise<void>;
+    stopScheduler(): Promise<void>;
     private writeUpload;
     private upload;
     fetch(request: Request): Promise<Response>;

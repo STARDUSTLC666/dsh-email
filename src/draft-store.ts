@@ -4,17 +4,21 @@ import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import lockfile from 'proper-lockfile'
 import type { EmailSendResult } from './types.js'
+import { scheduledTime } from './scheduled-time.js'
 
-export type DraftState = 'draft' | 'sending' | 'sent' | 'uncertain'
+export type DraftState = 'draft' | 'scheduled' | 'sending' | 'sent' | 'uncertain'
 export interface DraftAttachment { id: string; path: string; filename: string; owned: boolean }
 export interface EmailDraft {
   id: string; revision: number; account: string; to: string; cc: string; subject: string; text: string
   html?: string
+  sendAt?: string
+  scheduleKey?: string
+  scheduledAttachments?: Record<string, string>
   attachments: DraftAttachment[]; state: DraftState; createdAt: string; updatedAt: string
   attemptAt?: string; receipt?: EmailSendResult; error?: string
   reply?: { uid: number | string; folder: string; uidValidity?: number; mode?: 'reply' | 'reply-all' | 'forward' }
 }
-export interface DraftFields { account: string; to: string; cc: string; subject: string; text: string; html?: string }
+export interface DraftFields { account: string; to: string; cc: string; subject: string; text: string; html?: string; sendAt?: string }
 interface Document { version: 1; drafts: EmailDraft[] }
 export class DraftError extends Error { constructor(message: string, readonly code = 'draft-invalid') { super(message) } }
 const isId = (id: unknown): id is string => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id)
@@ -30,6 +34,7 @@ export function draftFields(input: unknown): DraftFields {
     if (raw.html !== undefined && (typeof raw.html !== 'string' || Buffer.byteLength(raw.html) > 256 * 1024 || raw.html.includes('\0'))) throw new DraftError('HTML 正文必须是文本，最多 256 KiB')
     fields.html = typeof raw.html === 'string' && raw.html.trim() ? raw.html : undefined
   }
+  if(Object.hasOwn(raw,'sendAt'))fields.sendAt=raw.sendAt?scheduledTime(raw.sendAt):undefined
   return fields
 }
 
@@ -47,11 +52,13 @@ export class DraftStore {
       const doc = JSON.parse(await readFile(this.file, 'utf8')) as Document
       if (doc.version !== 1 || !Array.isArray(doc.drafts) || doc.drafts.length > 50 || new Set(doc.drafts.map(d => d.id)).size !== doc.drafts.length) throw new Error('invalid document')
       for (const draft of doc.drafts) {
-        if (!isId(draft.id) || !Number.isSafeInteger(draft.revision) || draft.revision < 1 || !['draft', 'sending', 'sent', 'uncertain'].includes(draft.state)) throw new Error('invalid draft')
+        if (!isId(draft.id) || !Number.isSafeInteger(draft.revision) || draft.revision < 1 || !['draft', 'scheduled', 'sending', 'sent', 'uncertain'].includes(draft.state)) throw new Error('invalid draft')
         draftFields(draft)
+        if(draft.state==='scheduled'&&(!draft.sendAt||!/^[a-f0-9]{64}$/.test(draft.scheduleKey||'')||!draft.scheduledAttachments||Array.isArray(draft.scheduledAttachments)||Object.values(draft.scheduledAttachments).some(x=>typeof x!=='string'||!/^[a-f0-9]{64}$/.test(x))))throw new Error('invalid scheduled draft')
         if (draft.reply && (!(typeof draft.reply.uid === 'number' && Number.isSafeInteger(draft.reply.uid) && draft.reply.uid > 0 || typeof draft.reply.uid === 'string' && draft.reply.uid.length > 0 && draft.reply.uid.length <= 998 && !/[\r\n\0]/.test(draft.reply.uid)) || typeof draft.reply.folder !== 'string' || draft.reply.folder.length > 1024)) throw new Error('invalid reply reference')
         if (draft.reply?.uidValidity !== undefined && (!Number.isSafeInteger(draft.reply.uidValidity) || draft.reply.uidValidity <= 0)) throw new Error('invalid reply UIDVALIDITY')
         if (!Array.isArray(draft.attachments) || draft.attachments.length > 10 || draft.attachments.some(file => !isId(file.id) || !isAbsolute(file.path) || typeof file.filename !== 'string' || typeof file.owned !== 'boolean')) throw new Error('invalid attachments')
+        if(draft.state==='scheduled'&&(Object.keys(draft.scheduledAttachments!).length!==draft.attachments.length||draft.attachments.some(file=>!file.owned||!Object.hasOwn(draft.scheduledAttachments!,file.id))))throw new Error('invalid scheduled attachments')
       }
       return doc
     } catch (error) {

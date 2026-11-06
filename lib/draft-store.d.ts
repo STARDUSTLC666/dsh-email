@@ -1,5 +1,5 @@
 import type { EmailSendResult } from './types.js';
-export type DraftState = 'draft' | 'sending' | 'sent' | 'uncertain';
+export type DraftState = 'draft' | 'scheduled' | 'sending' | 'sent' | 'uncertain';
 export interface DraftAttachment {
     id: string;
     path: string;
@@ -15,6 +15,9 @@ export interface EmailDraft {
     subject: string;
     text: string;
     html?: string;
+    sendAt?: string;
+    scheduleKey?: string;
+    scheduledAttachments?: Record<string, string>;
     attachments: DraftAttachment[];
     state: DraftState;
     createdAt: string;
@@ -36,6 +39,7 @@ export interface DraftFields {
     subject: string;
     text: string;
     html?: string;
+    sendAt?: string;
 }
 export declare class DraftError extends Error {
     readonly code: string;

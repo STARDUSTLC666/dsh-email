@@ -5,6 +5,7 @@ import { NOT_LOGGED_IN_MESSAGE, oauth2StateOf } from './oauth2.js'
 import type { EmailRuntime } from './runtime.js'
 import type { EmailDraftBackend } from './draft-web.js'
 import { takeReplyAuthorization } from './approval.js'
+import { scheduleTool } from './schedule-tool.js'
 import {
   descriptions, parameters, MAX_LIMIT, MARK_ACTIONS, REPLY_MODES,
   executionSignal, normalizeAttachmentPaths, parseEmailDay,
@@ -39,7 +40,7 @@ import type {
 const QUERY_TIMEOUT_MS = 60000
 const BATCH_TIMEOUT_MS = 120000
 const DRAFT_PARAMETERS = { type: 'object', properties: {
-  account: {type:'string',description:'Sending account; default when omitted'},to:{type:'string',description:'Recipients; forward destination when reply.mode is forward'},cc:{type:'string'},subject:{type:'string'},text:{type:'string',description:'Plain text; optional when html is supplied'},html:{type:'string',description:'Safe HTML body; reviewed in Drafts before sending'},locale:{type:'string',description:'Reply quote language override: zh, en or fr'},
+  account: {type:'string',description:'Sending account; default when omitted'},to:{type:'string',description:'Recipients; forward destination when reply.mode is forward'},cc:{type:'string'},subject:{type:'string'},text:{type:'string',description:'Plain text; optional when html is supplied'},html:{type:'string',description:'Safe HTML body; reviewed in Drafts before sending'},locale:{type:'string',description:'Reply quote language override: zh, en or fr'},sendAt:{type:'string',description:'Optional proposed send time in ISO 8601 with timezone. Saving a draft does not schedule it; confirm in Drafts or use email_schedule.'},
   reply:{type:'object',properties:{uid:{oneOf:[{type:'integer'},{type:'string'}]},folder:{type:'string'},mode:{type:'string',enum:['reply','reply-all','forward']}},required:['uid'],additionalProperties:false},
   attachments:{type:'array',items:{type:'string'},description:'Up to ten local attachment paths, relative to this conversation workspace'}
 },additionalProperties:false}
@@ -64,10 +65,11 @@ export interface EmailToolDefinition {
   timeoutMs?: number
 }
 
-export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffectiveSettings' | 'watch'>, drafts?: Pick<EmailDraftBackend, 'create'>): EmailToolDefinition[] {
+export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffectiveSettings' | 'watch'>, drafts?: Pick<EmailDraftBackend, 'create'> & Partial<Pick<EmailDraftBackend,'action'|'store'>>): EmailToolDefinition[] {
   const { getPool, getEffectiveSettings, watch: watchCore } = runtime
 
   return [
+    ...(drafts?.action&&drafts.store?[scheduleTool(drafts as EmailDraftBackend)]:[]),
     ...(drafts ? [{
       name: 'email_draft',
       description: '准备可编辑的纯文本或 HTML 邮件草稿，不投递邮件。reply 可引用原邮件并保留回复/转发线程。用户在设置 → 邮件 → 草稿中检查正文和附件，预览并确认后发送。',

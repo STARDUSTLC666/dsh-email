@@ -12,4 +12,4 @@ export interface EmailToolDefinition {
     execute(args: unknown, exec?: unknown): Promise<unknown>;
     timeoutMs?: number;
 }
-export declare function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffectiveSettings' | 'watch'>, drafts?: Pick<EmailDraftBackend, 'create'>): EmailToolDefinition[];
+export declare function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffectiveSettings' | 'watch'>, drafts?: Pick<EmailDraftBackend, 'create'> & Partial<Pick<EmailDraftBackend, 'action' | 'store'>>): EmailToolDefinition[];

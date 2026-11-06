@@ -10,6 +10,7 @@ import { EmailSettingsSchema, SETTINGS_NAMESPACE } from './settings.js'
 import { EmailDraftBackend, installEmailDrafts } from './draft-web.js'
 import { EmailMailboxBackend, installEmailMailbox } from './mailbox-web.js'
 import { EmailService, type MailDependencies } from './mail-service.js'
+import { installScheduleApproval } from './schedule-tool.js'
 export const Config = ConfigSchema
 
 export const name = 'tool-email'
@@ -39,10 +40,13 @@ export function installEmailApplication(ctx:any,config:Config={},dependencies:Ma
   backend.watchImpl = runtime.watch
   installEmailSettingsWeb(ctx, backend)
   const drafts = new EmailDraftBackend(runtime, backend)
+  ctx.inject?.(['appReady'],(host:any)=>{if(typeof host.appReady?.onReady==='function')host.appReady.onReady(()=>drafts.startScheduler())})
+  ctx.on?.('dispose',()=>drafts.stopScheduler())
   installEmailDrafts(ctx, drafts)
   installEmailMailbox(ctx, new EmailMailboxBackend(runtime, drafts))
   for (const definition of buildEmailTools(runtime, drafts)) ctx.tools.register(definition)
   installSendApproval(ctx, runtime)
+  installScheduleApproval(ctx,drafts)
 }
 
 export { clampInt, defaultDownloadDir, EMAIL_PASSWORD_ENV, isOAuth2Account, OUTLOOK_OAUTH2_CLIENT_ID, OUTLOOK_PROVIDER, parseAccountsYaml, parseServerPresets, presetNamesIn, providerNames, PROVIDER_NAMES, resolveEmailConfig, resolveEmailSettings, serializeAccountsYaml } from './config.js'
