@@ -1,5 +1,6 @@
 import { ImapFlow } from 'imapflow';
 import type { ResolvedEmailConfig, ResolvedEmailSettings } from './config.js';
+import { type ReplyOptions } from './reply-locale.js';
 import type { AddressEntry, EmailAttachmentMeta, EmailAttachmentResult, EmailFoldersResult, EmailListResult, EmailMarkAction, EmailMarkResult, EmailReadResult, EmailReplyMode, EmailReplyResult, EmailSearchResult, EmailSearchOptions, EmailSendResult, ListedMessage } from './types.js';
 export declare class MailError extends Error {
     constructor(message: string);
@@ -92,6 +93,7 @@ export interface BuiltReply {
     cc?: string;
     subject: string;
     text: string;
+    html?: string;
     inReplyTo?: string;
     references?: string;
 }
@@ -105,7 +107,7 @@ export declare function extractMessageIds(source: Buffer): {
  * be tested without a connection: recipients exclude the sending account,
  * subject prefixes never stack, the original text is quoted underneath.
  */
-export declare function buildReplyMessage(original: OriginalDigest, mode: EmailReplyMode, selfAddress: string | readonly string[], text: string, forwardTo?: string): BuiltReply;
+export declare function buildReplyMessage(original: OriginalDigest, mode: EmailReplyMode, selfAddress: string | readonly string[], text: string, forwardTo?: string, options?: ReplyOptions): BuiltReply;
 /**
  * One mailbox pool for the whole plugin: pooled IMAP connections per account.
  */
@@ -211,7 +213,7 @@ export declare class EmailPool {
     mark(accountName: string | undefined, folder: string, uid: number, action: EmailMarkAction, toFolder?: string, signal?: AbortSignal): Promise<EmailMarkResult>;
     folders(accountName: string | undefined, subscribedOnly: boolean, signal?: AbortSignal): Promise<EmailFoldersResult>;
     downloadAttachment(accountName: string | undefined, folder: string, uid: number, index: number, workspaceHint?: string, signal?: AbortSignal, byteLimit?: number, expectedValidity?: number): Promise<EmailAttachmentResult>;
-    send(accountName: string | undefined, to: string, subject: string, text: string | undefined, cc: string | undefined, attachmentPaths: string[] | undefined, signal?: AbortSignal): Promise<EmailSendResult>;
+    send(accountName: string | undefined, to: string, subject: string, text: string | undefined, cc: string | undefined, attachmentPaths: string[] | undefined, signal?: AbortSignal, html?: string): Promise<EmailSendResult>;
     /** Send the attachment bytes the human reviewed, without re-reading mutable paths. */
     sendPrepared(accountName: string, to: string, subject: string, text: string, cc: string, attachments: Array<{
         filename: string;
@@ -220,8 +222,9 @@ export declare class EmailPool {
         uid: number;
         folder: string;
         uidValidity?: number;
-    }, pop3Thread?: Pick<BuiltReply, 'inReplyTo' | 'references'>): Promise<EmailSendResult>;
-    reply(accountName: string | undefined, folder: string, uid: number, mode: EmailReplyMode, text: string, forwardTo: string, cc: string | undefined, signal?: AbortSignal): Promise<EmailReplyResult>;
+        mode?: EmailReplyMode;
+    }, pop3Thread?: Pick<BuiltReply, 'inReplyTo' | 'references'>, html?: string): Promise<EmailSendResult>;
+    reply(accountName: string | undefined, folder: string, uid: number, mode: EmailReplyMode, text: string, forwardTo: string, cc: string | undefined, signal?: AbortSignal, options?: ReplyOptions): Promise<EmailReplyResult>;
 }
 /** Stat every attachment path up front; total size must stay under the cap. */
 export declare function validateAttachmentPaths(paths: string[], maxBytes: number, signal?: AbortSignal): Promise<Array<{

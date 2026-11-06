@@ -5,7 +5,7 @@ import { parseRecipientPolicies, type RecipientPolicy } from './recipient-policy
 import { parseProxyUrl } from './proxy.js'
 
 /** The 8 built-in provider ids. A `provider` may also name a custom preset. */
-export type ProviderName = 'qq' | '163' | '126' | 'sina' | 'aliyun' | 'gmail' | 'outlook' | 'icloud'
+export type ProviderName = 'qq' | 'exmail' | '163' | '126' | 'sina' | 'aliyun' | 'gmail' | 'outlook' | 'icloud'
 
 /**
  * A provider id as an account stores it: one of the built-in names, or the name
@@ -139,6 +139,8 @@ export interface AccountConfig {
    */
   proxy?: string
   inboxFolder?: string
+  replyLocale?: string
+  replyTimeZone?: string
 }
 
 export interface EmailConfig extends AccountConfig {
@@ -148,6 +150,7 @@ export interface EmailConfig extends AccountConfig {
   trustedRecipientsYaml?: string
   /** Ask the user for approval before email_send. Default true. */
   sendApproval?: boolean
+  allowTrustedReply?: boolean
   /** Plain-text body cap for email_read. Default 20000. */
   maxBodyChars?: number
   /** Named accounts. Account-level fields override the top-level shorthand. */
@@ -192,6 +195,7 @@ export interface EndpointPreset {
 
 export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
   qq: { imap: { host: 'imap.qq.com', port: 993, secure: true }, smtp: { host: 'smtp.qq.com', port: 465, secure: true } },
+  exmail: { imap: { host: 'imap.exmail.qq.com', port: 993, secure: true }, smtp: { host: 'smtp.exmail.qq.com', port: 465, secure: true } },
   '163': { imap: { host: 'imap.163.com', port: 993, secure: true }, smtp: { host: 'smtp.163.com', port: 465, secure: true } },
   '126': { imap: { host: 'imap.126.com', port: 993, secure: true }, smtp: { host: 'smtp.126.com', port: 465, secure: true } },
   sina: { imap: { host: 'imap.sina.com', port: 993, secure: true }, smtp: { host: 'smtp.sina.com', port: 465, secure: true } },
@@ -205,7 +209,7 @@ export const PROVIDER_NAMES = Object.keys(PROVIDER_PRESETS)
 
 /** Documented POP endpoints; unsupported providers require an explicit host. */
 export const POP3_PRESETS: Record<string, string> = {
-  qq: 'pop.qq.com', '163': 'pop.163.com', '126': 'pop.126.com', gmail: 'pop.gmail.com',
+  qq: 'pop.qq.com', exmail: 'pop.exmail.qq.com', '163': 'pop.163.com', '126': 'pop.126.com', gmail: 'pop.gmail.com',
 }
 
 export const EMAIL_PASSWORD_ENV = 'DSH_EMAIL_PASSWORD'
@@ -215,6 +219,8 @@ const DEFAULT_IDLE_TIMEOUT_MS = 60000
 
 /** Fully resolved, validated configuration for one account. */
 export interface ResolvedEmailConfig {
+  replyLocale?: string
+  replyTimeZone?: string
   transport?: 'agentmail' | 'pop3'
   pop3?: ImapConfig & { host: string; port: number; secure: boolean }
   apiBase?: 'https://api.agentmail.to' | 'https://api.agentmail.eu'
@@ -440,6 +446,8 @@ export function resolveEmailSettings(config: EmailConfig | undefined, onlyAccoun
     smtp: raw.smtp,
     proxy: raw.proxy,
     inboxFolder: raw.inboxFolder,
+    replyLocale: raw.replyLocale,
+    replyTimeZone: raw.replyTimeZone,
   }
   const parsedYaml = raw.accountsYaml?.trim() ? parseAccountsYaml(raw.accountsYaml) : undefined
   const entries = parsedYaml !== undefined
@@ -580,7 +588,9 @@ function resolveAccount(
     if (!/^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(user) || !key || key.length > 4096 || /[^\x21-\x7e]/.test(key)) throw new Error('AgentMail 账号需要有效邮箱地址和 API Key，请在「设置 → 邮件」补全后测试连接。')
     return { transport: 'agentmail', apiBase: requested === 'agentmail-eu' ? 'https://api.agentmail.eu' : 'https://api.agentmail.to', user,
       senderName: '', authUser: user, authPassword: key, password: key, authKind: 'password',
-      imap: { host: '', port: 993, secure: true }, smtp: { host: '', port: 465, secure: true }, inboxFolder: 'INBOX' }
+      imap: { host: '', port: 993, secure: true }, smtp: { host: '', port: 465, secure: true }, inboxFolder: 'INBOX',
+      ...(acc.replyLocale ?? common.replyLocale ? {replyLocale:acc.replyLocale ?? common.replyLocale}:{}),
+      ...(acc.replyTimeZone ?? common.replyTimeZone ? {replyTimeZone:acc.replyTimeZone ?? common.replyTimeZone}:{}) }
   }
   if (requested !== undefined && preset === undefined) {
     throw new Error(`dsh-email：账号 "${name}" 的 provider "${requested}" 未知，可选：${known.join('/')}；或省略 provider 直接填 imap.host 与 smtp.host`)
@@ -673,6 +683,8 @@ function resolveAccount(
     imap: { ...imap, host: imap.host!, port: imap.port!, secure: imap.secure! },
     smtp: { ...smtp, host: smtp.host ?? '', port: smtp.port ?? 465, secure: smtp.secure ?? true },
     inboxFolder: (acc.inboxFolder ?? common.inboxFolder ?? '').trim() || 'INBOX',
+    ...(acc.replyLocale ?? common.replyLocale ? { replyLocale: (acc.replyLocale ?? common.replyLocale)!.trim() } : {}),
+    ...(acc.replyTimeZone ?? common.replyTimeZone ? { replyTimeZone: (acc.replyTimeZone ?? common.replyTimeZone)!.trim() } : {}),
   }
 }
 

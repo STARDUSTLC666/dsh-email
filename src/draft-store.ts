@@ -9,11 +9,12 @@ export type DraftState = 'draft' | 'sending' | 'sent' | 'uncertain'
 export interface DraftAttachment { id: string; path: string; filename: string; owned: boolean }
 export interface EmailDraft {
   id: string; revision: number; account: string; to: string; cc: string; subject: string; text: string
+  html?: string
   attachments: DraftAttachment[]; state: DraftState; createdAt: string; updatedAt: string
   attemptAt?: string; receipt?: EmailSendResult; error?: string
-  reply?: { uid: number | string; folder: string; uidValidity?: number }
+  reply?: { uid: number | string; folder: string; uidValidity?: number; mode?: 'reply' | 'reply-all' | 'forward' }
 }
-export interface DraftFields { account: string; to: string; cc: string; subject: string; text: string }
+export interface DraftFields { account: string; to: string; cc: string; subject: string; text: string; html?: string }
 interface Document { version: 1; drafts: EmailDraft[] }
 export class DraftError extends Error { constructor(message: string, readonly code = 'draft-invalid') { super(message) } }
 const isId = (id: unknown): id is string => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id)
@@ -24,6 +25,10 @@ export function draftFields(input: unknown): DraftFields {
     const value = raw[key] ?? ''
     if (typeof value !== 'string' || Buffer.byteLength(value) > cap || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value) || (key !== 'text' && /[\r\n]/.test(value))) throw new DraftError(key === 'text' ? '正文最多 100 KiB，且不能包含非文本控制字符' : key + ' 内容过长或包含换行/控制字符')
     fields[key] = key === 'text' ? value : value.trim()
+  }
+  if (Object.hasOwn(raw, 'html')) {
+    if (raw.html !== undefined && (typeof raw.html !== 'string' || Buffer.byteLength(raw.html) > 256 * 1024 || raw.html.includes('\0'))) throw new DraftError('HTML 正文必须是文本，最多 256 KiB')
+    fields.html = typeof raw.html === 'string' && raw.html.trim() ? raw.html : undefined
   }
   return fields
 }

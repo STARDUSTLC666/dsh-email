@@ -30,7 +30,7 @@ export interface EmailAttachmentMeta {
 }
 
 /** Inert, allowlisted email content. Only the mailbox backend resolves images. */
-export type EmailContentNode = string | { tag: string; children?: EmailContentNode[]; href?: string; image?: number; span?: number }
+export type EmailContentNode = string | { tag: string; children?: EmailContentNode[]; href?: string; image?: number; span?: number; style?: Record<string, string> }
 export interface EmailRichBody {
   nodes: EmailContentNode[]
   images: { kind: 'inline' | 'remote'; alt: string; source: string; attachment?: number }[]
@@ -186,6 +186,7 @@ export interface EmailSendArgs extends AccountArg {
   to: string
   subject: string
   text?: string
+  html?: string
   cc?: string
   /** Absolute paths (or paths relative to the dsh process cwd) to attach. */
   attachments?: string[]
@@ -236,7 +237,10 @@ export type EmailReplyMode = 'reply' | 'reply-all' | 'forward'
 export interface EmailReplyArgs extends AccountArg {
   uid: number | string
   /** The new text to write; the original is quoted below it automatically. */
-  text: string
+  text?: string
+  html?: string
+  locale?: string
+  timeZone?: string
   mode?: EmailReplyMode
   /** Recipient(s) for mode=forward, comma-separated. */
   to?: string

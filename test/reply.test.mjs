@@ -14,14 +14,14 @@ const original = {
 }
 
 test('reply targets the original sender only, quotes the body, sets thread headers', () => {
-  const built = buildReplyMessage(original, 'reply', 'me@qq.com', '收到了')
+  const built = buildReplyMessage(original, 'reply', 'me@qq.com', '收到了', '', {locale:'zh'})
   assert.equal(built.to, '张三 <zhangsan@example.com>')
   assert.equal(built.subject, 'Re: 项目进度')
   assert.equal(built.inReplyTo, 'orig-1@example.com')
   assert.equal(built.references, 'root-0@example.com orig-1@example.com')
   assert.match(built.text, /^收到了/)
   assert.match(built.text, /> 第一行\n> 第二行/)
-  assert.match(built.text, /张三 写道：/)
+  assert.match(built.text, /张三 <zhangsan@example.com> 写道：/)
 })
 
 test('reply-all excludes self, dedupes, keeps from + to + cc', () => {
@@ -51,7 +51,7 @@ test('forward needs an explicit recipient and embeds the original', () => {
     () => buildReplyMessage(original, 'forward', 'me@qq.com', 'x', ''),
     err => err instanceof MailError && /to 参数/.test(err.message),
   )
-  const built = buildReplyMessage(original, 'forward', 'me@qq.com', '看一下这个', 'boss@corp.com')
+  const built = buildReplyMessage(original, 'forward', 'me@qq.com', '看一下这个', 'boss@corp.com', {locale:'zh'})
   assert.equal(built.to, 'boss@corp.com')
   assert.match(built.text, /转发的邮件/)
   assert.match(built.text, /发件人: 张三/)
@@ -77,7 +77,7 @@ test('no Message-ID means no thread headers, still sends', () => {
 
 test('long original bodies are truncated in the quote', () => {
   const long = { ...original, text: '字'.repeat(25000) }
-  const built = buildReplyMessage(long, 'reply', 'me@qq.com', 'x')
+  const built = buildReplyMessage(long, 'reply', 'me@qq.com', 'x', '', {locale:'zh'})
   assert.match(built.text, /已截断/)
 })
 

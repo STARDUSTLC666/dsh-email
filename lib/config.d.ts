@@ -1,6 +1,6 @@
 import { type RecipientPolicy } from './recipient-policy.js';
 /** The 8 built-in provider ids. A `provider` may also name a custom preset. */
-export type ProviderName = 'qq' | '163' | '126' | 'sina' | 'aliyun' | 'gmail' | 'outlook' | 'icloud';
+export type ProviderName = 'qq' | 'exmail' | '163' | '126' | 'sina' | 'aliyun' | 'gmail' | 'outlook' | 'icloud';
 /**
  * A provider id as an account stores it: one of the built-in names, or the name
  * of a custom `serverPresets` entry. The union keeps autocomplete for the
@@ -119,6 +119,8 @@ export interface AccountConfig {
      */
     proxy?: string;
     inboxFolder?: string;
+    replyLocale?: string;
+    replyTimeZone?: string;
 }
 export interface EmailConfig extends AccountConfig {
     /** Show browser new-mail notifications. UI policy only; default true. */
@@ -127,6 +129,7 @@ export interface EmailConfig extends AccountConfig {
     trustedRecipientsYaml?: string;
     /** Ask the user for approval before email_send. Default true. */
     sendApproval?: boolean;
+    allowTrustedReply?: boolean;
     /** Plain-text body cap for email_read. Default 20000. */
     maxBodyChars?: number;
     /** Named accounts. Account-level fields override the top-level shorthand. */
@@ -189,6 +192,8 @@ export declare const POP3_PRESETS: Record<string, string>;
 export declare const EMAIL_PASSWORD_ENV = "DSH_EMAIL_PASSWORD";
 /** Fully resolved, validated configuration for one account. */
 export interface ResolvedEmailConfig {
+    replyLocale?: string;
+    replyTimeZone?: string;
     transport?: 'agentmail' | 'pop3';
     pop3?: ImapConfig & {
         host: string;

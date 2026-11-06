@@ -144,6 +144,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
          */
         const PROVIDERS = [
             ["qq", "provider.qq"],
+            ["exmail", "provider.exmail"],
             ["163", "provider.163"],
             ["126", "provider.126"],
             ["sina", "provider.sina"],
@@ -158,6 +159,9 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             password: "",
             inboxFolder: "INBOX",
             sendApproval: true,
+            allowTrustedReply: false,
+            replyLocale: "auto",
+            replyTimeZone: "",
             newMailPopup: true,
             downloadDir: "",
             accountsYaml: "",
@@ -294,6 +298,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "provider.sina": "新浪邮箱",
                 "provider.aliyun": "阿里邮箱",
                 "provider.gmail": "Gmail",
+                "provider.exmail": "腾讯企业邮箱 / 企业微信邮箱",
                 "provider.outlook": "Outlook",
                 "provider.icloud": "iCloud",
                 "provider.custom": "自定义",
@@ -466,6 +471,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "provider.sina": "Sina Mail",
                 "provider.aliyun": "Alibaba Mail",
                 "provider.gmail": "Gmail",
+                "provider.exmail": "Tencent Enterprise / WeCom Mail",
                 "provider.outlook": "Outlook",
                 "provider.icloud": "iCloud",
                 "provider.custom": "Custom",
@@ -2351,9 +2357,14 @@ result?.searchSource === "api" ? h("p", { className: "dshe-hint" }, dt("AgentMai
             }
             return result.value;
         }
-        const draftForm = (draft) => ({ account: draft.account || "", to: draft.to || "", cc: draft.cc || "", subject: draft.subject || "", text: draft.text || "", attachments: draft.attachments.map(file => file.id) });
+        function OutgoingMailPreview({body}) {
+          const render=(nodes,prefix='')=>(nodes||[]).map((node,index)=>{if(typeof node==='string')return node;const props={key:prefix+index,style:node.style,...(node.href?{href:node.href,target:'_blank',rel:'noopener noreferrer'}:{}),...(node.span?{colSpan:node.span}:{})};return ['br','hr'].includes(node.tag)?h(node.tag,props):h(node.tag,props,render(node.children,prefix+index+'-'));});
+          return h('div',null,h('div',{className:'email-draft-rich',style:{maxHeight:320,overflow:'auto',overflowWrap:'anywhere'}},render(body.rich.nodes)),h('details',null,h('summary',null,dt('查看纯文本备选','View plain-text alternative')),h('pre',null,body.text)));
+        }
+        const draftForm = (draft) => ({ account: draft.account || "", to: draft.to || "", cc: draft.cc || "", subject: draft.subject || "", text: draft.text || "", html: draft.html || "", attachments: draft.attachments.map(file => file.id) });
         const draftState = (state) => ({ draft: dt("未发送", "Not sent"), sending: dt("正在提交 / 待核对", "Submitting / check mailbox"), sent: dt("已保存服务端回执", "Server receipt saved"), uncertain: dt("结果未确定，请核对邮箱", "Outcome uncertain, check mailbox") })[state] || state;
         function DraftWorkbench({active,requestedDraft,composeRequest,onComposeFinished}) {
+const [bodyFormat,setBodyFormat]=useState(() => draftUiCache?.form?.html ? 'html' : 'text');
 const [showEditor,setShowEditor]=useState(false);const handledCompose=useRef(null),composeStage=useRef(null);const controlId=React.useId();
             const [data, setData] = useState({ drafts: [], accounts: [] }), [selected, setSelected] = useState(() => draftUiCache && draftUiCache.selected), [form, setForm] = useState(() => draftUiCache && draftUiCache.form);
             const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState(""), [preview, setPreview] = useState(null), [acknowledged, setAcknowledged] = useState(false), [pending, setPending] = useState(null), [remove, setRemove] = useState(false), [copy, setCopy] = useState(false);
@@ -2385,7 +2396,7 @@ __stardustUpdatesGuard(React, "dsh-email.draft", { dirty: !!dirty, busy, retainO
                     setBusy(false);
                 }
             };
-            const adopt = (draft) => { setShowEditor(true); setSelected(draft); setForm(draftForm(draft)); setPreview(null); setAcknowledged(false); setRemove(false); setCopy(false); setError(""); setNotice(""); };
+            const adopt = (draft) => { setShowEditor(true); setSelected(draft); setForm(draftForm(draft)); setBodyFormat(draft.html ? 'html' : 'text'); setPreview(null); setAcknowledged(false); setRemove(false); setCopy(false); setError(""); setNotice(""); };
             useEffect(() => { if (active) {
                 setPreview(null);
                 setAcknowledged(false);
@@ -2428,7 +2439,7 @@ const field = (key, zh, en, multiline) => h("div", { className: "dshe-field", ke
                 h("p", null, dt("主题：", "Subject: ") + preview.draft.subject),
                 preview.matching.blocked ? h("div", { className: "dshe-alert error", role: "alert" }, dt("有收件人命中禁止规则，无法发送。请修改草稿或收件人规则。", "A recipient is blocked. Change the draft or recipient rules before sending.")) : null,
                 h("ul", { className: "dshe-match-list" }, preview.matching.rows.map((row, index) => h("li", { key: index }, (row.field === "cc" ? "Cc: " : "To: ") + row.address + " · " + (row.blocked ? dt("禁止发送：", "Blocked: ") + row.value : row.matched ? dt("匹配可信规则", "Matches a trusted rule") : dt("需要确认", "Needs confirmation"))))),
-                h("pre", null, preview.draft.text || dt("（空正文）", "(Empty body)")),
+                preview.body?.rich?.nodes?.length ? h(OutgoingMailPreview,{body:preview.body}) : h("pre", null, preview.body?.text || preview.draft.text || dt("（空正文）", "(Empty body)")),
                 preview.attachments.length ? h("ul", { className: "dshe-files" }, preview.attachments.map(file => h("li", { key: file.id }, [
                     h("span", null, file.filename + " · " + Math.ceil(file.size / 1024) + " KiB"),
                     h("a", { href: DRAFT_ROUTE + "?preview=" + encodeURIComponent(preview.id) + "&attachment=" + encodeURIComponent(file.id), download: file.filename }, dt("下载检查", "Download to check")),
@@ -2471,7 +2482,9 @@ notice ? h("div", { className: "dshe-alert info", role: "status" }, notice) : nu
  selected.reply ? h('p', { className: 'dshe-alert', role: 'note' }, dt('此草稿回复原邮件，保留会话关联与原文引用。请在引用上方填写回复，预览后再确认发送。', 'This draft replies in the original thread and includes a quoted copy. Write above the quote, then review and confirm before sending.')) : null,
                         h("div", { role: "status", className: "dshe-hint" }, dirty ? dt("有未保存的编辑", "Unsaved edits") : draftState(selected.state)),
                         h("div", { className: "dshe-field" }, [h("label", { htmlFor: controlId + "-account" }, dt("发件账号", "Sending account")), h("select", { id: controlId + "-account", value: form.account, disabled: busy || locked || !!selected?.reply, onChange: event => { const value = event.target.value; setForm(current => ({ ...current, account: value })); setPreview(null); setAcknowledged(false); } }, [h("option", { value: "" }, dt("请选择账号", "Choose an account")), ...[...new Set([...data.accounts, ...(form.account ? [form.account] : [])])].map(name => h("option", { key: name, value: name }, name))])]),
-                        field("to", "收件人 To", "Recipients To"), field("cc", "抄送 Cc", "Copy Cc"), field("subject", "主题", "Subject"), field("text", "正文", "Message", true),
+                        field("to", "收件人 To", "Recipients To"), field("cc", "抄送 Cc", "Copy Cc"), field("subject", "主题", "Subject"),
+                        h('label',{className:'dshe-field'},dt('正文格式','Body format'),h('select',{'aria-label':dt('正文格式','Body format'),value:bodyFormat,disabled:busy||locked,onChange:e=>{const next=e.target.value;setBodyFormat(next);setForm(current=>({...current,html:next==='html'?(current.html||'<p>'+String(current.text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')+'</p>'):'',text:next==='html'?'':current.text||current.html.replace(/<[^>]*>/g,' ')}));setPreview(null);setAcknowledged(false);}},h('option',{value:'text'},dt('纯文本','Plain text')),h('option',{value:'html'},dt('HTML 排版','Formatted HTML')))),
+                        bodyFormat==='html'?h(React.Fragment,null,field('html','HTML 正文','HTML body',true),field('text','纯文本备选（可选）','Plain-text alternative (optional)',true),h('p',{className:'dshe-hint'},dt('预览并发送安全排版；未填写纯文本时自动生成。脚本和外部图片会移除。','Preview and send safe formatting. Plain text is generated when omitted. Scripts and external images are removed.'))):field("text", "正文", "Message", true),
                         h("ul", { className: "dshe-files" }, selected.attachments.filter(file => form.attachments.includes(file.id)).map(file => h("li", { key: file.id }, [h("span", null, file.filename), !locked ? h("button", { type: "button", className: "dshe-btn", disabled: busy, "aria-label": dt("移除附件 ", "Remove attachment ") + file.filename, onClick: () => { setForm(current => ({ ...current, attachments: current.attachments.filter(id => id !== file.id) })); setPreview(null); setAcknowledged(false); } }, dt("移除", "Remove")) : null]))),
                         !locked ? h("label", { className: "dshe-upload" }, [dt("添加附件（先保存编辑，最多 10 个 / 合计 ", "Add attachments (save edits first; up to 10 files / ") + capLabel + dt("）", " total)"), h("input", { type: "file", multiple: true, disabled: busy || dirty, "aria-label": dt("添加附件", "Add attachments"), onChange: event => { const files = Array.from(event.target.files || []); event.target.value = ""; run(async () => { let current = selected; for (const file of files) {
                                     if (file.size > attachmentCap)
@@ -2534,7 +2547,7 @@ __stardustUpdatesGuard(React, "dsh-email.rules", { dirty: !!dirty, busy, retainO
             return h("section", { className: "dshe-panel dshe-rule-panel", "aria-label": dt("可信收件人规则", "Trusted recipients") }, [
                 h("p", { className: "dshe-hint" }, dt("默认每次确认。主动启用后，只有该账号的全部 To/Cc 都匹配时，email_send 才跳过插件确认；宿主权限仍然生效，草稿仍需手动确认。域名规则只匹配指定域名，不包含子域名。", "Approval is the default. When enabled, email_send skips this plugin's approval only if every To/Cc address matches this account's rules. Host permissions still apply, and drafts still need manual confirmation. Domain rules exclude subdomains.")),
                 h("p", { className: "dshe-hint" }, dt("禁止规则优先于可信规则，关闭发信确认也不能绕过；同样适用于草稿、回复与转发。禁止域名也仅精确匹配，不包含子域名。", "Blocked recipients take precedence over trusted rules, even with send approval off. Blocks also apply to drafts, replies and forwards. Blocked domains match exactly and exclude subdomains.")),
-                h('p', { className: 'dshe-hint' }, dt('可信名单的免审只适用于 email_send 新建邮件。email_reply 回复、回复全部和转发仍需确认；Full Access 不会弹确认框时，可在草稿页预览实际收件人并手动发送。', 'Trusted-recipient approval skipping applies only to new mail through email_send. email_reply, reply-all and forwarding still require confirmation. If Full Access cannot show a prompt, review the actual recipients in Drafts and send manually.')),
+                h('p', { className: 'dshe-hint' }, dt('可信回复免审默认关闭，可在连接设置中单独开启。开启后会读取原邮件并核对回复、回复全部或转发的所有实际 To/Cc；任何一位不可信都仍需确认。Full Access 无法显示确认时，可在草稿页预览并手动发送。', 'Trusted reply skipping is off by default and can be enabled in Connection settings. It checks every actual To/Cc for replies, reply-all and forwards; any unmatched recipient still needs confirmation. Use Drafts for manual review if Full Access cannot show a prompt.')),
                 error ? h("div", { className: "dshe-alert error", role: "alert" }, error) : null,
                 notice ? h("div", { className: "dshe-alert success", role: "status" }, notice) : null,
                 data && data.sendApproval === false ? h("div", { className: "dshe-alert info" }, dt("全局发信确认目前已关闭；禁止规则仍然生效。", "Global send approval is off; blocked-recipient rules still apply.")) : null,
@@ -2887,6 +2900,10 @@ h("section", { hidden: tab !== "accounts", className: "dshe-panel dshe-section-h
                         draft.sendApproval === false
                             ? h("div", { id: "dshe-send-approval-risk", className: "dshe-alert info", role: "status" }, t("global.sendApprovalRisk"))
                             : null,
+                        h('label',{className:'dshe-field'},dt('回复引用语言','Reply quote language'),h('select',{'aria-label':dt('回复引用语言','Reply quote language'),value:draft.replyLocale||'auto',disabled:snapshot?.writable===false,onChange:e=>update({replyLocale:e.target.value})},h('option',{value:'auto'},dt('跟随界面，未知时用英语','Follow interface; English if unknown')),h('option',{value:'zh'},'中文'),h('option',{value:'en'},'English'),h('option',{value:'fr'},'Français'))),
+                        h('label',{className:'dshe-check'},h('input',{type:'checkbox',checked:draft.allowTrustedReply===true,disabled:snapshot?.writable===false,onChange:e=>update({allowTrustedReply:e.target.checked})}),dt('允许可信回复免审（默认关闭）','Allow trusted replies without confirmation (off by default)')),
+                        h('p',{className:'dshe-hint'},dt('开启后，仅当回复、回复全部或转发的所有实际 To/Cc 都匹配该账号可信规则时免审；禁止规则和宿主权限继续生效。','When enabled, every actual To/Cc in a reply, reply-all or forward must match that account’s trusted rules. Block rules and host permissions still apply.')),
+                        h('label',{className:'dshe-field'},dt('引用日期时区（可选）','Quote date timezone (optional)'),h('input',{value:draft.replyTimeZone||'',placeholder:'Asia/Shanghai · Europe/Paris',disabled:snapshot?.writable===false,onChange:e=>update({replyTimeZone:e.target.value})})),
                         h("div", { className: "dshe-field" }, [
                             h("label", null, t("global.downloadDirLabel")),
                             fieldInput("text", draft.downloadDir, (v) => update({ downloadDir: v }), t("global.downloadDirPlaceholder")),

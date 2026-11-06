@@ -14,6 +14,7 @@ export interface EmailDraft {
     cc: string;
     subject: string;
     text: string;
+    html?: string;
     attachments: DraftAttachment[];
     state: DraftState;
     createdAt: string;
@@ -25,6 +26,7 @@ export interface EmailDraft {
         uid: number | string;
         folder: string;
         uidValidity?: number;
+        mode?: 'reply' | 'reply-all' | 'forward';
     };
 }
 export interface DraftFields {
@@ -33,6 +35,7 @@ export interface DraftFields {
     cc: string;
     subject: string;
     text: string;
+    html?: string;
 }
 export declare class DraftError extends Error {
     readonly code: string;

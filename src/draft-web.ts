@@ -8,6 +8,8 @@ import { messageOf, redactCredentials } from './mail-client.js'
 import type { EmailRuntime } from './runtime.js'
 import type { EmailSettingsBackend } from './web.js'
 import type { EmailSendResult } from './types.js'
+import { prepareMailBody } from './outgoing-body.js'
+import { richEmailBody } from './rich-body.js'
 
 export const EMAIL_DRAFT_ROUTE = '/api/dsh-email/drafts'
 const MAX_BYTES = 20 * 1024 * 1024
@@ -56,13 +58,21 @@ export class EmailDraftBackend {
     return result
   }
   async create(input: Record<string, unknown>, signal?: AbortSignal): Promise<EmailDraft> {
-    const fields = draftFields(input)
+    let fields = draftFields(input)
     if (!fields.account) { try { fields.account = this.runtime.getEffectiveSettings().defaultAccount } catch { /* A local draft is useful even before the mailbox is configured. */ } }
     const paths = input.attachments ?? []
     if (!Array.isArray(paths) || paths.length > 10 || paths.some(file => typeof file !== 'string' || !file.trim())) throw new DraftError('附件应为最多 10 个本地文件路径')
     const files: DraftAttachment[] = paths.map(path => ({ id: randomUUID(), path: resolve(path as string), filename: basename(path as string), owned: false }))
     if (files.length) { const cap = fields.account ? this.connection(fields.account).cap : MAX_BYTES; await this.attachments({ attachments: files } as EmailDraft, cap, signal) }
-    return this.store.create(fields, files, signal)
+    let reply: EmailDraft['reply']
+    if (input.reply !== undefined) {
+      const reference = input.reply as Record<string, unknown>
+      if (!reference || typeof reference !== 'object' || Array.isArray(reference) || !(typeof reference.uid === 'number' && Number.isSafeInteger(reference.uid) && reference.uid > 0 || typeof reference.uid === 'string' && reference.uid.length > 0 && reference.uid.length <= 998 && !/[\r\n\0]/.test(reference.uid)) || reference.folder !== undefined && typeof reference.folder !== 'string' || reference.mode !== undefined && !['reply','reply-all','forward'].includes(String(reference.mode))) throw new DraftError('回复草稿的邮件编号、文件夹或模式无效')
+      const prepared = await this.runtime.getPool().prepareReply(fields.account || undefined, String(reference.folder || ''), reference.uid as number | string, (reference.mode || 'reply') as 'reply'|'reply-all'|'forward', fields.text, fields.to, fields.cc, signal, {html:fields.html,locale:typeof input.locale==='string'?input.locale:undefined})
+      fields = draftFields({...fields,...prepared});reply = prepared.reply
+    }
+    const created = await this.store.create(fields, files, signal)
+    return reply ? this.store.change(created.id, created.revision, draft => { draft.reply=reply }, signal) : created
   }
   private async recover(signal?: AbortSignal): Promise<void> {
     for (const draft of await this.store.list()) if (draft.state === 'sending') {
@@ -82,7 +92,7 @@ export class EmailDraftBackend {
     if (body.action === 'rules') {
       const snapshot = await this.settings.snapshot()
       const policies = parseRecipientPolicies(snapshot.settings.value.trustedRecipientsYaml)
-      return { accounts: snapshot.accounts, revision: snapshot.settings.revision, writable: snapshot.writable, sendApproval: snapshot.settings.value.sendApproval !== false, policies: Object.fromEntries(policies) }
+      return { accounts: snapshot.accounts, revision: snapshot.settings.revision, writable: snapshot.writable, sendApproval: snapshot.settings.value.sendApproval !== false, allowTrustedReply: snapshot.settings.value.allowTrustedReply === true, policies: Object.fromEntries(policies) }
     }
     if (body.action === 'saveRules' || body.action === 'matchRules') {
       if (typeof body.account !== 'string' || !body.account.trim()) throw new DraftError('请先选择账号')
@@ -128,9 +138,10 @@ export class EmailDraftBackend {
       const connection = this.connection(draft.account), matching = await matchRecipients(draft.to, draft.cc, connection.policy), attachments = await this.attachments(draft, connection.cap, signal)
       if (connection.config.transport === 'pop3' && !connection.config.smtp.host) throw new DraftError('此账号只配置了 POP3 收信；请先补全 SMTP 发信设置。草稿未发送且仍可编辑。', 'smtp-missing')
       if (connection.key !== this.connection(draft.account).key || (await this.store.get(id)).revision !== draft.revision) throw new DraftError('草稿或账号已改变，请重新预览', 'draft-conflict')
+      const rendered = prepareMailBody(draft.text, draft.html)
       this.invalidate(id); if (this.plans.size >= 3) this.plans.delete(this.plans.keys().next().value!)
       const plan: Plan = { id: randomUUID(), created: this.now(), key: connection.key, draft, attachments }; this.plans.set(plan.id, plan)
-      return { id: plan.id, draft: view(draft), from: { address: connection.config.user, name: connection.config.senderName }, matching, attachments: attachments.map(({ id, filename, content }) => ({ id, filename, size: content.length, sha256: createHash('sha256').update(content).digest('hex') })), expiresAt: plan.created + 10 * 60 * 1000 }
+      return { id: plan.id, draft: view(draft), body: { ...rendered, rich: richEmailBody(rendered.html, [], true) }, from: { address: connection.config.user, name: connection.config.senderName }, matching, attachments: attachments.map(({ id, filename, content }) => ({ id, filename, size: content.length, sha256: createHash('sha256').update(content).digest('hex') })), expiresAt: plan.created + 10 * 60 * 1000 }
     }
     if (body.action === 'send') {
       if (body.confirmed !== true) throw new DraftError('请核对预览后明确确认发送')
@@ -150,7 +161,7 @@ export class EmailDraftBackend {
           throw new DraftError('账号或规则已改变，邮件未提交；请重新预览', 'draft-conflict')
         }
         let receipt: EmailSendResult
-        try { receipt = await pool.sendPrepared(before.account, before.to, before.subject, before.text, before.cc, plan.attachments.map(({ filename, content }) => ({ filename, content })), current, before.reply) }
+        try { receipt = await pool.sendPrepared(before.account, before.to, before.subject, before.text, before.cc, plan.attachments.map(({ filename, content }) => ({ filename, content })), current, before.reply, before.html) }
         catch (error) {
           if (error instanceof RecipientPolicyError) {
             await this.store.change(id, pending.revision, value => { value.state = 'draft'; delete value.attemptAt })

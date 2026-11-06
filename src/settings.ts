@@ -18,6 +18,9 @@ export const EmailSettingsSchema = z.object({
   password: z.string().role('secret').default(''),
   inboxFolder: z.string().default('INBOX'),
   sendApproval: z.boolean().default(true),
+  allowTrustedReply: z.boolean().default(false),
+  replyLocale: z.string().default('auto'),
+  replyTimeZone: z.string().default(''),
   newMailPopup: z.boolean().default(true),
   trustedRecipientsYaml: z.string().default(''),
   maxBodyChars: z.number().default(20000),
@@ -51,6 +54,9 @@ export interface EmailSettingsValue {
   password: string
   inboxFolder: string
   sendApproval: boolean
+  allowTrustedReply?: boolean
+  replyLocale?: string
+  replyTimeZone?: string
   newMailPopup?: boolean
   trustedRecipientsYaml?: string
   maxBodyChars: number
@@ -72,6 +78,9 @@ export function toSettingsBase(config: EmailConfig): Partial<EmailSettingsValue>
     ...(config.password !== undefined && config.password !== '' ? { password: config.password } : {}),
     ...(config.inboxFolder !== undefined && config.inboxFolder !== '' ? { inboxFolder: config.inboxFolder } : {}),
     ...(config.sendApproval !== undefined ? { sendApproval: config.sendApproval } : {}),
+    ...(config.allowTrustedReply !== undefined ? { allowTrustedReply: config.allowTrustedReply } : {}),
+    ...(config.replyLocale !== undefined ? { replyLocale: config.replyLocale } : {}),
+    ...(config.replyTimeZone !== undefined ? { replyTimeZone: config.replyTimeZone } : {}),
     ...(config.newMailPopup !== undefined ? { newMailPopup: config.newMailPopup } : {}),
     ...(config.trustedRecipientsYaml !== undefined ? { trustedRecipientsYaml: config.trustedRecipientsYaml } : {}),
     ...(config.maxBodyChars !== undefined ? { maxBodyChars: config.maxBodyChars } : {}),
@@ -157,6 +166,9 @@ export function toEmailConfig(value: EmailSettingsValue, user?: Partial<EmailSet
   if (has('password')) set('password', draft.password)
   if (has('inboxFolder')) set('inboxFolder', draft.inboxFolder)
   if (has('sendApproval')) set('sendApproval', draft.sendApproval)
+  if (has('allowTrustedReply')) set('allowTrustedReply', draft.allowTrustedReply)
+  if (has('replyLocale')) set('replyLocale', draft.replyLocale)
+  if (has('replyTimeZone')) set('replyTimeZone', draft.replyTimeZone)
   if (has('trustedRecipientsYaml')) set('trustedRecipientsYaml', draft.trustedRecipientsYaml)
   if (has('maxBodyChars')) set('maxBodyChars', draft.maxBodyChars)
   if (has('downloadDir')) set('downloadDir', draft.downloadDir)
@@ -223,6 +235,9 @@ function describeValue(value: unknown): string {
  */
 export function validateSettingsValue(value: EmailSettingsValue, extraProviders: readonly string[] = []): void {
   const draft = (value ?? {}) as Partial<EmailSettingsValue>
+  if(draft.allowTrustedReply!==undefined&&typeof draft.allowTrustedReply!=='boolean')throw new Error('可信回复免审开关必须为布尔值')
+  if(draft.replyLocale!==undefined&&(typeof draft.replyLocale!=='string'||!/^(?:auto|(?:zh|en|fr)(?:-[a-z0-9]{1,8})*)$/i.test(draft.replyLocale)))throw new Error('回复引用语言请选择 auto、zh、en 或 fr')
+  if(draft.replyTimeZone!==undefined){if(typeof draft.replyTimeZone!=='string')throw new Error('时区必须为文本');if(draft.replyTimeZone.trim())try{new Intl.DateTimeFormat('en',{timeZone:draft.replyTimeZone.trim()})}catch{throw new Error('引用日期时区无效，请填写 Asia/Shanghai、Europe/Paris 等 IANA 时区')}}
   if (draft.receiveProtocol !== undefined && !['imap', 'pop3'].includes(draft.receiveProtocol)) throw new Error('收信协议只能是 IMAP 或 POP3')
   if (portOutOfRange(endpointPort(draft.pop3))) throw new Error('POP3 端口必须在 1-65535 之间')
   if (draft.newMailPopup !== undefined && typeof draft.newMailPopup !== 'boolean') {

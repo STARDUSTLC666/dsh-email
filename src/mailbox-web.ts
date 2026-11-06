@@ -202,6 +202,8 @@ export class EmailMailboxBackend {
         mode,
         [cfg.user, cfg.authUser],
         '',
+        '',
+        { locale: cfg.replyLocale && cfg.replyLocale !== 'auto' ? cfg.replyLocale : typeof body.locale === 'string' ? body.locale : 'en', timeZone: cfg.replyTimeZone },
       )
       const created = await this.drafts.store.create(
         draftFields({

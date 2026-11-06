@@ -4,6 +4,7 @@ import { messageOf } from './mail-client.js'
 import { NOT_LOGGED_IN_MESSAGE, oauth2StateOf } from './oauth2.js'
 import type { EmailRuntime } from './runtime.js'
 import type { EmailDraftBackend } from './draft-web.js'
+import { takeReplyAuthorization } from './approval.js'
 import {
   descriptions, parameters, MAX_LIMIT, MARK_ACTIONS, REPLY_MODES,
   executionSignal, normalizeAttachmentPaths, parseEmailDay,
@@ -37,6 +38,11 @@ import type {
 /** 单次工具调用的 deadline：普通查询 60s，正文扫描/watch 这类整批操作 120s。 */
 const QUERY_TIMEOUT_MS = 60000
 const BATCH_TIMEOUT_MS = 120000
+const DRAFT_PARAMETERS = { type: 'object', properties: {
+  account: {type:'string',description:'Sending account; default when omitted'},to:{type:'string',description:'Recipients; forward destination when reply.mode is forward'},cc:{type:'string'},subject:{type:'string'},text:{type:'string',description:'Plain text; optional when html is supplied'},html:{type:'string',description:'Safe HTML body; reviewed in Drafts before sending'},locale:{type:'string',description:'Reply quote language override: zh, en or fr'},
+  reply:{type:'object',properties:{uid:{oneOf:[{type:'integer'},{type:'string'}]},folder:{type:'string'},mode:{type:'string',enum:['reply','reply-all','forward']}},required:['uid'],additionalProperties:false},
+  attachments:{type:'array',items:{type:'string'},description:'Up to ten local attachment paths, relative to this conversation workspace'}
+},additionalProperties:false}
 function validUid(uid: unknown): boolean { return typeof uid === 'number' ? Number.isSafeInteger(uid) && uid > 0 : typeof uid === 'string' && uid.length > 0 && uid.length <= 998 && !/[\r\n\0]/.test(uid) }
 
 function attachmentPaths(value: unknown, exec?: unknown): string[] | undefined {
@@ -64,8 +70,8 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
   return [
     ...(drafts ? [{
       name: 'email_draft',
-      description: '准备可编辑的本地邮件草稿，不投递邮件。用户在设置 → 邮件 → 草稿中编辑、检查附件预览并明确确认后才发送。可在邮箱尚未配置时准备文字草稿；不用于回复原邮件线程。',
-      parameters: { type: 'object', properties: { account: { type: 'string', description: '发件账号名，省略时使用默认账号' }, to: { type: 'string', description: 'To 地址，支持显示名和地址组' }, cc: { type: 'string' }, subject: { type: 'string' }, text: { type: 'string', description: '纯文本正文' }, attachments: { type: 'array', items: { type: 'string' }, description: '最多 10 个本地附件路径；相对路径以当前会话工作区为基准，用户在预览中检查后才提交' } }, required: ['to', 'subject', 'text'], additionalProperties: false },
+      description: '准备可编辑的纯文本或 HTML 邮件草稿，不投递邮件。reply 可引用原邮件并保留回复/转发线程。用户在设置 → 邮件 → 草稿中检查正文和附件，预览并确认后发送。',
+      parameters: DRAFT_PARAMETERS,
       output: { schema: { type: 'object', properties: { id: { type: 'string' }, state: { type: 'string' }, subject: { type: 'string' } }, required: ['id', 'state', 'subject'] }, render: (_args: unknown, value: unknown): TextBlock[] => [{ type: 'text', text: '本地草稿已保存，邮件未发送。请在设置 → 邮件 → 草稿中打开并检查。\n草稿编号：' + (value as { id: string }).id + '\n主题：' + (value as { subject: string }).subject }] },
       timeoutMs: QUERY_TIMEOUT_MS,
       async execute(args: unknown, exec?: unknown) { const input = args as Record<string, unknown>; const draft = await drafts.create({ ...input, attachments: attachmentPaths(input.attachments, exec) }, executionSignal(exec)); return { id: draft.id, state: draft.state, subject: draft.subject } },
@@ -172,6 +178,7 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
           typeof args.cc === 'string' && args.cc.trim() !== '' ? args.cc.trim() : undefined,
           attachmentPaths(args.attachments, exec),
           executionSignal(exec),
+          args.html,
         )
       }
     },
@@ -186,7 +193,7 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
         if (!validUid(args.uid)) {
           throw new Error('uid 必须是正整数（IMAP）或 email_list 返回的字符串邮件标识（AgentMail）')
         }
-        if (typeof args.text !== 'string' || args.text.trim() === '') throw new Error('text 不能为空')
+        if (!(typeof args.text === 'string' && args.text.trim()) && !(typeof args.html === 'string' && args.html.trim())) throw new Error('请填写 text 或 html 正文')
         const mode = ((typeof args.mode === 'string' && args.mode.trim() !== '' ? args.mode.trim().toLowerCase() : 'reply')) as EmailReplyMode
         if (!REPLY_MODES.includes(mode)) {
           throw new Error('mode 必须是 ' + REPLY_MODES.join('、') + ' 之一')
@@ -195,7 +202,12 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
           throw new Error('mode=forward 时需要 to 参数指定转发收件人')
         }
         const cc = typeof args.cc === 'string' && args.cc.trim() !== '' ? args.cc.trim() : undefined
-        return await getPool().reply(args.account, args.folder?.trim() || '', args.uid, mode, args.text, args.to?.trim() ?? '', cc, executionSignal(exec))
+        const prepared=takeReplyAuthorization(rawArgs,runtime as any)
+        if(prepared){
+          const sent=await getPool().sendPrepared(prepared.account,prepared.to,prepared.subject,prepared.text,prepared.cc,[],executionSignal(exec),prepared.reply,prepared.html)
+          return {...sent,mode,originalUid:args.uid,to:prepared.to.split(','),subject:prepared.subject}
+        }
+        return await getPool().reply(args.account, args.folder?.trim() || '', args.uid, mode, args.text || '', args.to?.trim() ?? '', cc, executionSignal(exec), { html: args.html, locale: args.locale, timeZone: args.timeZone })
       }
     },
     {

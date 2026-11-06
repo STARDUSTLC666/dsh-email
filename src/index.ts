@@ -32,7 +32,9 @@ export function installEmailApplication(ctx:any,config:Config={},dependencies:Ma
       settingsCtx.effect(() => settingsCtx.settings.configure({ auto: false }, ctx.fiber))
     })
   }
-  const runtime = createEmailRuntime(ctx, config, settings=>new EmailService(settings,dependencies))
+  const runtime = createEmailRuntime(ctx, config, settings=>new EmailService(settings,{...dependencies,replyLocale:dependencies.replyLocale??(()=>{
+    try { const locale=ctx.settings.describe?.().find((row:any)=>row.ns==='locale');return locale?.user?.preference||locale?.base?.preference } catch { return undefined }
+  })}))
   const backend = new EmailSettingsBackend(ctx, runtime.settingsScope, config,dependencies.fetch)
   backend.watchImpl = runtime.watch
   installEmailSettingsWeb(ctx, backend)
@@ -64,3 +66,5 @@ export { AgentMailClient } from './agentmail.js'
 export { Pop3Client } from './pop3.js'
 export { EmailService } from './mail-service.js'
 export { EmailMailboxBackend, installEmailMailbox, MAILBOX_ROUTE } from './mailbox-web.js'
+export { prepareMailBody, sanitizeOutgoingHtml } from './outgoing-body.js'
+export { replyLanguage, replyDate } from './reply-locale.js'

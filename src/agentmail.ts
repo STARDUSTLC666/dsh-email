@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { prepareMailBody } from './outgoing-body.js'
 import { richEmailBody } from './rich-body.js'
 import { createReadStream } from 'node:fs'
 import { mkdir, open, unlink } from 'node:fs/promises'
@@ -360,6 +361,7 @@ export class AgentMailClient {
     attachments: Array<{ filename: string; content: Buffer }>,
     signal?: AbortSignal,
     reply?: { uid: MessageRef; folder: string },
+    html?: string,
   ): Promise<EmailSendResult> {
     await assertRecipientsAllowed(
       to,
@@ -390,7 +392,7 @@ export class AgentMailClient {
         to: toList,
         ...(ccList.length ? { cc: ccList } : {}),
         ...(!reply ? { subject } : {}),
-        text,
+        ...prepareMailBody(text, html),
         attachments: attachments.map((a) => ({
           filename: a.filename,
           content: a.content.toString('base64'),
@@ -480,6 +482,7 @@ export class AgentMailClient {
     cc: string,
     paths: string[],
     signal?: AbortSignal,
+    html?: string,
   ) {
     await assertRecipientsAllowed(
       to,
@@ -503,7 +506,7 @@ export class AgentMailClient {
         content: Buffer.concat(chunks),
       })
     }
-    return this.send(name, to, subject, text, cc, attachments, signal)
+    return this.send(name, to, subject, text, cc, attachments, signal, undefined, html)
   }
   async watch(
     name: string,

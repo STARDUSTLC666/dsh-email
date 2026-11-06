@@ -1,4 +1,5 @@
 import { parseDocument } from 'htmlparser2'
+import { mailStyles } from './mail-html.js'
 import type { EmailAttachmentMeta, EmailContentNode, EmailRichBody } from './types.js'
 
 const allowed = new Set('p div span br hr strong b em i u s del blockquote pre code ul ol li h1 h2 h3 h4 h5 h6 table thead tbody tfoot tr td th a'.split(' '))
@@ -13,7 +14,7 @@ export function safeMailLink(value: string): string | undefined {
 }
 
 /** Parse into React data, never sanitized HTML or an executable DOM. */
-export function richEmailBody(html: unknown, attachments: EmailAttachmentMeta[] = []): EmailRichBody | undefined {
+export function richEmailBody(html: unknown, attachments: EmailAttachmentMeta[] = [], styles = false): EmailRichBody | undefined {
   if (typeof html !== 'string' || !html.trim()) return
   if (Buffer.byteLength(html, 'utf8') > 256 * 1024) return { nodes: [], images: [], limited: true }
   const result: EmailRichBody = { nodes: [], images: [], limited: false }
@@ -45,6 +46,7 @@ export function richEmailBody(html: unknown, attachments: EmailAttachmentMeta[] 
       const children = visit(node.children || [], depth + 1)
       if (!allowed.has(tag)) { out.push(...children); continue }
       const safe: Exclude<EmailContentNode, string> = { tag, children }
+      if (styles) safe.style = mailStyles(node.attribs?.style)
       if (tag === 'a') safe.href = safeMailLink(String(node.attribs?.href || ''))
       if (tag === 'td' || tag === 'th') { const span = Number(node.attribs?.colspan); if (Number.isInteger(span) && span > 1 && span <= 20) safe.span = span }
       out.push(safe)

@@ -15,19 +15,24 @@ import type {
   EmailSearchOptions,
 } from './types.js'
 import type { downloadPublicBytes } from './public-download.js'
+import type { ReplyOptions } from './reply-locale.js'
+import { prepareMailBody } from './outgoing-body.js'
 
 export interface ReplyReference {
   uid: MessageRef
   folder: string
   uidValidity?: number
+  mode?: EmailReplyMode
 }
 export interface MailDependencies {
+  replyLocale?: () => string | undefined
   pop3?: Pop3WireOptions
   fetch?: typeof fetch
   download?: typeof downloadPublicBytes
 }
 /** Route accounts independently. IMAP's numeric UIDs retain their original meaning. */
 export class EmailService {
+  private readonly locale: () => string | undefined
   private imap: EmailPool
   private api: AgentMailClient
   private pop3: Pop3Client
@@ -35,6 +40,7 @@ export class EmailService {
     private settings: ResolvedEmailSettings,
     dependencies: MailDependencies = {},
   ) {
+    this.locale = dependencies.replyLocale ?? (() => undefined)
     this.imap = new EmailPool(settings)
     this.pop3 = new Pop3Client(settings, dependencies.pop3)
     this.api = new AgentMailClient(
@@ -78,6 +84,16 @@ export class EmailService {
   }
   private folder(account: string | undefined, folder: string) {
     return folder || this.settings.accounts.get(this.name(account))!.inboxFolder
+  }
+  replyOptions(account?: string, options: ReplyOptions = {}): ReplyOptions {
+    const cfg = this.settings.accounts.get(this.name(account))!
+    const configured = cfg.replyLocale && cfg.replyLocale !== 'auto' ? cfg.replyLocale : undefined
+    return { ...options, locale: options.locale || configured || options.uiLocale || this.locale() || 'en', timeZone: options.timeZone || cfg.replyTimeZone || undefined }
+  }
+  async prepareReply(account: string | undefined, folder: string, uid: MessageRef, mode: EmailReplyMode, text: string, to: string, cc?: string, signal?: AbortSignal, options: ReplyOptions = {}) {
+    const name = this.name(account), cfg = this.settings.accounts.get(name)!, original = await this.read(name, uid, folder, signal)
+    const built = buildReplyMessage({ ...original, messageId: '', references: '' }, mode, [cfg.user, cfg.authUser], text, to, this.replyOptions(name, options))
+    return { ...built, account: name, cc: cc ?? built.cc ?? '', reply: { uid, folder: original.folder, ...(original.uidValidity ? { uidValidity: original.uidValidity } : {}), mode } }
   }
   list(
     account: string | undefined,
@@ -259,9 +275,11 @@ export class EmailService {
     cc: string | undefined,
     paths: string[] | undefined,
     signal?: AbortSignal,
+    html?: string,
   ) {
     if (!this.usesApi(account))
-      return this.imap.send(account, to, subject, text, cc, paths, signal)
+      return this.imap.send(account, to, subject, text, cc, paths, signal, html)
+    const body = prepareMailBody(text, html)
     await validateAttachmentPaths(
       paths ?? [],
       Math.min(this.settings.maxAttachmentBytes, 4 * 1024 * 1024),
@@ -271,10 +289,11 @@ export class EmailService {
       this.name(account),
       to,
       subject,
-      text ?? '',
+      body.text,
       cc ?? '',
       paths ?? [],
       signal,
+      body.html,
     )
   }
   async sendPrepared(
@@ -286,24 +305,27 @@ export class EmailService {
     attachments: Array<{ filename: string; content: Buffer }>,
     signal?: AbortSignal,
     reply?: ReplyReference,
+    html?: string,
   ) {
+    const body = prepareMailBody(text, html)
     if (this.usesPop3(account) && reply) {
       const original = await this.pop3.original(this.name(account), reply.uid, this.folder(account, reply.folder), signal)
       if (!original.messageId) throw new Error('原邮件缺少 Message-ID，无法关联回复草稿；请新建草稿发送')
       return this.imap.sendPrepared(account, to, subject, text, cc, attachments, signal, undefined, {
-        inReplyTo: original.messageId, references: [original.references, original.messageId].filter(Boolean).join(' '),
-      })
+        ...(reply.mode === 'forward' ? {} : { inReplyTo: original.messageId }), references: [original.references, original.messageId].filter(Boolean).join(' '),
+      }, html)
     }
     return this.usesApi(account)
       ? this.api.send(
           this.name(account),
           to,
           subject,
-          text,
+          body.text,
           cc,
           attachments,
           signal,
-          reply,
+          reply?.mode === 'forward' ? undefined : reply,
+          body.html,
         )
       : this.imap.sendPrepared(
           account,
@@ -314,6 +336,8 @@ export class EmailService {
           attachments,
           signal,
           reply ? { ...reply, uid: this.number(reply.uid) } : undefined,
+          undefined,
+          html,
         )
   }
   async reply(
@@ -325,12 +349,13 @@ export class EmailService {
     to: string,
     cc: string | undefined,
     signal?: AbortSignal,
+    options: ReplyOptions = {},
   ): Promise<EmailReplyResult> {
     if (this.usesPop3(account)) {
       const name = this.name(account), cfg = this.settings.accounts.get(name)!
       const original = await this.pop3.original(name, uid, this.folder(account, folder), signal)
-      const built = buildReplyMessage(original, mode, [cfg.user, cfg.authUser], text, to)
-      const sent = await this.imap.sendPrepared(name, built.to, built.subject, built.text, cc ?? built.cc ?? '', [], signal, undefined, built)
+      const built = buildReplyMessage(original, mode, [cfg.user, cfg.authUser], text, to, this.replyOptions(account, options))
+      const sent = await this.imap.sendPrepared(name, built.to, built.subject, built.text, cc ?? built.cc ?? '', [], signal, undefined, built, built.html)
       return { ...sent, mode, originalUid: uid, to: built.to.split(','), subject: built.subject }
     }
     if (!this.usesApi(account))
@@ -343,6 +368,7 @@ export class EmailService {
         to,
         cc,
         signal,
+        this.replyOptions(account, options),
       )
     const name = this.name(account),
       cfg = this.settings.accounts.get(name)!,
@@ -358,6 +384,7 @@ export class EmailService {
         cfg.user,
         text,
         to,
+        this.replyOptions(account, options),
       ),
       sent = await this.api.send(
         name,
@@ -368,6 +395,7 @@ export class EmailService {
         [],
         signal,
         mode === 'forward' ? undefined : { uid, folder },
+        built.html,
       )
     return {
       ...sent,

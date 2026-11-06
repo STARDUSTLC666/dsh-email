@@ -63,7 +63,7 @@ function MailContent({ detail, account, folder, selected }) {
 function MailMessage({ detail, currentRow, account, folder, selected, busy, run, who, date, onDraft, onMark, onTrash, canTrash }) {
   async function reply(all) {
     return run(async valid => {
-      const draft = await mailboxApi('replyDraft', { account, folder, uid: selected, replyAll: all });
+      const draft = await mailboxApi('replyDraft', { account, folder, uid: selected, replyAll: all, locale: UI_LANG === 'en' ? 'en' : 'zh' });
       if (valid()) onDraft(draft.id);
     });
   }

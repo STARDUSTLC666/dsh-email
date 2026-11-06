@@ -9,6 +9,9 @@ import { join } from 'node:path'
 import type { Readable } from 'node:stream'
 import type { AuthKind, ResolvedEmailConfig, ResolvedEmailSettings } from './config.js'
 import { getFreshAccessToken, OAuth2Error } from './oauth2.js'
+import { prepareMailBody } from './outgoing-body.js'
+import { escapeMailHtml } from './mail-html.js'
+import { attribution, replyDate, replyWords, type ReplyOptions } from './reply-locale.js'
 import { assertRecipientsAllowed } from './recipient-policy.js'
 import { openProxiedSocket, resolveProxyUrl } from './proxy.js'
 import { flattenAddresses, parseRawMessage, sanitizeFilename, stripHtml, truncateText } from './parse.js'
@@ -259,6 +262,7 @@ export interface BuiltReply {
   cc?: string
   subject: string
   text: string
+  html?: string
   inReplyTo?: string
   references?: string
 }
@@ -304,23 +308,25 @@ const FORWARD_MAX_CHARS = 4000
  * be tested without a connection: recipients exclude the sending account,
  * subject prefixes never stack, the original text is quoted underneath.
  */
-export function buildReplyMessage(original: OriginalDigest, mode: EmailReplyMode, selfAddress: string | readonly string[], text: string, forwardTo = ''): BuiltReply {
-  const fromText = original.from.map(a => a.name ?? a.address).filter(Boolean).join(', ') || '(未知发件人)'
+export function buildReplyMessage(original: OriginalDigest, mode: EmailReplyMode, selfAddress: string | readonly string[], text: string, forwardTo = '', options: ReplyOptions = {}): BuiltReply {
+  const words = replyWords(options.locale), body = prepareMailBody(text, options.html)
+  const fromText = original.from.map(formatAddress).filter(Boolean).join(', ') || '(' + words.unknownSender + ')'
   const self = (Array.isArray(selfAddress) ? selfAddress : [selfAddress]).filter(a => a.trim() !== '')
   if (mode === 'forward') {
     const to = forwardTo.trim()
     if (to === '') throw new MailError('forward 模式需要 to 参数指定转发收件人')
     const fwdBody = original.text.length > FORWARD_MAX_CHARS
-      ? original.text.slice(0, FORWARD_MAX_CHARS) + '\n…[原文过长，已截断]'
+      ? original.text.slice(0, FORWARD_MAX_CHARS) + '\n…[' + words.truncated + ']'
       : original.text
-    const header = '---------- 转发的邮件 ----------\n发件人: ' + fromText
-      + (original.date !== '' ? '\n时间: ' + original.date : '')
-      + '\n主题: ' + (original.subject || '(无主题)')
-      + (original.to.length > 0 ? '\n收件人: ' + original.to.map(a => a.address).filter(Boolean).join(', ') : '')
+    const header = '---------- ' + words.forward + ' ----------\n' + words.from + ': ' + fromText
+      + (original.date !== '' ? '\n' + words.date + ': ' + replyDate(original.date, options) : '')
+      + '\n' + words.subject + ': ' + (original.subject || '(' + words.noSubject + ')')
+      + (original.to.length > 0 ? '\n' + words.to + ': ' + original.to.map(a => a.address).filter(Boolean).join(', ') : '')
     return {
       to,
       subject: 'Fwd: ' + stripReplyPrefix(original.subject, /fwd:|fw:|re:/),
-      text: text + '\n\n' + header + '\n\n' + fwdBody,
+      text: body.text + '\n\n' + header + '\n\n' + fwdBody,
+      ...(body.html ? { html: body.html + '<hr><p>' + escapeMailHtml(header).replace(/\n/g, '<br>') + '</p><blockquote>' + escapeMailHtml(fwdBody).replace(/\n/g, '<br>') + '</blockquote>' } : {}),
       ...(original.messageId !== '' ? { references: (original.references !== '' ? original.references + ' ' : '') + original.messageId } : {}),
     }
   }
@@ -335,14 +341,16 @@ export function buildReplyMessage(original: OriginalDigest, mode: EmailReplyMode
     throw new MailError('原邮件没有可用的发件人地址，无法回复；可用 email_send 手动发送')
   }
   const quoteText = original.text.length > QUOTE_MAX_CHARS
-    ? original.text.slice(0, QUOTE_MAX_CHARS) + '\n…[原文过长，已截断]'
+    ? original.text.slice(0, QUOTE_MAX_CHARS) + '\n…[' + words.truncated + ']'
     : original.text
-  const quote = '在 ' + (original.date || '未知时间') + '，' + fromText + ' 写道：\n'
+  const line = attribution(original.date, fromText, options)
+  const quote = line + '\n'
     + quoteText.split('\n').map(line => '> ' + line).join('\n')
   const built: BuiltReply = {
     to: recipients.map(formatAddress).join(', '),
     subject: 'Re: ' + stripReplyPrefix(original.subject, /re:/),
-    text: text + '\n\n' + quote,
+    text: body.text + '\n\n' + quote,
+    ...(body.html ? { html: body.html + '<p>' + escapeMailHtml(line) + '</p><blockquote>' + escapeMailHtml(quoteText).replace(/\n/g, '<br>') + '</blockquote>' } : {}),
   }
   if (original.messageId !== '') {
     built.inReplyTo = original.messageId
@@ -1301,7 +1309,7 @@ export class EmailPool {
     }, true, signal)
   }
 
-  async send(accountName: string | undefined, to: string, subject: string, text: string | undefined, cc: string | undefined, attachmentPaths: string[] | undefined, signal?: AbortSignal): Promise<EmailSendResult> {
+  async send(accountName: string | undefined, to: string, subject: string, text: string | undefined, cc: string | undefined, attachmentPaths: string[] | undefined, signal?: AbortSignal, html?: string): Promise<EmailSendResult> {
     const name = this.resolveName(accountName)
     const cfg = this.account(name)
     const attachments = await validateAttachmentPaths(attachmentPaths ?? [], this.settings.maxAttachmentBytes, signal)
@@ -1310,7 +1318,8 @@ export class EmailPool {
       to,
       cc,
       subject,
-      text: text ?? '',
+      ...prepareMailBody(text, html),
+      disableFileAccess: true, disableUrlAccess: true,
       attachments,
     }, signal)
     return {
@@ -1323,7 +1332,7 @@ export class EmailPool {
   }
 
   /** Send the attachment bytes the human reviewed, without re-reading mutable paths. */
-  async sendPrepared(accountName: string, to: string, subject: string, text: string, cc: string, attachments: Array<{ filename: string; content: Buffer }>, signal?: AbortSignal, reply?: { uid: number; folder: string; uidValidity?: number }, pop3Thread?: Pick<BuiltReply, 'inReplyTo' | 'references'>): Promise<EmailSendResult> {
+  async sendPrepared(accountName: string, to: string, subject: string, text: string, cc: string, attachments: Array<{ filename: string; content: Buffer }>, signal?: AbortSignal, reply?: { uid: number; folder: string; uidValidity?: number; mode?: EmailReplyMode }, pop3Thread?: Pick<BuiltReply, 'inReplyTo' | 'references'>, html?: string): Promise<EmailSendResult> {
     const name = this.resolveName(accountName), cfg = this.account(name)
     if (attachments.length > 10 || attachments.reduce((sum, file) => sum + file.content.length, 0) > Math.min(this.settings.maxAttachmentBytes, 20 * 1024 * 1024)) throw new MailError('草稿附件超过大小或数量上限')
     const thread: Record<string, unknown> = {}
@@ -1337,13 +1346,14 @@ export class EmailPool {
       if (!original || !original.headers) throw new MailError('原邮件不存在或缺少线程头，请重新打开邮件')
       const ids = extractMessageIds(original.headers)
       if (!ids.messageId) throw new MailError('原邮件缺少 Message-ID，无法安全关联回复线程')
-      thread.inReplyTo = '<' + ids.messageId + '>'; thread.references = [...(ids.references ?? '').split(' ').filter(Boolean), ids.messageId].map(id => '<' + id + '>')
+      if (reply.mode !== 'forward') thread.inReplyTo = '<' + ids.messageId + '>'
+      thread.references = [...(ids.references ?? '').split(' ').filter(Boolean), ids.messageId].map(id => '<' + id + '>')
     }, true, signal)
-    const info = await this.sendMail(name, cfg, { from: senderOf(cfg), to, cc, subject, text, attachments, ...thread, disableFileAccess: true, disableUrlAccess: true }, signal)
+    const info = await this.sendMail(name, cfg, { from: senderOf(cfg), to, cc, subject, ...prepareMailBody(text, html), attachments, ...thread, disableFileAccess: true, disableUrlAccess: true }, signal)
     return { account: name, messageId: String(info.messageId ?? ''), accepted: Array.isArray(info.accepted) ? info.accepted.map(String) : [], rejected: Array.isArray(info.rejected) ? info.rejected.map(String) : [], response: String(info.response ?? '') }
   }
 
-  async reply(accountName: string | undefined, folder: string, uid: number, mode: EmailReplyMode, text: string, forwardTo: string, cc: string | undefined, signal?: AbortSignal): Promise<EmailReplyResult> {
+  async reply(accountName: string | undefined, folder: string, uid: number, mode: EmailReplyMode, text: string, forwardTo: string, cc: string | undefined, signal?: AbortSignal, options: ReplyOptions = {}): Promise<EmailReplyResult> {
     const name = this.resolveName(accountName)
     const cfg = this.account(name)
     const folderName = folder || cfg.inboxFolder
@@ -1365,6 +1375,7 @@ export class EmailPool {
         cfg.authUser === cfg.user ? cfg.user : [cfg.user, cfg.authUser],
         text,
         forwardTo,
+        options,
       )
     }, true, signal)
     const info = await this.sendMail(name, cfg, {
@@ -1373,6 +1384,8 @@ export class EmailPool {
       cc,
       subject: built.subject,
       text: built.text,
+      ...(built.html ? { html: built.html } : {}),
+      disableFileAccess: true, disableUrlAccess: true,
       ...(built.inReplyTo !== undefined ? { inReplyTo: '<' + built.inReplyTo + '>' } : {}),
       ...(built.references !== undefined ? { references: built.references.split(' ').map(id => '<' + id + '>') } : {}),
     }, signal)
