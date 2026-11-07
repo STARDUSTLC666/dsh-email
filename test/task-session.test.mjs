@@ -32,3 +32,11 @@ test('the workspace setting defaults to empty so sessions follow the global defa
   assert.equal(resolveEmailSettings({ provider: '', ...manual }).taskSessionWorkspace, '')
   assert.equal(resolveEmailSettings({ provider: '', ...manual, taskSessionWorkspace: '/srv/dsh-default' }).taskSessionWorkspace, '/srv/dsh-default')
 })
+
+test('the seeded prompt carries the explicit user requirement when one is given', () => {
+  const text = taskSessionPrompt({ account: 'default', folder: 'INBOX', uid: 7, subject: '测试主题', from: 'a@b.c', date: '2026-11-06T08:00:00Z', text: '正文' }, '识别告警设备并查库存，输出处理建议')
+  assert.ok(text.includes('处理需求：'))
+  assert.ok(text.includes('识别告警设备并查库存，输出处理建议'))
+  const fallback = taskSessionPrompt({ account: 'a', folder: 'f', uid: 1, subject: '', from: '', date: '', text: '' })
+  assert.ok(fallback.includes('(用户未填写额外需求，请自行判断处理)'))
+})

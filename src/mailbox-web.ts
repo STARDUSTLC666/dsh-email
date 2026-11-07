@@ -217,8 +217,11 @@ export class EmailMailboxBackend {
         signal,
       )
     }
-    if (body.action === 'taskSession')
-      return await runEmailTaskSession({ ctx: this.taskCtx, runtime: this.runtime, account, folder, uid, signal })
+    if (body.action === 'taskSession') {
+      const requirement = typeof body.requirement === 'string' ? body.requirement.trim() : ''
+      if (requirement.length > 2000) throw new Error('处理需求过长（最多 2000 字）')
+      return await runEmailTaskSession({ ctx: this.taskCtx, runtime: this.runtime, account, folder, uid, requirement, signal })
+    }
     if (body.action === 'replyDraft') {
       const original = await pool.read(account, uid, folder, signal),
         mode = body.replyAll === true ? 'reply-all' : 'reply'

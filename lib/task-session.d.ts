@@ -17,7 +17,7 @@ export declare function taskSessionPrompt(info: {
     from: string;
     date: string;
     text: string;
-}): string;
+}, requirement?: string): string;
 /**
  * Create (or reuse) a task session for one message and seed it with the approved
  * summary + handling brief. Host services arrive through the plugin ctx.
@@ -28,6 +28,7 @@ export declare function runEmailTaskSession(opts: {
     account: string;
     folder: string;
     uid: string | number;
+    requirement?: string;
     signal?: AbortSignal;
 }): Promise<{
     sessionId: string;

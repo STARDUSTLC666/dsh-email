@@ -31,16 +31,19 @@ export function taskSessionPrompt(info: {
   from: string
   date: string
   text: string
-}): string {
+}, requirement?: string): string {
   const body = String(info.text || '')
   const lines = [
-    '【邮件任务】以下邮件由邮箱页面的「在会话中处理」发起，请分析并按需要处理。',
+    '【邮件任务】以下邮件由邮箱页面的「在会话中处理」发起，请按下述处理需求执行。',
     `- 账号：${info.account}`,
     `- 文件夹：${info.folder}`,
     `- UID：${info.uid}（可用 email_read 按账号/文件夹/UID 重读全文与附件）`,
     `- 发件人：${info.from || '(未知)'}`,
     `- 时间：${info.date || '(未知)'}`,
     `- 主题：${info.subject || '(无主题)'}`,
+    '',
+    '处理需求：',
+    String(requirement || '').trim() || '(用户未填写额外需求，请自行判断处理)',
     '',
     '正文节选：',
     body ? body.slice(0, TASK_SESSION_PROMPT_LIMIT) : '(无正文)',
@@ -60,6 +63,7 @@ export async function runEmailTaskSession(opts: {
   account: string
   folder: string
   uid: string | number
+  requirement?: string
   signal?: AbortSignal
 }): Promise<{ sessionId: string; created: boolean; title: string }> {
   const read = (await opts.runtime.getPool().read(opts.account, opts.uid, opts.folder, opts.signal)) as any
@@ -90,7 +94,7 @@ export async function runEmailTaskSession(opts: {
   await controller.prompt({
     sessionId,
     requestId: randomUUID(),
-    content: [{ type: 'text', text: taskSessionPrompt(info) }],
+    content: [{ type: 'text', text: taskSessionPrompt(info, opts.requirement) }],
   }, opts.signal)
   return { sessionId, created: true, title: taskSessionTitle(info.subject) }
 }
