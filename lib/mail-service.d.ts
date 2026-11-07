@@ -24,6 +24,12 @@ export declare class EmailService {
     get withImap(): EmailPool['withImap'];
     previewTrash(account: string, folder: string, uids: number[], target?: string, signal?: AbortSignal): Promise<import("./types.js").EmailMovePreview>;
     moveMessages(account: string, folder: string, uids: number[], target: string, uidValidity: number, signal?: AbortSignal): Promise<import("./types.js").EmailMoveResult>;
+    createFolder(account: string, path: string, signal?: AbortSignal): Promise<void>;
+    deleteFolder(account: string, path: string, signal?: AbortSignal): Promise<void>;
+    renameFolder(account: string, path: string, newPath: string, signal?: AbortSignal): Promise<void>;
+    purgeFolder(account: string, path: string, signal?: AbortSignal): Promise<{
+        count: number;
+    }>;
     set withImap(run: EmailPool['withImap']);
     private name;
     private usesApi;

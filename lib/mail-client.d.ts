@@ -209,6 +209,12 @@ export declare class EmailPool {
     previewTrash(accountName: string | undefined, folder: string, uids: number[], target?: string, signal?: AbortSignal): Promise<import("./types.js").EmailMovePreview>;
     moveMessages(accountName: string | undefined, folder: string, uids: number[], target: string, uidValidity: number, signal?: AbortSignal): Promise<import("./types.js").EmailMoveResult>;
     mark(accountName: string | undefined, folder: string, uid: number, action: EmailMarkAction, toFolder?: string, signal?: AbortSignal): Promise<EmailMarkResult>;
+    purgeFolder(accountName: string | undefined, path: string, signal?: AbortSignal): Promise<{
+        count: number;
+    }>;
+    createFolder(accountName: string | undefined, path: string, signal?: AbortSignal): Promise<void>;
+    deleteFolder(accountName: string | undefined, path: string, signal?: AbortSignal): Promise<void>;
+    renameFolder(accountName: string | undefined, path: string, newPath: string, signal?: AbortSignal): Promise<void>;
     folders(accountName: string | undefined, subscribedOnly: boolean, signal?: AbortSignal): Promise<EmailFoldersResult>;
     downloadAttachment(accountName: string | undefined, folder: string, uid: number, index: number, workspaceHint?: string, signal?: AbortSignal, byteLimit?: number, expectedValidity?: number): Promise<EmailAttachmentResult>;
     send(accountName: string | undefined, to: string, subject: string, text: string | undefined, cc: string | undefined, attachmentPaths: string[] | undefined, signal?: AbortSignal): Promise<EmailSendResult>;

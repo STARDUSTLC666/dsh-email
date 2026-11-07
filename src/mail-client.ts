@@ -1234,6 +1234,47 @@ export class EmailPool {
     }, false, signal)
   }
 
+  async purgeFolder(accountName: string | undefined, path: string, signal?: AbortSignal): Promise<{ count: number }> {
+    const name = this.resolveName(accountName)
+    const cfg = this.account(name)
+    const folderName = path || cfg.inboxFolder
+    return this.withImap(name, folderName, async (client) => {
+      const mailbox = client.mailbox
+      const before = mailbox === false ? 0 : mailbox.exists
+      await client.messageFlagsAdd('1:*', ['\\Deleted'])
+      signal?.throwIfAborted()
+      await client.messageDelete('1:*', { uid: false })
+      signal?.throwIfAborted()
+      const after = client.mailbox === false ? 0 : client.mailbox.exists
+      this.folderCache.delete(name)
+      return { count: Math.max(0, before - after) }
+    }, false, signal)
+  }
+
+  async createFolder(accountName: string | undefined, path: string, signal?: AbortSignal): Promise<void> {
+    const name = this.resolveName(accountName)
+    return this.withImap(name, null, async (client) => {
+      await client.mailboxCreate(path)
+      this.folderCache.delete(name)
+    }, true, signal)
+  }
+
+  async deleteFolder(accountName: string | undefined, path: string, signal?: AbortSignal): Promise<void> {
+    const name = this.resolveName(accountName)
+    return this.withImap(name, null, async (client) => {
+      await client.mailboxDelete(path)
+      this.folderCache.delete(name)
+    }, true, signal)
+  }
+
+  async renameFolder(accountName: string | undefined, path: string, newPath: string, signal?: AbortSignal): Promise<void> {
+    const name = this.resolveName(accountName)
+    return this.withImap(name, null, async (client) => {
+      await client.mailboxRename(path, newPath)
+      this.folderCache.delete(name)
+    }, true, signal)
+  }
+
   async folders(accountName: string | undefined, subscribedOnly: boolean, signal?: AbortSignal): Promise<EmailFoldersResult> {
     const name = this.resolveName(accountName)
     return this.withImap(name, null, async (client) => {

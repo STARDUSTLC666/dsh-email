@@ -109,6 +109,27 @@ export class EmailMailboxBackend {
     if (folder.length > 1024 || /[\r\n\0]/.test(folder))
       throw new Error('无效文件夹')
     if (body.action === 'folders') return pool.folders(account, false, signal)
+    if (body.action === 'folderCreate' || body.action === 'folderRename' || body.action === 'folderDelete' || body.action === 'folderPurge') {
+      const path = typeof body.path === 'string' ? body.path.trim() : ''
+      if (!path || path.length > 1024 || /[\r\n\0]/.test(path)) throw new Error('无效文件夹')
+      const newName = typeof body.newName === 'string' ? body.newName.trim() : ''
+      if (body.action === 'folderCreate') {
+        await pool.createFolder(account, path, signal)
+        return { ok: true, action: 'create', path }
+      }
+      if (body.action === 'folderRename') {
+        if (!newName || newName.length > 1024 || /[\r\n\0]/.test(newName)) throw new Error('无效的新文件夹名')
+        await pool.renameFolder(account, path, newName, signal)
+        return { ok: true, action: 'rename', path, newName }
+      }
+      if (body.action === 'folderDelete') {
+        if (path === 'INBOX' || path === 'Sent Messages') throw new Error('系统文件夹不可删除')
+        await pool.deleteFolder(account, path, signal)
+        return { ok: true, action: 'delete', path }
+      }
+      const result = await pool.purgeFolder(account, path, signal)
+      return { ok: true, action: 'purge', path, count: result.count }
+    }
     if (body.action === 'trashPreview') {
       const preview: EmailMovePreview = await pool.previewTrash(account, folder, moveUids(body.uids), typeof body.target === 'string' ? body.target : undefined, signal)
       this.unchanged(account, accountFingerprint)

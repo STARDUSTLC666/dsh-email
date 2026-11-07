@@ -52,7 +52,7 @@ test('all tool schemas use the portable Harness supported keyword subset', () =>
   }
   const ctx = fakeCtx()
   apply(ctx, {})
-  assert.equal(ctx.tools.defs.length, 11)
+  assert.equal(ctx.tools.defs.length, 15)
   for (const tool of ctx.tools.defs) { check(tool.parameters, tool.name + '.parameters'); check(tool.output.schema, tool.name + '.output') }
 })
 
@@ -72,11 +72,11 @@ test('every registered tool parameters value is a compiled JSON Schema (native w
   assert.deepEqual(send.parameters.properties.attachments.items, { type: 'string' })
 })
 
-test('apply registers the eleven email tools even without config', () => {
+test('apply registers the fifteen email tools even without config', () => {
   const ctx = fakeCtx()
   apply(ctx, {})
   const names = ctx.tools.defs.map(def => def.name).sort()
-  assert.deepEqual(names, ['email_attachment', 'email_draft', 'email_folders', 'email_health', 'email_list', 'email_mark', 'email_read', 'email_reply', 'email_search', 'email_send', 'email_watch'])
+  assert.deepEqual(names, ['email_attachment', 'email_draft', 'email_folder_create', 'email_folder_delete', 'email_folder_purge', 'email_folder_rename', 'email_folders', 'email_health', 'email_list', 'email_mark', 'email_read', 'email_reply', 'email_search', 'email_send', 'email_watch'])
 })
 
 test('every tool returns a config hint instead of throwing when unconfigured', async () => {
@@ -271,12 +271,12 @@ test('no approval channel denies with the headless hint', async () => {
 })
 
 
-test('all eleven public tools declare finite timeouts', () => {
+test('all fifteen public tools declare finite timeouts', () => {
   const ctx = fakeCtx()
   apply(ctx, {})
-  const readmeTools = ['email_draft', 'email_list', 'email_read', 'email_search', 'email_send', 'email_folders', 'email_attachment', 'email_health', 'email_watch', 'email_mark', 'email_reply']
+  const readmeTools = ['email_draft', 'email_list', 'email_read', 'email_search', 'email_send', 'email_folders', 'email_attachment', 'email_health', 'email_watch', 'email_mark', 'email_reply', 'email_folder_create', 'email_folder_rename', 'email_folder_delete', 'email_folder_purge']
   assert.deepEqual(ctx.tools.defs.map(def => def.name).sort(), [...readmeTools].sort())
-  const slow = new Set(['email_search', 'email_watch'])
+  const slow = new Set(['email_search', 'email_watch', 'email_folder_purge'])
   for (const def of ctx.tools.defs) {
     assert.ok(Number.isFinite(def.timeoutMs) && def.timeoutMs > 0, def.name + ' 必须声明有限正数 timeoutMs')
     assert.equal(def.timeoutMs, slow.has(def.name) ? 120000 : 60000, def.name + ' 的 timeoutMs 与工具预算一致')

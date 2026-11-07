@@ -29,6 +29,10 @@ See the [draft workbench](DRAFTS.en.md) for editable drafts and per-account trus
 | `email_watch` | Incremental new-mail check: the first call seeds a baseline, every later call reports only unread mail newer than the last check — ideal for scheduled new-mail notifications |
 | `email_mark` | Mark messages as read/unread, add/remove stars, or move messages to another folder |
 | `email_reply` | Reply, reply-all or forward with thread headers and quoted content; uses the same send-approval gate |
+| `email_folder_create` | Create a folder on the mail server (IMAP only; path separators follow the server, e.g. `Other/New Folder`) |
+| `email_folder_rename` | Rename a folder (IMAP only; system folders like INBOX / Sent Messages cannot be renamed) |
+| `email_folder_purge` | Purge a folder: mark every message inside deleted and remove from the server, **not recoverable** |
+| `email_folder_delete` | Delete a folder and all its messages, **not recoverable** (system folders like INBOX / Sent Messages cannot be deleted) |
 
 ### Search coverage and older messages
 

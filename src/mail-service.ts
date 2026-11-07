@@ -54,6 +54,22 @@ export class EmailService {
     if (this.settings.accounts.get(account)?.transport) throw new Error('移入废纸篓仅支持 IMAP 账号 / Trash is available for IMAP accounts')
     return this.imap.moveMessages(account, folder, uids, target, uidValidity, signal)
   }
+  createFolder(account: string, path: string, signal?: AbortSignal) {
+    if (this.settings.accounts.get(account)?.transport) throw new Error('新建文件夹仅支持 IMAP 账号 / Folders are only available for IMAP accounts')
+    return this.imap.createFolder(account, path, signal)
+  }
+  deleteFolder(account: string, path: string, signal?: AbortSignal) {
+    if (this.settings.accounts.get(account)?.transport) throw new Error('删除文件夹仅支持 IMAP 账号 / Folders are only available for IMAP accounts')
+    return this.imap.deleteFolder(account, path, signal)
+  }
+  renameFolder(account: string, path: string, newPath: string, signal?: AbortSignal) {
+    if (this.settings.accounts.get(account)?.transport) throw new Error('重命名文件夹仅支持 IMAP 账号 / Folders are only available for IMAP accounts')
+    return this.imap.renameFolder(account, path, newPath, signal)
+  }
+  purgeFolder(account: string, path: string, signal?: AbortSignal) {
+    if (this.settings.accounts.get(account)?.transport) throw new Error('清空文件夹仅支持 IMAP 账号 / Folders are only available for IMAP accounts')
+    return this.imap.purgeFolder(account, path, signal)
+  }
   set withImap(run: EmailPool['withImap']) {
     this.imap.withImap = run
   }

@@ -1,3 +1,33 @@
+function MailFoldersDialog({ account, folders, busy, onClose, onChanged }) {
+  const [newName, setNewName] = React.useState('');
+  const [renameOf, setRenameOf] = React.useState(null), [renameValue, setRenameValue] = React.useState('');
+  const [error, setError] = React.useState(''), [working, setWorking] = React.useState(false);
+  const system = path => /^(INBOX|Sent Messages|Deleted Messages|Drafts|Junk)$/i.test(path);
+  async function act(name, payload, confirmText, done) {
+    if (confirmText && !window.confirm(confirmText)) return;
+    setError(''); setWorking(true);
+    try {
+      await mailboxApi(name, { account, ...payload });
+      setWorking(false); setNewName(''); setRenameOf(null); setRenameValue('');
+      if (done) done();
+      if (onChanged) onChanged();
+    } catch (e) { setWorking(false); setError(emailError(e)); }
+  }
+  return h(W.Dialog, { title: dt('管理文件夹', 'Manage folders'), closeLabel: dt('关闭', 'Close'), busy: working || busy, onClose },
+    h('p', { className: 'dshe-hint' }, dt('新建、重命名、清空或删除邮箱文件夹（仅 IMAP 账号支持）。删除/清空不可恢复。', 'Create, rename, empty or delete mailbox folders (IMAP accounts only). Delete and empty cannot be undone.')),
+    h(W.Status, { tone: 'error' }, error),
+    h('label', { className: 'dshe-field' }, dt('新建文件夹', 'New folder'), h('div', { style: { display: 'flex', gap: 8 } }, h('input', { value: newName, placeholder: dt('例如：招标文件', 'e.g. Tenders'), onChange: e => setNewName(e.target.value) }), h(W.Button, { disabled: !newName.trim() || working || busy, variant: 'primary', onClick: () => act('folderCreate', { path: newName.trim() }) }, dt('创建', 'Create')))),
+    h('ul', { style: { listStyle: 'none', padding: 0, margin: '8px 0 0', display: 'grid', gap: 6 } }, folders.map(f => h('li', { key: f.path, style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', border: '1px solid var(--w-border)', borderRadius: 8, padding: '6px 10px', fontSize: 13 } },
+      renameOf === f.path ? h(React.Fragment, null,
+        h('input', { value: renameValue, onChange: e => setRenameValue(e.target.value), style: { flex: 1, minWidth: 120 } }),
+        h(W.Button, { disabled: !renameValue.trim() || working || busy, variant: 'primary', onClick: () => act('folderRename', { path: f.path, newName: renameValue.trim() }, null, () => setRenameOf(null)) }, dt('保存', 'Save')),
+        h(W.Button, { disabled: working || busy, onClick: () => { setRenameOf(null); setRenameValue(''); } }, dt('取消', 'Cancel')))
+      : h(React.Fragment, null,
+        h('span', { style: { flex: 1, minWidth: 120, overflowWrap: 'anywhere' }, title: f.path }, f.path),
+        working || busy || system(f.path) ? h('span', { className: 'dshe-hint' }, dt('（系统文件夹）', '(System folder)'))
+        : h('span', { style: { display: 'flex', gap: 6 } }, h(W.Button, { variant: 'ghost', onClick: () => { setRenameOf(f.path); setRenameValue(f.path); } }, dt('重命名', 'Rename')), h(W.Button, { variant: 'ghost', onClick: () => act('folderPurge', { path: f.path }, dt('清空将永久删除该文件夹内的全部邮件，确定继续？', 'Empty permanently deletes every message in this folder. Continue?')) }, dt('清空', 'Empty')), h(W.Button, { variant: 'ghost', onClick: () => act('folderDelete', { path: f.path }, dt('删除将移除文件夹及其全部邮件，且不可恢复，确定继续？', 'Delete removes the folder and all its messages forever. Continue?')) }, dt('删除', 'Delete'))))))));
+}
+
 function MailTrashDialog({ account, folder, uids, uidValidity, folders, busy, onClose, onConfirm }) {
   const [target, setTarget] = React.useState(''), [preview, setPreview] = React.useState(null), [error, setError] = React.useState(''), [checking, setChecking] = React.useState(true);
   React.useEffect(() => {
