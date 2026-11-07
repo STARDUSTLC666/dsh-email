@@ -220,7 +220,19 @@ export class EmailMailboxBackend {
     if (body.action === 'taskSession') {
       const requirement = typeof body.requirement === 'string' ? body.requirement.trim() : ''
       if (requirement.length > 2000) throw new Error('处理需求过长（最多 2000 字）')
-      return await runEmailTaskSession({ ctx: this.taskCtx, runtime: this.runtime, account, folder, uid, requirement, signal })
+      const workspace = typeof body.workspace === 'string' ? body.workspace.trim() : ''
+      return await runEmailTaskSession({ ctx: this.taskCtx, runtime: this.runtime, account, folder, uid, requirement, workspace, signal })
+    }
+    if (body.action === 'workspaces') {
+      // 只读：返回已注册工作区列表 + 任务会话默认工作区，供前端创建会话时选择。
+      const registry = this.taskCtx?.get?.('workspaceRegistry')
+      const rows: { id: string; title: string; path: string }[] = []
+      if (registry?.list) {
+        for (const ws of registry.list() || []) {
+          rows.push({ id: String(ws?.id || ''), title: String(ws?.title || ws?.name || ''), path: String(ws?.path || '') })
+        }
+      }
+      return { workspaces: rows, defaultWorkspace: String(this.runtime.getEffectiveSettings().taskSessionWorkspace || '') }
     }
     if (body.action === 'replyDraft') {
       const original = await pool.read(account, uid, folder, signal),

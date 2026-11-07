@@ -29,6 +29,7 @@ export declare function runEmailTaskSession(opts: {
     folder: string;
     uid: string | number;
     requirement?: string;
+    workspace?: string;
     signal?: AbortSignal;
 }): Promise<{
     sessionId: string;
