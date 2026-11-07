@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { Readable } from 'node:stream'
 import { EmailSettingsBackend, installEmailSettingsWeb, SETTINGS_API_ROUTE, WHALE_API_ROUTE } from '../lib/web.js'
 import { EmailSettingsSchema } from '../lib/settings.js'
+import { parseAccountsYaml, resolveEmailSettings } from '../lib/config.js'
 
 const host = '192.168.36.49:3080'
 function fixture() {
@@ -66,4 +67,158 @@ test('settings and static courier routes register through the authenticated conn
   installEmailSettingsWeb(ctx, backend)
   assert.deepEqual(carrier.map(v => [v.path, v.methods]), [[SETTINGS_API_ROUTE, ['GET', 'POST']], [WHALE_API_ROUTE, ['GET']]])
   assert.equal(carrier[0].requestBody, 'buffered');assert.equal(carrier[1].requestBody, 'buffered');assert.equal(raw.length, 2)
+})
+
+test('account cards fall back to the accounts map when no accountsYaml is stored', async () => {
+  const value = EmailSettingsSchema({})
+  const ctx = { settings: { writable: true, describe: () => [{ ns: 'dsh-email', revision: 0, user: value }], async replace() {} } }
+  const config = {
+    defaultAccount: 'qq',
+    sendApproval: true,
+    accounts: {
+      qq: { provider: 'qq', user: 'first@example.test', password: 'secret-one' },
+      mail163: { provider: '163', user: 'second@example.test', password: 'secret-two' },
+    },
+  }
+  const backend = new EmailSettingsBackend(ctx, { get: () => value, config }, undefined)
+  const snapshot = await backend.snapshot()
+  assert.deepEqual(snapshot.accountsDetail.list.map((card) => card.name), ['qq', 'mail163'])
+  assert.equal(snapshot.accounts.filter((name) => name !== 'default').sort().join(','), 'mail163,qq')
+  // The editable value must carry the synthesized text: the editor seeds its save buffer
+  // from it and serializeCards() preserves the passwords that only live in that text.
+  assert.match(snapshot.settings.value.accountsYaml, /secret-one/)
+  assert.match(snapshot.settings.value.accountsYaml, /secret-two/)
+  const reloaded = resolveEmailSettings({ ...config, accountsYaml: snapshot.settings.value.accountsYaml })
+  assert.equal(reloaded.accounts.get('mail163').password, 'secret-two')
+})
+
+test('synthesized cards inherit the shared provider and endpoints', async () => {
+  const value = EmailSettingsSchema({})
+  const ctx = { settings: { writable: true, describe: () => [{ ns: 'dsh-email', revision: 0, user: value }], async replace() {} } }
+  const config = { provider: 'qq', accounts: { work: { user: 'w@example.test', password: 'p' } } }
+  const backend = new EmailSettingsBackend(ctx, { get: () => value, config }, undefined)
+  const [card] = (await backend.snapshot()).accountsDetail.list
+  assert.equal(card.name, 'work');assert.equal(card.provider, 'qq');assert.equal(card.imap.host, 'imap.qq.com')
+})
+
+test('synthesized accounts keep provider-scoped credentials and transport', async () => {
+  const value = EmailSettingsSchema({})
+  const ctx = { settings: { writable: true, describe: () => [{ ns: 'dsh-email', revision: 0, user: value }], async replace() {} } }
+  // A shared QQ password must not leak into an AgentMail account, whose credential is
+  // its own API key; a POP3 mailbox must keep its transport when the YAML is synthesized.
+  const config = {
+    provider: 'qq',
+    password: 'qq-shared-secret',
+    receiveProtocol: 'pop3',
+    accounts: {
+      work: { user: 'w@example.test' },
+      bot: { provider: 'agentmail', user: 'bot@example.test', apiKey: 'agent-key' },
+    },
+  }
+  const backend = new EmailSettingsBackend(ctx, { get: () => value, config }, undefined)
+  const snapshot = await backend.snapshot()
+  const parsed = parseAccountsYaml(snapshot.settings.value.accountsYaml).map
+  // The shared mailbox password belongs to QQ only: the AgentMail entry keeps its key.
+  assert.equal(parsed.work.password, 'qq-shared-secret')
+  assert.equal(parsed.work.receiveProtocol, 'pop3')
+  assert.equal(parsed.bot.password, undefined)
+  assert.equal(parsed.bot.apiKey, 'agent-key')
+  const cards = Object.fromEntries(snapshot.accountsDetail.list.map((card) => [card.name, card]))
+  assert.equal(cards.work.receiveProtocol, 'pop3')
+  assert.equal(cards.work.pop3.host, 'pop.qq.com')
+  assert.equal(cards.bot.provider, 'agentmail')
+})
+
+test('a different client ID never inherits the shared OAuth client secret', async () => {
+  const value = EmailSettingsSchema({})
+  const ctx = { settings: { writable: true, describe: () => [{ ns: 'dsh-email', revision: 0, user: value }], async replace() {} } }
+  const config = {
+    provider: 'gmail',
+    clientId: 'shared-client',
+    clientSecret: 'shared-secret',
+    accounts: { other: { provider: 'gmail', user: 'o@example.test', clientId: 'other-client' } },
+  }
+  const backend = new EmailSettingsBackend(ctx, { get: () => value, config }, undefined)
+  const yaml = (await backend.snapshot()).settings.value.accountsYaml
+  assert.doesNotMatch(yaml, /shared-secret/)
+})
+
+test('a named provider inherits the row password, and AgentMail keeps its own key', async () => {
+  const value = EmailSettingsSchema({})
+  const ctx = { settings: { writable: true, describe: () => [{ ns: 'dsh-email', revision: 0, user: value }], async replace() {} } }
+  // The row names no provider but does carry the password: resolveEmailSettings() still
+  // inherits it for a mailbox that names qq, so the synthesized YAML must keep it.
+  const config = { password: 'row-secret', accounts: { work: { provider: 'qq', user: 'w@example.test' } } }
+  const backend = new EmailSettingsBackend(ctx, { get: () => value, config }, undefined)
+  const parsed = parseAccountsYaml((await backend.snapshot()).settings.value.accountsYaml).map
+  assert.equal(parsed.work.password, 'row-secret')
+})
+
+test('AgentMail keeps its own API key over a shared AgentMail password', async () => {
+  const value = EmailSettingsSchema({})
+  const ctx = { settings: { writable: true, describe: () => [{ ns: 'dsh-email', revision: 0, user: value }], async replace() {} } }
+  const config = { provider: 'agentmail', password: 'shared-key', accounts: { bot: { apiKey: 'bot-key', user: 'bot@example.test' } } }
+  const backend = new EmailSettingsBackend(ctx, { get: () => value, config }, undefined)
+  const parsed = parseAccountsYaml((await backend.snapshot()).settings.value.accountsYaml).map
+  assert.equal(parsed.bot.apiKey, 'bot-key')
+  assert.equal(parsed.bot.password, undefined)
+})
+
+test('a blank AgentMail entry key inherits the shared AgentMail credential', async () => {
+  const value = EmailSettingsSchema({})
+  const ctx = { settings: { writable: true, describe: () => [{ ns: 'dsh-email', revision: 0, user: value }], async replace() {} } }
+  const config = { provider: 'agentmail', password: 'shared-key', accounts: { bot: { user: 'bot@example.test', apiKey: '' } } }
+  const backend = new EmailSettingsBackend(ctx, { get: () => value, config }, undefined)
+  const parsed = parseAccountsYaml((await backend.snapshot()).settings.value.accountsYaml).map
+  assert.equal(parsed.bot.apiKey, 'shared-key')
+  assert.equal(parsed.bot.password, undefined)
+})
+
+test('a nullish account password inherits the row password', async () => {
+  const value = EmailSettingsSchema({})
+  const ctx = { settings: { writable: true, describe: () => [{ ns: 'dsh-email', revision: 0, user: value }], async replace() {} } }
+  const config = { provider: 'qq', password: 'row-secret', accounts: { work: { user: 'w@example.test', password: null } } }
+  const backend = new EmailSettingsBackend(ctx, { get: () => value, config }, undefined)
+  const parsed = parseAccountsYaml((await backend.snapshot()).settings.value.accountsYaml).map
+  assert.equal(parsed.work.password, 'row-secret')
+})
+
+test('a blank account provider inherits the row provider', async () => {
+  const value = EmailSettingsSchema({})
+  const ctx = { settings: { writable: true, describe: () => [{ ns: 'dsh-email', revision: 0, user: value }], async replace() {} } }
+  const config = { provider: 'qq', accounts: { work: { provider: '', user: 'w@example.test', password: 'p' } } }
+  const backend = new EmailSettingsBackend(ctx, { get: () => value, config }, undefined)
+  const [card] = (await backend.snapshot()).accountsDetail.list
+  assert.equal(card.provider, 'qq');assert.equal(card.imap.host, 'imap.qq.com')
+})
+
+test('AgentMail keeps password-first precedence and nullish identity inherits the row', async () => {
+  const value = EmailSettingsSchema({})
+  const ctx = { settings: { writable: true, describe: () => [{ ns: 'dsh-email', revision: 0, user: value }], async replace() {} } }
+  const config = {
+    provider: 'qq', user: 'row@example.test', password: 'row-password',
+    accounts: { work: { user: null } },
+  }
+  const backend = new EmailSettingsBackend(ctx, { get: () => value, config }, undefined)
+  const parsed = parseAccountsYaml((await backend.snapshot()).settings.value.accountsYaml).map
+  assert.equal(parsed.work.user, 'row@example.test')
+  assert.equal(parsed.work.password, 'row-password')
+
+  const mail = { provider: 'agentmail', accounts: { bot: { user: 'bot@example.test', password: 'current-key', apiKey: 'old-key' } } }
+  const mailBackend = new EmailSettingsBackend(ctx, { get: () => value, config: mail }, undefined)
+  const bot = parseAccountsYaml((await mailBackend.snapshot()).settings.value.accountsYaml).map.bot
+  assert.equal(bot.apiKey, 'current-key')
+  assert.equal(bot.password, undefined)
+})
+
+test('nullish provider inherits the row, and AgentMail stays password-authenticated', async () => {
+  const value = EmailSettingsSchema({})
+  const ctx = { settings: { writable: true, describe: () => [{ ns: 'dsh-email', revision: 0, user: value }], async replace() {} } }
+  const config = { provider: 'qq', accounts: { work: { provider: null, user: 'w@example.test', password: 'p' } } }
+  const [card] = (await new EmailSettingsBackend(ctx, { get: () => value, config }, undefined).snapshot()).accountsDetail.list
+  assert.equal(card.provider, 'qq')
+
+  const mail = { provider: 'agentmail', authKind: 'oauth2', accounts: { bot: { user: 'bot@example.test', apiKey: 'k' } } }
+  const [bot] = (await new EmailSettingsBackend(ctx, { get: () => value, config: mail }, undefined).snapshot()).accountsDetail.list
+  assert.equal(bot.authKind, 'password')
 })

@@ -190,10 +190,6 @@ export declare function postVerdict(headers: Record<string, unknown>): {
     status: number;
     message: string;
 } | undefined;
-/**
- * Browser-facing backend: snapshot the settings namespace, save it with
- * optimistic concurrency, and test a draft account over a live IMAP login.
- */
 export declare class EmailSettingsBackend {
     private readonly ctx;
     private readonly scope;
