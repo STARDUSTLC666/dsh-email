@@ -80,8 +80,10 @@ export async function runEmailTaskSession(opts: {
   const sessionId = taskSessionId(taskSessionKey(String(read.messageId || ''), opts.account, opts.folder, opts.uid))
   const controller = opts.ctx?.sessionController
   if (!controller) throw new Error('当前 Host 不支持任务会话 / this host cannot create task sessions')
+  // 任务会话默认工作区：settings 的 taskSessionWorkspace（空 = 跟随 Host 全局默认）。
+  const workspace = String(opts.runtime.getEffectiveSettings().taskSessionWorkspace || '').trim()
   try {
-    await controller.create({ sessionId })
+    await controller.create({ sessionId, ...(workspace ? { cwd: workspace } : {}) })
   } catch (e) {
     const err = e as { message?: unknown }
     const msg = String(err?.message ?? e)
@@ -89,6 +91,17 @@ export async function runEmailTaskSession(opts: {
       return { sessionId, created: false, title: taskSessionTitle(info.subject) }
     }
     throw e
+  }
+  // 固定标题「邮件处理：<主题>」并 pin 住（user 源，覆盖引擎自动生成的标题）。
+  // rename 失败仅静默降级：不阻塞会话创建，回落引擎默认标题。
+  try {
+    await controller.rename({ sessionId, title: taskSessionTitle(info.subject) })
+  } catch (e) {
+    const err = e as { message?: unknown }
+    if (!String(err?.message ?? e).includes('already exists')) {
+      // 标题设置是可选的增强；任何失败（无 session-title 服务等）都不应终止任务会话。
+      console.warn(`[dsh-email] task session title rename skipped: ${String(err?.message ?? e)}`)
+    }
   }
   // sessionController.prompt(request, signal) — signal is REQUIRED (non-optional throwIfAborted)
   await controller.prompt({

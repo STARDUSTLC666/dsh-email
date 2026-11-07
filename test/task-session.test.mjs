@@ -40,3 +40,42 @@ test('the seeded prompt carries the explicit user requirement when one is given'
   const fallback = taskSessionPrompt({ account: 'a', folder: 'f', uid: 1, subject: '', from: '', date: '', text: '' })
   assert.ok(fallback.includes('(用户未填写额外需求，请自行判断处理)'))
 })
+
+test('runEmailTaskSession passes the configured workspace as cwd and pins the title via rename', async () => {
+  const { runEmailTaskSession } = await import('../lib/task-session.js')
+  let createArgs, renameArgs, promptArgs
+  const controller = {
+    create: async (req) => { createArgs = req },
+    rename: async (req) => { renameArgs = req },
+    prompt: async (req) => { promptArgs = req },
+  }
+  const runtime = {
+    getEffectiveSettings: () => ({ taskSessionWorkspace: '/home/xajc/mail' }),
+    getPool: () => ({ read: async () => ({ messageId: '<m@t>', subject: '磁盘告警 Disk-01 使用率 92%', from: [{ address: 'a@b.c' }], date: new Date('2026-11-07T08:00:00Z'), text: '正文' }) }),
+  }
+  const res = await runEmailTaskSession({ ctx: { sessionController: controller }, runtime, account: 'default', folder: 'INBOX', uid: 9, requirement: '查库存' })
+  assert.equal(res.created, true)
+  assert.equal(createArgs.sessionId, taskSessionId(taskSessionKey('<m@t>', 'default', 'INBOX', 9)))
+  assert.equal(createArgs.cwd, '/home/xajc/mail')
+  assert.equal(renameArgs.title, res.title)
+  assert.ok(renameArgs.title.startsWith('邮件处理：磁盘'))
+  assert.ok(promptArgs.content[0].text.includes('处理需求：'))
+})
+
+test('runEmailTaskSession omits cwd when the workspace setting is empty and tolerates rename failure', async () => {
+  const { runEmailTaskSession } = await import('../lib/task-session.js')
+  let createArgs, renamed = false
+  const controller = {
+    create: async (req) => { createArgs = req },
+    rename: async () => { renamed = true; throw new Error('gateway/internal renaming is unavailable') },
+    prompt: async () => {},
+  }
+  const runtime = {
+    getEffectiveSettings: () => ({ taskSessionWorkspace: '' }),
+    getPool: () => ({ read: async () => ({ messageId: '<n@t>', subject: '周报', from: [{ address: 'a@b.c' }], date: '2026-11-07T08:00:00Z', text: 'x' }) }),
+  }
+  const res = await runEmailTaskSession({ ctx: { sessionController: controller }, runtime, account: 'default', folder: 'INBOX', uid: 10 })
+  assert.equal(res.created, true)
+  assert.equal(createArgs.cwd, undefined) // 空设置 = 不传 cwd，跟随 Host 默认
+  assert.equal(renamed, true) // rename 被尝试过
+})
