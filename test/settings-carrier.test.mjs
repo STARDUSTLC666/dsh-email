@@ -67,3 +67,20 @@ test('settings and static courier routes register through the authenticated conn
   assert.deepEqual(carrier.map(v => [v.path, v.methods]), [[SETTINGS_API_ROUTE, ['GET', 'POST']], [WHALE_API_ROUTE, ['GET']]])
   assert.equal(carrier[0].requestBody, 'buffered');assert.equal(carrier[1].requestBody, 'buffered');assert.equal(raw.length, 2)
 })
+
+test('account cards fall back to the accounts map when no accountsYaml is stored', async () => {
+  const value = EmailSettingsSchema({})
+  const ctx = { settings: { writable: true, describe: () => [{ ns: 'dsh-email', revision: 0, user: value }], async replace() {} } }
+  const config = {
+    defaultAccount: 'qq',
+    sendApproval: true,
+    accounts: {
+      qq: { provider: 'qq', user: 'first@example.test', password: 'secret-one' },
+      mail163: { provider: '163', user: 'second@example.test', password: 'secret-two' },
+    },
+  }
+  const backend = new EmailSettingsBackend(ctx, { get: () => value, config }, undefined)
+  const snapshot = await backend.snapshot()
+  assert.deepEqual(snapshot.accountsDetail.list.map((card) => card.name), ['qq', 'mail163'])
+  assert.equal(snapshot.accounts.filter((name) => name !== 'default').sort().join(','), 'mail163,qq')
+})
