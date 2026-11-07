@@ -13,7 +13,7 @@ import { EmailService, type MailDependencies } from './mail-service.js'
 export const Config = ConfigSchema
 
 export const name = 'tool-email'
-export const inject = ['settings', 'tools']
+export const inject = ['settings', 'tools', 'sessionController']
 export type Config = EmailConfig
 
 /** Compose settings/pool lifecycle, tools, browser routes and the outgoing-mail gate. */
