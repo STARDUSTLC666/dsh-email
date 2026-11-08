@@ -1006,6 +1006,13 @@ export function postVerdict(headers: Record<string, unknown>): { status: number;
  * Browser-facing backend: snapshot the settings namespace, save it with
  * optimistic concurrency, and test a draft account over a live IMAP login.
  */
+/** Drop the account storage a map-backed profile owns, so a form without accounts cannot clear it. */
+function withoutMappedAccountStorage(value: EmailSettingsValue): Record<string, unknown> {
+  const section: Record<string, unknown> = { ...value }
+  for (const key of ['accounts', 'user', 'password', 'authUser', 'authPassword']) delete section[key]
+  return section
+}
+
 export class EmailSettingsBackend {
   constructor(private readonly ctx: any, private readonly scope: any, private readonly rowConfig: EmailConfig, private readonly apiFetch?: typeof fetch) {}
 
@@ -1082,8 +1089,17 @@ export class EmailSettingsBackend {
       // The card editor takes ownership of legacy shorthand/maps. Clear only
       // the superseded account storage, so removing the last card cannot
       // resurrect a hidden old account on the next read.
+      // A profile can store its mailboxes as the documented `accounts` map instead of the
+      // settings page's `accountsYaml` text. That form renders an empty card list, so an
+      // autosave arrives with blank accountsYaml even though the mailboxes are configured —
+      // and clearing the superseded storage below would delete every one of them, including
+      // the credentials, with no warning. Keep the map and the legacy scalars whenever the
+      // form carried no accounts at all.
+      const incomingYaml = typeof value.accountsYaml === 'string' ? value.accountsYaml.trim() : undefined
+      const storedAccounts = (this.currentConfig as Record<string, any> | undefined)?.accounts
+      const keepsMappedAccounts = incomingYaml === '' && storedAccounts !== null && typeof storedAccounts === 'object' && !Array.isArray(storedAccounts) && Object.keys(storedAccounts).length > 0
       const section: Record<string, unknown> = Object.hasOwn(value, 'accountsYaml')
-        ? { ...value, accounts: {}, user: '', password: '', authUser: '', authPassword: '' }
+        ? keepsMappedAccounts ? withoutMappedAccountStorage(value) : { ...value, accounts: {}, user: '', password: '', authUser: '', authPassword: '' }
         : { ...value }
       if (Object.hasOwn(value, 'accountsYaml')) {
         // The form displays the default card's resolved endpoints; those are not shared edits.
