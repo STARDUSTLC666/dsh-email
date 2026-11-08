@@ -4,18 +4,21 @@ import { messageOf } from './mail-client.js'
 import { NOT_LOGGED_IN_MESSAGE, oauth2StateOf } from './oauth2.js'
 import type { EmailRuntime } from './runtime.js'
 import type { EmailDraftBackend } from './draft-web.js'
-import { takeReplyAuthorization } from './approval.js'
+import { takeReplyAuthorization, takeFolderAuthorization } from './approval.js'
 import { scheduleTool } from './schedule-tool.js'
 import {
   descriptions, parameters, MAX_LIMIT, MARK_ACTIONS, REPLY_MODES,
   executionSignal, normalizeAttachmentPaths, parseEmailDay,
   attachmentSchema, foldersSchema, listSchema, markSchema, readSchema, replySchema, sendSchema, watchSchema,
-  renderAttachment, renderFolders, renderHealth, renderList, renderMark, renderRead, renderReply,
+  renderAttachment, renderFolder, renderFolders, renderHealth, renderList, renderMark, renderRead, renderReply,
   renderSearch, renderSend, renderWatch, type TextBlock,
 } from './tool-contract.js'
 import type {
   EmailAttachmentArgs,
   EmailAttachmentResult,
+  EmailFolderAction,
+  EmailFolderArgs,
+  EmailFolderResult,
   EmailFoldersArgs,
   EmailFoldersResult,
   EmailListArgs,
@@ -298,6 +301,63 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
         const args = rawArgs as EmailWatchArgs
         const limit = clampInt(args.limit, 20, 1, MAX_LIMIT)
         return await watchCore(args.account?.trim() || '', args.folder?.trim() || '', limit, 'tool', executionSignal(exec))
+      }
+    },
+    {
+      name: 'email_folder_create',
+      description: descriptions.email_folder_create,
+      parameters: parameters.email_folder_create,
+      output: { schema: { type: 'object', properties: { account: { type: 'string' }, action: { type: 'string' }, path: { type: 'string' } }, required: ['account', 'action', 'path'] }, render: (_a: unknown, v: unknown) => renderFolder(v as EmailFolderResult) },
+      timeoutMs: QUERY_TIMEOUT_MS,
+      async execute(rawArgs: unknown, exec: unknown) {
+        const args = rawArgs as EmailFolderArgs
+        if (!args.path?.trim()) throw new Error('path 参数不能为空')
+        const permit = takeFolderAuthorization(rawArgs, runtime)
+        await getPool().createFolder(permit.account, permit.path, executionSignal(exec))
+        return { account: permit.account, action: 'create' as EmailFolderAction, path: permit.path }
+      }
+    },
+    {
+      name: 'email_folder_rename',
+      description: descriptions.email_folder_rename,
+      parameters: parameters.email_folder_rename,
+      output: { schema: { type: 'object', properties: { account: { type: 'string' }, action: { type: 'string' }, path: { type: 'string' }, newName: { type: 'string' } }, required: ['account', 'action', 'path'] }, render: (_a: unknown, v: unknown) => renderFolder(v as EmailFolderResult) },
+      timeoutMs: QUERY_TIMEOUT_MS,
+      async execute(rawArgs: unknown, exec: unknown) {
+        const args = rawArgs as EmailFolderArgs
+        if (!args.path?.trim()) throw new Error('path 参数不能为空')
+        if (!args.newName?.trim()) throw new Error('newName 参数不能为空')
+        const permit = takeFolderAuthorization(rawArgs, runtime)
+        await getPool().renameFolder(permit.account, permit.path, permit.newName!, executionSignal(exec))
+        return { account: permit.account, action: 'rename' as EmailFolderAction, path: permit.path, newName: permit.newName }
+      }
+    },
+    {
+      name: 'email_folder_delete',
+      description: descriptions.email_folder_delete,
+      parameters: parameters.email_folder_delete,
+      output: { schema: { type: 'object', properties: { account: { type: 'string' }, action: { type: 'string' }, path: { type: 'string' } }, required: ['account', 'action', 'path'] }, render: (_a: unknown, v: unknown) => renderFolder(v as EmailFolderResult) },
+      timeoutMs: QUERY_TIMEOUT_MS,
+      async execute(rawArgs: unknown, exec: unknown) {
+        const args = rawArgs as EmailFolderArgs
+        if (!args.path?.trim()) throw new Error('path 参数不能为空')
+        const permit = takeFolderAuthorization(rawArgs, runtime)
+        await getPool().deleteFolder(permit.account, permit.path, permit.snapshot!, executionSignal(exec))
+        return { account: permit.account, action: 'delete' as EmailFolderAction, path: permit.path }
+      }
+    },
+    {
+      name: 'email_folder_purge',
+      description: descriptions.email_folder_purge,
+      parameters: parameters.email_folder_purge,
+      output: { schema: { type: 'object', properties: { account: { type: 'string' }, action: { type: 'string' }, path: { type: 'string' }, count: { type: 'number' } }, required: ['account', 'action', 'path'] }, render: (_a: unknown, v: unknown) => renderFolder(v as EmailFolderResult) },
+      timeoutMs: BATCH_TIMEOUT_MS,
+      async execute(rawArgs: unknown, exec: unknown) {
+        const args = rawArgs as EmailFolderArgs
+        if (!args.path?.trim()) throw new Error('path 参数不能为空')
+        const permit = takeFolderAuthorization(rawArgs, runtime)
+        const result = await getPool().purgeFolder(permit.account, permit.path, permit.snapshot!, executionSignal(exec))
+        return { account: permit.account, action: 'purge' as EmailFolderAction, path: permit.path, count: result.count }
       }
     }
   ]

@@ -219,6 +219,24 @@ export interface EmailMarkArgs extends AccountArg {
   folder?: string
 }
 
+export type EmailFolderAction = 'create' | 'rename' | 'delete' | 'purge'
+
+export interface EmailFolderArgs extends AccountArg {
+  /** Folder path to operate on; for 'create' the new folder path, for 'rename' the current path. */
+  path: string
+  /** Target name for 'rename' action. */
+  newName?: string
+}
+
+export interface EmailFolderResult {
+  account: string
+  action: EmailFolderAction
+  path: string
+  newName?: string
+  /** Number of messages deleted or purged. */
+  count?: number
+}
+
 export interface EmailMarkResult {
   account: string
   uid: number | string

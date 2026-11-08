@@ -1,3 +1,38 @@
+function MailFoldersDialog({ account, folders, busy, onClose, onChanged }) {
+  const [newName, setNewName] = React.useState('');
+  const [renameOf, setRenameOf] = React.useState(null), [renameValue, setRenameValue] = React.useState('');
+  const [error, setError] = React.useState(''), [working, setWorking] = React.useState(false);
+  const system = row => !!row.specialUse || /^(INBOX|Sent|Sent Messages|Sent Items|Deleted Messages|Deleted Items|Drafts|Junk|Trash|Archive|All Mail)$/i.test(row.path);
+  async function act(name, payload, confirmText, done) {
+    setError(''); setWorking(true);
+    try {
+      let confirmation = {};
+      if (confirmText) {
+        const preview = await mailboxApi('folderPreview', { account, path: payload.path, operation: name === 'folderDelete' ? 'delete' : 'purge' });
+        if (!window.confirm(account + ' · ' + payload.path + ' · ' + preview.count + dt(' 封邮件\n', ' messages\n') + confirmText)) { setWorking(false); return; }
+        confirmation = { receipt: preview.receipt, confirmed: true };
+      }
+      await mailboxApi(name, { account, ...payload, ...confirmation });
+      setWorking(false); setNewName(''); setRenameOf(null); setRenameValue('');
+      if (done) done();
+      if (onChanged) onChanged();
+    } catch (e) { setWorking(false); setError(emailError(e)); }
+  }
+  return h(W.Dialog, { title: dt('管理文件夹', 'Manage folders'), closeLabel: dt('关闭', 'Close'), busy: working || busy, onClose },
+    h('p', { className: 'dshe-hint' }, dt('仅管理 IMAP 自建文件夹。清空先预览再确认，只处理已确认邮件；最多 2000 封并要求 UIDPLUS。只能删除空文件夹，永久删除不可恢复。', 'Manage custom IMAP folders. Purge requires preview and confirmation, affects reviewed messages only, and requires UIDPLUS (up to 2000 messages). Only empty folders can be deleted. Permanent deletion cannot be undone.')),
+    h(W.Status, { tone: 'error' }, error),
+    h('label', { className: 'dshe-field' }, dt('新建文件夹', 'New folder'), h('div', { style: { display: 'flex', gap: 8 } }, h('input', { value: newName, placeholder: dt('例如：招标文件', 'e.g. Tenders'), onChange: e => setNewName(e.target.value) }), h(W.Button, { disabled: !newName.trim() || working || busy, variant: 'primary', onClick: () => act('folderCreate', { path: newName.trim() }) }, dt('创建', 'Create')))),
+    h('ul', { style: { listStyle: 'none', padding: 0, margin: '8px 0 0', display: 'grid', gap: 6 } }, folders.map(f => h('li', { key: f.path, style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', border: '1px solid var(--w-border)', borderRadius: 8, padding: '6px 10px', fontSize: 13 } },
+      renameOf === f.path ? h(React.Fragment, null,
+        h('input', { value: renameValue, onChange: e => setRenameValue(e.target.value), style: { flex: 1, minWidth: 120 } }),
+        h(W.Button, { disabled: !renameValue.trim() || working || busy, variant: 'primary', onClick: () => act('folderRename', { path: f.path, newName: renameValue.trim() }, null, () => setRenameOf(null)) }, dt('保存', 'Save')),
+        h(W.Button, { disabled: working || busy, onClick: () => { setRenameOf(null); setRenameValue(''); } }, dt('取消', 'Cancel')))
+      : h(React.Fragment, null,
+        h('span', { style: { flex: 1, minWidth: 120, overflowWrap: 'anywhere' }, title: f.path }, f.path),
+        system(f) ? h('span', { className: 'dshe-hint' }, dt('（系统文件夹）', '(System folder)'))
+        : h('span', { style: { display: 'flex', gap: 6 } }, h(W.Button, { variant: 'ghost', disabled: working || busy, onClick: () => { setRenameOf(f.path); setRenameValue(f.path); } }, dt('重命名', 'Rename')), h(W.Button, { variant: 'ghost', disabled: working || busy, onClick: () => act('folderPurge', { path: f.path }, dt('清空将永久删除该文件夹内的全部邮件，确定继续？', 'Empty permanently deletes every message in this folder. Continue?')) }, dt('清空', 'Empty')), h(W.Button, { variant: 'ghost', disabled: working || busy, onClick: () => act('folderDelete', { path: f.path }, dt('删除将移除文件夹及其全部邮件，且不可恢复，确定继续？', 'Delete removes the folder and all its messages forever. Continue?')) }, dt('删除', 'Delete'))))))));
+}
+
 function MailTrashDialog({ account, folder, uids, uidValidity, folders, busy, onClose, onConfirm }) {
   const [target, setTarget] = React.useState(''), [preview, setPreview] = React.useState(null), [error, setError] = React.useState(''), [checking, setChecking] = React.useState(true);
   React.useEffect(() => {
@@ -52,7 +87,7 @@ function MailContent({ detail, account, folder, selected }) {
   }
   const external = rich?.images?.filter(image => image.kind === 'remote').length || 0;
   return h('section', { className: 'w-section email-body' },
-    rich?.nodes?.length ? h('div', { className: 'email-content-toolbar' }, h(W.Button, { variant: 'ghost', onClick: () => setPlain(!plain) }, plain ? dt('查看图文', 'View formatted message') : dt('查看纯文本', 'View plain text')),
+    rich?.nodes?.length ? h('div', { className: 'email-content-toolbar' }, h(W.Button, { variant: 'ghost', disabled: working || busy, onClick: () => setPlain(!plain) }, plain ? dt('查看图文', 'View formatted message') : dt('查看纯文本', 'View plain text')),
       !plain && external > 0 ? h(W.Button, { disabled: remote, onClick: () => setRemote(true) }, remote ? dt('已允许本封外部图片', 'External images allowed for this message') : dt('加载外部图片（', 'Load external images (') + external + dt('）', ')')) : null,
       !plain && Object.values(images).some(image => image.error) ? h(W.Button, { onClick: () => setRetry(n => n + 1) }, dt('重试图片', 'Retry images')) : null) : null,
     !plain && external > 0 && !remote ? h('p', { className: 'dshe-hint' }, dt('外部图片默认不加载，加载后可能向发件人透露阅读时间与网络地址。仅对当前邮件生效。', 'External images are blocked by default. Loading may reveal your reading time and network address to the sender. Consent applies only to this message.')) : null,

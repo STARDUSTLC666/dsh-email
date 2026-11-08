@@ -31,6 +31,10 @@ See the [draft workbench](DRAFTS.en.md) for editable drafts and per-account trus
 | `email_watch` | Incremental new-mail check: the first call seeds a baseline, every later call reports only unread mail newer than the last check — ideal for scheduled new-mail notifications |
 | `email_mark` | Mark messages as read/unread, add/remove stars, or move messages to another folder |
 | `email_reply` | Reply, reply-all or forward with thread headers and quoted content; uses the same send-approval gate |
+| `email_folder_create` | Create a folder on the mail server (IMAP only; path separators follow the server, e.g. `Other/New Folder`) |
+| `email_folder_rename` | Rename a folder (IMAP only; system folders like INBOX / Sent Messages cannot be renamed) |
+| `email_folder_purge` | Purge a folder: mark every message inside deleted and remove from the server, **not recoverable** |
+| `email_folder_delete` | Delete a folder and all its messages, **not recoverable** (system folders like INBOX / Sent Messages cannot be deleted) |
 
 ### Search coverage and older messages
 
@@ -272,3 +276,9 @@ Trusted replies are a separate opt-in, off by default. Enable allowTrustedReply 
 When DSH listens on a LAN address, sign in to DSH in your browser and open Settings → Email to add, edit and test accounts. The page uses the official authenticated connection service; there is no need to disable the legacy route guard or enable an unsafe remote switch. Use HTTPS on public or untrusted networks.
 
 The current UI uses `/api/dsh-email/settings`, with host-owned session authentication, same-origin checks and an explicit request marker. The legacy `/_dsh/dsh-email/settings` route remains localhost-only. Manual API calls need a valid DSH session and the `x-dsh-email-settings: 1` header; that header is not an authentication credential.
+
+## Account preservation and folder management
+
+Current native hosts project the accounts map into complete, editable cards; saving preserves the projected accounts, and intentional last-card deletion still clears legacy fallback. If an older host can only show an empty form, settings lists configuration-managed account names and preserves their storage and inherited credentials while saving general preferences. Adding a card cannot silently replace hidden existing accounts. Edit such accounts in the original configuration after backing up and checking inherited server, credential and OAuth settings.
+
+For an IMAP account, open Manage folders in the mailbox. Create or rename custom folders; preview the account, path and message count before confirming purge. Purge affects reviewed UIDs only, excludes newly arriving mail, requires UIDPLUS and is limited to 2000 messages. Delete supports empty custom leaf folders only; system folders and their parents are protected. The four email_folder_* tools require separate confirmation even when sendApproval is false. Unavailable confirmation refuses mutations; uncertain outcomes require checking the mailbox before retrying. Real remote-server concurrency still requires live-account validation.

@@ -2,6 +2,8 @@
 
 import type {
   EmailAttachmentResult,
+  EmailFolderAction,
+  EmailFolderResult,
   EmailFoldersResult,
   EmailListResult,
   EmailMarkAction,
@@ -287,6 +289,13 @@ export function renderFolders(value: EmailFoldersResult): TextBlock[] {
   return oneText('账号 ' + value.account + ' 的文件夹（' + value.folders.length + ' 个）：\n\n' + lines.join('\n') + '\n\n把 folder 参数填成其中的 path 即可。')
 }
 
+export function renderFolder(value: EmailFolderResult): TextBlock[] {
+  let msg = '邮箱账号 ' + value.account + '：已对文件夹「' + value.path + '」执行「' + value.action + '」操作'
+  if (value.newName) msg += '，新名称「' + value.newName + '」'
+  if (value.count !== undefined) msg += '，移除了 ' + value.count + ' 封邮件'
+  return oneText(msg)
+}
+
 export function renderAttachment(value: EmailAttachmentResult): TextBlock[] {
   return oneText('账号 ' + value.account + ' 已下载附件 "' + value.filename + '"（' + value.contentType + '，' + value.size + ' 字节）到：\n' + value.path + '\n可用 read 工具读取该文件。')
 }
@@ -373,7 +382,11 @@ export const descriptions = {
   "email_folders": 'List the mailbox folders of an account (INBOX, Sent, Trash, custom folders, ...). Use the returned path values as the folder argument of the other email tools.',
   "email_health": 'AgentMail accounts show fixed regional API endpoints instead of IMAP/SMTP servers. Self-check for dsh-email: summarizes configured accounts (provider / IMAP / SMTP hosts) without any network connection and never shows passwords. Run this first when troubleshooting.',
   "email_attachment": 'AgentMail downloads are limited to 20 MiB or the smaller configured maximum. Download one attachment of a message to a local file (size capped by maxAttachmentBytes). The index matches the attachments array of email_read. Returns the absolute path of the written file.',
-  "email_watch": 'Check for NEW unread emails since the last check (cursor-based). The first call per account+folder sets the baseline and reports nothing as new; every later call returns only unseen unread messages. Call this periodically (e.g. via a scheduled task) to notify the user about new mail. Returns newCount, the new messages, and totalUnread.'
+  "email_watch": 'Check for NEW unread emails since the last check (cursor-based). The first call per account+folder sets the baseline and reports nothing as new; every later call returns only unseen unread messages. Call this periodically (e.g. via a scheduled task) to notify the user about new mail. Returns newCount, the new messages, and totalUnread.',
+  "email_folder_create": 'Create a new IMAP folder under the mailbox. The path can be a simple name or a hierarchical path. Returns the created folder info.',
+  "email_folder_rename": 'Rename an existing IMAP folder. Pass the current path as `path` and the desired new name as `newName`. Returns the renamed folder info.',
+  "email_folder_delete": 'Delete an existing IMAP folder and ALL its messages. This operation is irreversible: the folder and every message inside it are removed from the server.',
+  "email_folder_purge": 'Remove every message inside a folder (purge / empty the folder) without deleting the folder itself. The returned count is the number of messages removed.',
 }
 
 // Transport boundaries precede generic guidance so models do not request IMAP-only mutations.
@@ -386,6 +399,10 @@ const pop3Descriptions: Partial<Record<keyof typeof descriptions, string>> = {
   email_health: 'POP3 accounts report POP3/SMTP configuration; a configuration check is not a network connectivity test. ',
   email_attachment: 'POP3 downloads the entire source message (max 32 MiB) to parse an attachment (max 20 MiB or configured lower limit). ',
   email_watch: 'POP3 watches newly appearing UIDLs, not unread flags. Its first call seeds a baseline, and totalUnreadExact=false with transport=pop3 means no server unread total is available. ',
+  email_folder_create: '',
+  email_folder_rename: '',
+  email_folder_delete: '',
+  email_folder_purge: '',
 }
 for (const key of Object.keys(pop3Descriptions) as Array<keyof typeof descriptions>) descriptions[key] = pop3Descriptions[key] + descriptions[key]
 
@@ -457,6 +474,23 @@ export const parameters = {
   "email_watch": compileParameters({
     folder: { type: 'string', description: 'IMAP folder path (see email_folders); defaults to the account inboxFolder' },
     limit: { type: 'integer', description: 'Max number of new messages to return, 1-100, default 20' },
+    account: { type: 'string', description: ACCOUNT_HINT },
+  })
+  ,"email_folder_create": compileParameters({
+    path: { type: 'string', required: true, description: 'Folder path to create. Use email_folders to see existing folders. Can be hierarchical: "Parent/Child".' },
+    account: { type: 'string', description: ACCOUNT_HINT },
+  })
+  ,"email_folder_rename": compileParameters({
+    path: { type: 'string', required: true, description: 'Current folder path, as shown by email_folders.' },
+    newName: { type: 'string', required: true, description: 'New name (or full path) for the folder.' },
+    account: { type: 'string', description: ACCOUNT_HINT },
+  })
+  ,"email_folder_delete": compileParameters({
+    path: { type: 'string', required: true, description: 'Folder path to delete. WARNING: this removes the folder and ALL its messages permanently.' },
+    account: { type: 'string', description: ACCOUNT_HINT },
+  })
+  ,"email_folder_purge": compileParameters({
+    path: { type: 'string', required: true, description: 'Folder path to purge (delete all messages but keep the folder).' },
     account: { type: 'string', description: ACCOUNT_HINT },
   })
 }

@@ -1,5 +1,12 @@
 # 更新记录
 
+## 0.24.0 (2026-11-08)
+
+- 防止设置页空表单或新增卡片覆盖 `accounts` 映射及继承凭据；旧宿主空表单明确显示配置文件管理的账号，通用设置可保存；当前原生宿主的完整账号卡片继续可编辑，删除最后一个账号时仍清除旧回退（#43）。
+- 新增 IMAP 自建文件夹创建、重命名、预览确认清空与空文件夹删除，以及四个独立确认的工具；保护系统目录和父目录。清空锁定已确认 UID、要求 UIDPLUS，账号/UIDVALIDITY 改变和旧确认重放均拒绝，最多 2000 封（#41）。
+- 保留 0.23.0 的 HTML、Google OAuth、定时发送与邮件任务；未合入文件夹 PR 中不属于本次范围的旧会话实现。
+- Preserve configuration-owned accounts and credentials; add separately confirmed custom IMAP folder management with protected system folders, UID-scoped purge and one-use review. Keep all 0.23.0 features.
+
 ## 0.23.0 (2026-11-07)
 
 - HTML 发送、回复与关联草稿：安全表格/内联样式、惰性预览及 MIME 纯文本替代；引用语言支持中/英/法与可读时区日期（#37、#40）。

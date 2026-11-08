@@ -5,6 +5,7 @@ import type { ResolvedEmailSettings } from './config.js';
 import type { EmailFoldersResult, EmailReplyMode, EmailReplyResult, EmailMarkAction, EmailSearchOptions } from './types.js';
 import type { downloadPublicBytes } from './public-download.js';
 import type { ReplyOptions } from './reply-locale.js';
+import type { FolderMutationSnapshot } from './imap-folders.js';
 export interface ReplyReference {
     uid: MessageRef;
     folder: string;
@@ -28,6 +29,13 @@ export declare class EmailService {
     get withImap(): EmailPool['withImap'];
     previewTrash(account: string, folder: string, uids: number[], target?: string, signal?: AbortSignal): Promise<import("./types.js").EmailMovePreview>;
     moveMessages(account: string, folder: string, uids: number[], target: string, uidValidity: number, signal?: AbortSignal): Promise<import("./types.js").EmailMoveResult>;
+    createFolder(account: string, path: string, signal?: AbortSignal): Promise<void>;
+    previewFolderMutation(account: string, path: string, action: 'delete' | 'purge', signal?: AbortSignal): Promise<FolderMutationSnapshot>;
+    deleteFolder(account: string, path: string, expected: FolderMutationSnapshot, signal?: AbortSignal): Promise<void>;
+    renameFolder(account: string, path: string, newPath: string, signal?: AbortSignal): Promise<void>;
+    purgeFolder(account: string, path: string, expected: FolderMutationSnapshot, signal?: AbortSignal): Promise<{
+        count: number;
+    }>;
     set withImap(run: EmailPool['withImap']);
     private name;
     private usesApi;

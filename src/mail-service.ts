@@ -17,6 +17,7 @@ import type {
 import type { downloadPublicBytes } from './public-download.js'
 import type { ReplyOptions } from './reply-locale.js'
 import { prepareMailBody } from './outgoing-body.js'
+import type { FolderMutationSnapshot } from './imap-folders.js'
 
 export interface ReplyReference {
   uid: MessageRef
@@ -59,6 +60,31 @@ export class EmailService {
   moveMessages(account: string, folder: string, uids: number[], target: string, uidValidity: number, signal?: AbortSignal) {
     if (this.settings.accounts.get(account)?.transport) throw new Error('移入废纸篓仅支持 IMAP 账号 / Trash is available for IMAP accounts')
     return this.imap.moveMessages(account, folder, uids, target, uidValidity, signal)
+  }
+  createFolder(account: string, path: string, signal?: AbortSignal) {
+    account = this.name(account)
+    if (this.settings.accounts.get(account)?.transport) throw new Error('新建文件夹仅支持 IMAP 账号 / Folders are only available for IMAP accounts')
+    return this.imap.createFolder(account, path, signal)
+  }
+  previewFolderMutation(account: string, path: string, action: 'delete' | 'purge', signal?: AbortSignal) {
+    account = this.name(account)
+    if (this.settings.accounts.get(account)?.transport) throw new Error('文件夹管理仅支持 IMAP 账号 / Folders are only available for IMAP accounts')
+    return this.imap.previewFolderMutation(account, path, action, signal)
+  }
+  deleteFolder(account: string, path: string, expected: FolderMutationSnapshot, signal?: AbortSignal) {
+    account = this.name(account)
+    if (this.settings.accounts.get(account)?.transport) throw new Error('删除文件夹仅支持 IMAP 账号 / Folders are only available for IMAP accounts')
+    return this.imap.deleteFolder(account, path, expected, signal)
+  }
+  renameFolder(account: string, path: string, newPath: string, signal?: AbortSignal) {
+    account = this.name(account)
+    if (this.settings.accounts.get(account)?.transport) throw new Error('重命名文件夹仅支持 IMAP 账号 / Folders are only available for IMAP accounts')
+    return this.imap.renameFolder(account, path, newPath, signal)
+  }
+  purgeFolder(account: string, path: string, expected: FolderMutationSnapshot, signal?: AbortSignal) {
+    account = this.name(account)
+    if (this.settings.accounts.get(account)?.transport) throw new Error('清空文件夹仅支持 IMAP 账号 / Folders are only available for IMAP accounts')
+    return this.imap.purgeFolder(account, path, expected, signal)
   }
   set withImap(run: EmailPool['withImap']) {
     this.imap.withImap = run

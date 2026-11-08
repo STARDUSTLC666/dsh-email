@@ -1,5 +1,5 @@
 /** Model-facing parameters, input normalization, output schemas and text rendering. */
-import type { EmailAttachmentResult, EmailFoldersResult, EmailListResult, EmailMarkAction, EmailMarkResult, EmailReadResult, EmailReplyMode, EmailReplyResult, EmailSearchResult, EmailSendResult, EmailWatchResult } from './types.js';
+import type { EmailAttachmentResult, EmailFolderResult, EmailFoldersResult, EmailListResult, EmailMarkAction, EmailMarkResult, EmailReadResult, EmailReplyMode, EmailReplyResult, EmailSearchResult, EmailSendResult, EmailWatchResult } from './types.js';
 export type TextBlock = {
     type: 'text';
     text: string;
@@ -313,6 +313,7 @@ export declare function renderRead(value: EmailReadResult): TextBlock[];
 export declare function renderSearch(value: EmailSearchResult): TextBlock[];
 export declare function renderSend(value: EmailSendResult): TextBlock[];
 export declare function renderFolders(value: EmailFoldersResult): TextBlock[];
+export declare function renderFolder(value: EmailFolderResult): TextBlock[];
 export declare function renderAttachment(value: EmailAttachmentResult): TextBlock[];
 export declare function renderMark(value: EmailMarkResult): TextBlock[];
 export declare function renderReply(value: EmailReplyResult): TextBlock[];
@@ -439,6 +440,10 @@ export declare const descriptions: {
     email_health: string;
     email_attachment: string;
     email_watch: string;
+    email_folder_create: string;
+    email_folder_rename: string;
+    email_folder_delete: string;
+    email_folder_purge: string;
 };
 export declare const parameters: {
     email_list: Record<string, unknown>;
@@ -451,5 +456,9 @@ export declare const parameters: {
     email_health: Record<string, unknown>;
     email_attachment: Record<string, unknown>;
     email_watch: Record<string, unknown>;
+    email_folder_create: Record<string, unknown>;
+    email_folder_rename: Record<string, unknown>;
+    email_folder_delete: Record<string, unknown>;
+    email_folder_purge: Record<string, unknown>;
 };
 export {};

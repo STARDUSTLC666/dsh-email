@@ -9,10 +9,12 @@ import type { EmailRuntime } from './runtime.js'
 import type { EmailDraftBackend } from './draft-web.js'
 import { parseEmailDay } from './tool-contract.js'
 import { clampInt } from './config.js'
+import { folderPath, type FolderMutationSnapshot } from './imap-folders.js'
 import type { EmailMarkAction, EmailMovePreview, EmailRichBody, EmailReadResult } from './types.js'
 
 interface MoveTicket { kind: 'trash' | 'undo'; account: string; folder: string; target: string; uids: number[]; uidValidity: number; fingerprint: string; expires: number }
 interface ImageTicket { account: string; folder: string; uid: string | number; uidValidity?: number; image: EmailRichBody['images'][number]; fingerprint: string; expires: number }
+interface FolderTicket { snapshot: FolderMutationSnapshot; fingerprint: string; expires: number }
 function boundedSet<T extends { expires: number }>(map: Map<string, T>, id: string, value: T, max: number) {
   for (const [key, row] of map) if (row.expires < Date.now()) map.delete(key)
   while (map.size >= max) map.delete(map.keys().next().value!)
@@ -31,6 +33,7 @@ const json = (status: number, value: unknown) =>
 export class EmailMailboxBackend {
   private moves = new Map<string, MoveTicket>()
   private images = new Map<string, ImageTicket>()
+  private folderTickets = new Map<string, FolderTicket>()
   constructor(
     private runtime: Pick<EmailRuntime, 'getEffectiveSettings' | 'getPool'>,
     private drafts: EmailDraftBackend,
@@ -106,6 +109,37 @@ export class EmailMailboxBackend {
     if (folder.length > 1024 || /[\r\n\0]/.test(folder))
       throw new Error('无效文件夹')
     if (body.action === 'folders') return pool.folders(account, false, signal)
+    if (body.action === 'folderCreate' || body.action === 'folderRename' || body.action === 'folderDelete' || body.action === 'folderPurge' || body.action === 'folderPreview') {
+      if (cfg.transport) throw new Error('文件夹管理仅支持 IMAP 账号 / Folder management requires IMAP')
+      const path = folderPath(body.path)
+      if (body.action === 'folderPreview') {
+        if (body.operation !== 'delete' && body.operation !== 'purge') throw new Error('无效文件夹操作 / Invalid folder operation')
+        const snapshot = await pool.previewFolderMutation(account, path, body.operation, signal)
+        this.unchanged(account, accountFingerprint)
+        const receipt = randomUUID(), expires = Date.now() + 90000
+        boundedSet(this.folderTickets, receipt, { snapshot, fingerprint: accountFingerprint, expires }, 32)
+        return { receipt, expires, account, path, operation: body.operation, count: snapshot.count }
+      }
+      if (body.action === 'folderCreate') {
+        await pool.createFolder(account, path, signal)
+        return { ok: true, action: 'create', path }
+      }
+      if (body.action === 'folderRename') {
+        const newName = folderPath(body.newName)
+        await pool.renameFolder(account, path, newName, signal)
+        return { ok: true, action: 'rename', path, newName }
+      }
+      const operation = body.action === 'folderDelete' ? 'delete' : 'purge'
+      const receipt = String(body.receipt || ''), ticket = this.folderTickets.get(receipt)
+      if (!ticket || body.confirmed !== true || ticket.expires < Date.now() || ticket.snapshot.account !== account || ticket.snapshot.path !== path || ticket.snapshot.action !== operation || ticket.fingerprint !== this.fingerprint(account)) throw new Error('确认已过期或账号已改变，请重新预览 / Confirmation expired or account changed; preview again')
+      this.folderTickets.delete(receipt)
+      if (operation === 'delete') {
+        await pool.deleteFolder(account, path, ticket.snapshot, signal)
+        return { ok: true, action: 'delete', path }
+      }
+      const result = await pool.purgeFolder(account, path, ticket.snapshot, signal)
+      return { ok: true, action: 'purge', path, count: result.count }
+    }
     if (body.action === 'trashPreview') {
       const preview: EmailMovePreview = await pool.previewTrash(account, folder, moveUids(body.uids), typeof body.target === 'string' ? body.target : undefined, signal)
       this.unchanged(account, accountFingerprint)

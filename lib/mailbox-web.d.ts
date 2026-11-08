@@ -8,6 +8,7 @@ export declare class EmailMailboxBackend {
     private download;
     private moves;
     private images;
+    private folderTickets;
     constructor(runtime: Pick<EmailRuntime, 'getEffectiveSettings' | 'getPool'>, drafts: EmailDraftBackend, download?: typeof downloadPublicBytes);
     private fingerprint;
     private unchanged;

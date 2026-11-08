@@ -7,7 +7,7 @@ import type { EmailWatchResult } from './types.js'
 import { liveConfig } from './host-config.js'
 
 export type EmailClient = Pick<EmailService,
-  'list' | 'read' | 'mark' | 'search' | 'send' | 'sendPrepared' | 'reply' | 'prepareReply' | 'replyOptions' | 'folders' | 'downloadAttachment' | 'unseenUids' | 'fetchByUids' | 'startIdleSweep' | 'dispose' | 'watchApi' | 'previewTrash' | 'moveMessages'>
+  'list' | 'read' | 'mark' | 'search' | 'send' | 'sendPrepared' | 'reply' | 'prepareReply' | 'replyOptions' | 'folders' | 'downloadAttachment' | 'unseenUids' | 'fetchByUids' | 'startIdleSweep' | 'dispose' | 'watchApi' | 'previewTrash' | 'moveMessages' | 'createFolder' | 'deleteFolder' | 'renameFolder' | 'purgeFolder' | 'previewFolderMutation'>
 
 export interface EmailSettingsScope {
   get(): unknown

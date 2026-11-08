@@ -2218,8 +2218,9 @@ const [accountsLoading,setAccountsLoading]=useState(true),[accountReload,setAcco
             const [accounts, setAccounts] = useState([]), [account, setAccount] = useState(""), [folders, setFolders] = useState([]), [folder, setFolder] = useState("");
             const isPop3 = accounts.find(a=>a.name===account)?.incoming === 'pop3';
             const canTrash = accounts.find(a=>a.name===account)?.trashSupported === true;
-            const [checked, setChecked] = useState([]), [trash, setTrash] = useState(null), [moved, setMoved] = useState(null);
-            __stardustUpdatesGuard(React, 'dsh-email.mailbox', { busy: !!trash });
+            const [checked, setChecked] = useState([]), [trash, setTrash] = useState(null), [moved, setMoved] = useState(null), [foldersOpen, setFoldersOpen] = useState(false), [folderReload, setFolderReload] = useState(0);
+            __stardustUpdatesGuard(React, 'dsh-email.mailbox', { busy: !!trash || foldersOpen });
+            useEffect(() => setFoldersOpen(false), [account]);
 useEffect(()=>{onAccountChange?.(account);},[account,onAccountChange]);
             const [input, setInput] = useState(""), [query, setQuery] = useState(""), [offset, setOffset] = useState(0), [scanOffset, setScanOffset] = useState(0), [unread, setUnread] = useState(false), [refresh, setRefresh] = useState(0);
             const [result, setResult] = useState(null), [selected, setSelected] = useState(null), [detail, setDetail] = useState(null), [loading, setLoading] = useState(false), [reading, setReading] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(""), [readToken, setReadToken] = useState(0);
@@ -2255,7 +2256,7 @@ setAccountsLoading(true);
                     return; setFolders(value.folders); setFolder(value.folders.find(f => f.specialUse === "\\Inbox")?.path || value.folders.find(f => f.path === "INBOX")?.path || value.folders[0]?.path || ""); }).catch(e => { if (!ctrl.signal.aborted)
                     setError(emailError(e)); });
                 return () => ctrl.abort();
-            }, [active, account]);
+            }, [active, account, folderReload]);
             useEffect(() => {
                 context.current++;
                 setSelected(null);
@@ -2326,7 +2327,8 @@ setAccountsLoading(true);
  h('aside',{className:'email-folder-rail','aria-label':dt('账号与文件夹','Accounts and folders')},
  h('label',null,dt('邮箱账号','Account'),h('select',{value:account,disabled:busy,onChange:event=>{reset();setInput('');setQuery('');setUnread(false);setAccount(event.target.value);}},accounts.map(a=>h('option',{key:a.name,value:a.name},a.name+' · '+a.user)))),
  h('nav',{'aria-label':dt('邮件文件夹','Mail folders')},folders.filter(f=>f.specialUse === '\\Trash' || f.specialUse === '\\Inbox' || f.specialUse === '\\Sent' || /^(INBOX|sent|sent messages|已发送)$/i.test(f.path)).map(f=>h(W.Button,{key:f.path,className:'email-folder-button',variant:'ghost',icon:f.specialUse === '\\Sent' || /sent|已发送/i.test(f.path)?'reply':'mail',disabled:busy || loading,'aria-pressed':folder === f.path,onClick:()=>changeFolder(f.path)},f.specialUse === '\\Trash'?dt('废纸篓','Trash'):f.specialUse === '\\Inbox' || f.path === 'INBOX'?dt('收件箱','Inbox'):dt('已发送','Sent')))),
- folders.length>2 || !folders.some(f=>(f.specialUse === '\\Inbox' || f.specialUse === '\\Sent' || /^(INBOX|sent|sent messages|已发送)$/i.test(f.path)) && f.path===folder) ? h('label',{className:'email-custom-folder'},dt('所有文件夹','All folders'),h('select',{value:folder,disabled:busy || !folders.length,onChange:event=>changeFolder(event.target.value)},folders.map(f=>h('option',{key:f.path,value:f.path},f.name)))) : null),
+ folders.length>2 || !folders.some(f=>(f.specialUse === '\\Inbox' || f.specialUse === '\\Sent' || /^(INBOX|sent|sent messages|已发送)$/i.test(f.path)) && f.path===folder) ? h('label',{className:'email-custom-folder'},dt('所有文件夹','All folders'),h('div',{style:{display:'flex',gap:6,alignItems:'center'}},h('select',{value:folder,disabled:busy || !folders.length,onChange:event=>changeFolder(event.target.value)},folders.map(f=>h('option',{key:f.path,value:f.path},f.name))),h(W.IconButton,{icon:'plus',label:dt('管理文件夹','Manage folders'),disabled:busy || !folders.length || accounts.find(a=>a.name===account)?.incoming !== 'imap',onClick:()=>setFoldersOpen(true)}))) : h('div',{style:{marginTop:4}},h(W.Button,{variant:'ghost',icon:'plus',disabled:busy || !folders.length || accounts.find(a=>a.name===account)?.incoming !== 'imap',onClick:()=>setFoldersOpen(true)},dt('管理文件夹','Manage folders')))),
+ !foldersOpen ? null : h(MailFoldersDialog,{account,folders,busy,onClose:()=>setFoldersOpen(false),onChanged:()=>setFolderReload(n=>n+1)}),
  h(W.Split,{className:'email-message-split',listWidth:330,selected:selected===null?null:String(selected),onBack:()=>setSelected(null),backLabel:dt('返回邮件列表','Back to messages'),
  list:h('div',null,
  h('form',{className:'email-search',onSubmit:event=>{event.preventDefault();reset();setUnread(false);setQuery(input.trim());setRefresh(n=>n+1);}},

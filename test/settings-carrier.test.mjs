@@ -109,3 +109,23 @@ test('removing the last YAML-owned card still clears a hidden legacy map', async
   assert.deepEqual(f.writes[0].accounts, {})
   assert.equal(f.writes[0].user, '')
 })
+
+test('native projected cards remain editable without losing mapped accounts', async () => {
+  const value = { ...EmailSettingsSchema({}), accountsYaml: 'qq: {provider: qq, user: a@example.test, password: synthetic-only}\n' }
+  const writes = [], config = { accounts: { qq: { provider: 'qq', user: 'a@example.test', password: 'synthetic-only' } }, defaultAccount: 'qq' }
+  const backend = new EmailSettingsBackend({ settings: { describe: () => [], update: async (_ns, section) => writes.push(section) } }, { config, get: () => value }, config)
+  const snapshot = await backend.snapshot()
+  assert.deepEqual(snapshot.configurationManagedAccounts, [])
+  assert.equal(snapshot.settings.value.accountsYaml, value.accountsYaml)
+  await backend.save({ ...snapshot.settings.value, replyLocale: 'en' }, 0)
+  assert.equal(writes[0].replyLocale, 'en')
+  assert.deepEqual(writes[0].accounts, {})
+  assert.equal(writes[0].accountsYaml, value.accountsYaml)
+})
+
+test('a complete explicit list can migrate an unprojected map but a partial list cannot', async () => {
+  const f = mapBackedFixture(), full = 'qq: {provider: qq, user: a@example.test, password: synthetic-only}\nwork: {provider: qq, user: w@example.test, password: synthetic-only}\n'
+  await f.backend.save({ ...EmailSettingsSchema({}), accountsYaml: full }, 0)
+  assert.deepEqual(f.writes[0].accounts, {})
+  assert.equal(f.writes[0].accountsYaml, full)
+})

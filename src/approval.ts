@@ -4,10 +4,22 @@ import type { EmailReplyArgs, EmailSendArgs } from './types.js'
 import { matchRecipients, parseRecipientPolicies } from './recipient-policy.js'
 import { createHash } from 'node:crypto'
 import type { EmailService } from './mail-service.js'
+import { folderPath, type FolderMutationSnapshot } from './imap-folders.js'
 
 type Runtime = Pick<EmailRuntime, 'getSettingsValue' | 'getEffectiveSettings'> & Partial<Pick<EmailRuntime, 'getPool'>>
 type PreparedReply = Awaited<ReturnType<EmailService['prepareReply']>>
 const approvedReplies = new WeakMap<object, { prepared: PreparedReply; stamp: string; expires: number }>()
+interface FolderAuthorization { account: string; path: string; newName?: string; snapshot?: FolderMutationSnapshot; stamp: string; expires: number }
+const approvedFolders = new WeakMap<object, FolderAuthorization>()
+const folderTools = new Set(['email_folder_create', 'email_folder_rename', 'email_folder_delete', 'email_folder_purge'])
+const folderStamp = (runtime: Pick<EmailRuntime, 'getEffectiveSettings'>, args: unknown, account: string) => createHash('sha256').update(JSON.stringify({ args, account: runtime.getEffectiveSettings().accounts.get(account) })).digest('hex')
+export function takeFolderAuthorization(args: unknown, runtime: Pick<EmailRuntime, 'getEffectiveSettings'>): FolderAuthorization {
+  const permit = args && typeof args === 'object' ? approvedFolders.get(args) : undefined
+  if (!permit) throw new Error('文件夹操作需要单独确认，请在邮件面板操作 / Folder changes require separate confirmation; use the mailbox panel')
+  approvedFolders.delete(args as object)
+  if (permit.expires < Date.now() || permit.stamp !== folderStamp(runtime, args, permit.account)) throw new Error('账号或确认已改变，请重新确认 / Account or confirmation changed; confirm again')
+  return permit
+}
 function replyStamp(runtime: Runtime, prepared: PreparedReply, args: unknown): string {
   const config=runtime.getEffectiveSettings().accounts.get(prepared.account), value=runtime.getSettingsValue()
   return createHash('sha256').update(JSON.stringify({config,rules:value.trustedRecipientsYaml,allowTrustedReply:value.allowTrustedReply,args})).digest('hex')
@@ -38,6 +50,28 @@ interface ApprovalContext {
 
 export function installSendApproval(ctx: ApprovalContext, runtime: Runtime): void {
   ctx.on('tools/pre-execute', async (exec, next) => {
+    if (folderTools.has(exec?.name)) {
+      try {
+        const args = exec.arguments as Record<string, unknown> | undefined
+        if (!args || typeof args !== 'object') throw new Error('文件夹参数无效 / Invalid folder arguments')
+        const settings = runtime.getEffectiveSettings(), account = typeof args.account === 'string' && args.account.trim() ? args.account.trim() : settings.defaultAccount
+        const config = settings.accounts.get(account), path = folderPath(args.path)
+        if (!config || config.transport) throw new Error('文件夹管理仅支持 IMAP 账号 / Folder management requires IMAP')
+        const newName = exec.name === 'email_folder_rename' ? folderPath(args.newName) : undefined
+        const destructive = exec.name === 'email_folder_delete' || exec.name === 'email_folder_purge'
+        const snapshot = destructive ? await runtime.getPool!().previewFolderMutation(account, path, exec.name === 'email_folder_delete' ? 'delete' : 'purge', exec.signal) : undefined
+        const approval = ctx.get('approval')
+        if (!approval) return { kind: 'deny', reason: '文件夹操作需要审批界面，请使用邮件面板 / Folder changes need a confirmation UI; use the mailbox panel' }
+        const stamp = folderStamp(runtime, args, account)
+        const result = await approval.request({ agent: exec.agent, toolName: exec.name, callId: exec.callId, signal: exec.signal,
+          reason: `${exec.name} · ${account} · ${path}${newName ? ' → ' + newName : ''}${snapshot ? ' · ' + snapshot.count + ' 封邮件 / messages; permanent operation' : ''}` })
+        if (result !== 'allowed-once') return { kind: 'deny', reason: '文件夹操作未获确认，未执行修改 / Folder change was not confirmed; no changes made' }
+        exec.signal?.throwIfAborted()
+        if (stamp !== folderStamp(runtime, args, account)) return { kind: 'deny', reason: '账号已改变，请重新确认 / Account changed; confirm again' }
+        approvedFolders.set(args, { account, path, newName, snapshot, stamp, expires: Date.now() + 60000 })
+        return next()
+      } catch (error) { return { kind: 'deny', reason: error instanceof Error ? error.message : 'Folder operation refused' } }
+    }
     if (exec?.name !== 'email_send' && exec?.name !== 'email_reply') return next()
     const value = runtime.getSettingsValue()
     try {
