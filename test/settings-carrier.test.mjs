@@ -67,3 +67,56 @@ test('settings and static courier routes register through the authenticated conn
   assert.deepEqual(carrier.map(v => [v.path, v.methods]), [[SETTINGS_API_ROUTE, ['GET', 'POST']], [WHALE_API_ROUTE, ['GET']]])
   assert.equal(carrier[0].requestBody, 'buffered');assert.equal(carrier[1].requestBody, 'buffered');assert.equal(raw.length, 2)
 })
+
+function mapBackedFixture() {
+  const value = EmailSettingsSchema({})
+  const writes = []
+  const ctx = { settings: { writable: true, describe: () => [{ ns: 'dsh-email', revision: 0, user: value }], async update(_ns, next, expected) {
+    assert.equal(expected, 0); writes.push(structuredClone(next))
+  }, async replace(_ns, next) { writes.push(structuredClone(next)) } } }
+  const config = { defaultAccount: 'qq', accounts: { qq: { provider: 'qq', user: 'a@example.test', password: 'p1' } }, sendApproval: true }
+  return { backend: new EmailSettingsBackend(ctx, { get: () => value, config }, undefined), writes }
+}
+
+test('an empty account form never erases mailboxes stored as an accounts map', async () => {
+  const f = mapBackedFixture(), value = { ...EmailSettingsSchema({}), accountsYaml: '', newMailPopup: false }
+  await f.backend.save(value, 0)
+  const section = f.writes[0]
+  assert.equal(Object.hasOwn(section, 'accounts'), false)
+  assert.equal(Object.hasOwn(section, 'password'), false)
+  assert.equal(section.newMailPopup, false)
+})
+
+test('a saved account list still migrates the map away', async () => {
+  const f = mapBackedFixture(), value = { ...EmailSettingsSchema({}), accountsYaml: 'qq: {provider: qq, user: a@example.test, password: p1}\nwork: {provider: qq, user: w@example.test, password: p2}\n' }
+  await f.backend.save(value, 0)
+  const section = f.writes[0]
+  assert.equal(section.accounts && Object.keys(section.accounts).length, 0)
+  assert.equal(section.user, '')
+})
+
+test('an account list that omits a mapped mailbox is refused instead of overwriting it', async () => {
+  const f = mapBackedFixture(), value = { ...EmailSettingsSchema({}), accountsYaml: 'work: {provider: qq, user: w@example.test, password: p2}\n' }
+  await assert.rejects(() => f.backend.save(value, 0), /accounts 映射/)
+  assert.equal(f.writes.length, 0)
+
+  const full = { ...EmailSettingsSchema({}), accountsYaml: 'qq: {provider: qq, user: a@example.test, password: p1}\nwork: {provider: qq, user: w@example.test, password: p2}\n' }
+  await f.backend.save(full, 0)
+  assert.equal(f.writes.length, 1)
+})
+
+test('deleting the last projected card still removes the mapped mailbox', async () => {
+  const value = EmailSettingsSchema({})
+  const writes = []
+  // Native host: createEmailRuntime() projects the map into editable YAML, so the form
+  // the user sees is not empty and clearing it is an explicit deletion.
+  const projected = { ...value, accountsYaml: 'qq: {provider: qq, user: a@example.test, password: p1}\n' }
+  const ctx = { settings: { writable: true, describe: () => [{ ns: 'dsh-email', revision: 0, user: projected }], async update(_ns, next) { writes.push(structuredClone(next)) } } }
+  const config = { accounts: { qq: { provider: 'qq', user: 'a@example.test', password: 'p1' } } }
+  const backend = new EmailSettingsBackend(ctx, { get: () => projected, config }, undefined)
+  await backend.save({ ...value, accountsYaml: '' }, 0)
+  // The section must clear the map explicitly: native settings.update merges the section,
+  // so omitting `accounts` would keep the mailbox this deletion is meant to remove.
+  assert.equal(Object.hasOwn(writes[0], 'accounts'), true)
+  assert.equal(Object.keys(writes[0].accounts).length, 0)
+})

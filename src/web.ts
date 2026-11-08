@@ -1006,6 +1006,13 @@ export function postVerdict(headers: Record<string, unknown>): { status: number;
  * Browser-facing backend: snapshot the settings namespace, save it with
  * optimistic concurrency, and test a draft account over a live IMAP login.
  */
+/** Drop the account storage a map-backed profile owns, so a form without accounts cannot clear it. */
+function withoutMappedAccountStorage(value: EmailSettingsValue): Record<string, unknown> {
+  const section: Record<string, unknown> = { ...value }
+  for (const key of ['accounts', 'user', 'password', 'authUser', 'authPassword']) delete section[key]
+  return section
+}
+
 export class EmailSettingsBackend {
   constructor(private readonly ctx: any, private readonly scope: any, private readonly rowConfig: EmailConfig, private readonly apiFetch?: typeof fetch) {}
 
@@ -1082,8 +1089,36 @@ export class EmailSettingsBackend {
       // The card editor takes ownership of legacy shorthand/maps. Clear only
       // the superseded account storage, so removing the last card cannot
       // resurrect a hidden old account on the next read.
+      // A profile can store its mailboxes as the documented `accounts` map instead of the
+      // settings page's `accountsYaml` text. That form renders an empty card list, so an
+      // autosave arrives with blank accountsYaml even though the mailboxes are configured —
+      // and clearing the superseded storage below would delete every one of them, including
+      // the credentials, with no warning. Keep the map and the legacy scalars whenever the
+      // form carried no accounts at all.
+      const incomingYaml = typeof value.accountsYaml === 'string' ? value.accountsYaml.trim() : undefined
+      const storedAccounts = (this.currentConfig as Record<string, any> | undefined)?.accounts
+      const storedNames = storedAccounts !== null && typeof storedAccounts === 'object' && !Array.isArray(storedAccounts) ? Object.keys(storedAccounts) : []
+      // The native host already projects the map into editable cards (createEmailRuntime),
+      // so a blank form there means the user deleted the last card on purpose. Only an
+      // already-blank form is the case this guard protects: it carried no accounts at all.
+      const currentYaml = (this.scope.get() as EmailSettingsValue | undefined)?.accountsYaml
+      const formWasEmpty = typeof currentYaml !== 'string' || currentYaml.trim() === ''
+      const keepsMappedAccounts = incomingYaml === '' && storedNames.length > 0 && formWasEmpty
+      // A non-empty list that omits a mapped mailbox would overwrite it just as silently.
+      // Refuse instead: the profile file is the only place those accounts can be edited.
+      if (formWasEmpty && incomingYaml !== '' && incomingYaml !== undefined && storedNames.length > 0) {
+        let submitted: string[] = []
+        try {
+          submitted = Object.keys(parseAccountsYaml(value.accountsYaml as string).map)
+        }
+        catch { /* invalid YAML is reported by validation below */ }
+        const dropped = storedNames.filter((name) => !submitted.includes(name))
+        if (dropped.length > 0) {
+          throw new Error(`账号 ${dropped.join('、')} 来自 profile 配置的 accounts 映射，设置页无法显示；本次保存会删除它们。请先在 cordis.patch.yml 中把它们改写为 accountsYaml，或连同这些账号一起提交后再试。`)
+        }
+      }
       const section: Record<string, unknown> = Object.hasOwn(value, 'accountsYaml')
-        ? { ...value, accounts: {}, user: '', password: '', authUser: '', authPassword: '' }
+        ? keepsMappedAccounts ? withoutMappedAccountStorage(value) : { ...value, accounts: {}, user: '', password: '', authUser: '', authPassword: '' }
         : { ...value }
       if (Object.hasOwn(value, 'accountsYaml')) {
         // The form displays the default card's resolved endpoints; those are not shared edits.
