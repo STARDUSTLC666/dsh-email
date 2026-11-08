@@ -1006,6 +1006,15 @@ export function postVerdict(headers: Record<string, unknown>): { status: number;
  * Browser-facing backend: snapshot the settings namespace, save it with
  * optimistic concurrency, and test a draft account over a live IMAP login.
  */
+/** Configuration-owned accounts must never be rewritten by the card editor's defaults. */
+function withoutMappedAccountStorage(value: EmailSettingsValue): Record<string, unknown> {
+  const section: Record<string, unknown> = { ...value }
+  for (const key of ['accounts', 'accountsYaml', 'defaultAccount', 'provider', 'user', 'password',
+    'authUser', 'authPassword', 'apiKey', 'senderName', 'clientId', 'clientSecret', 'oauthProvider',
+    'authKind', 'receiveProtocol', 'pop3', 'imap', 'smtp', 'inboxFolder']) delete section[key]
+  return section
+}
+
 export class EmailSettingsBackend {
   constructor(private readonly ctx: any, private readonly scope: any, private readonly rowConfig: EmailConfig, private readonly apiFetch?: typeof fetch) {}
 
@@ -1032,6 +1041,13 @@ export class EmailSettingsBackend {
     return { ...merged, ...(typeof stored?.serverPresets === 'string' ? { serverPresets: stored.serverPresets } : {}) }
   }
 
+  private configurationManagedAccounts(): string[] {
+    const config = this.effectiveStored()
+    if (config.accountsYaml?.trim()) return []
+    const accounts = config.accounts
+    return accounts && typeof accounts === 'object' && !Array.isArray(accounts) ? Object.keys(accounts) : []
+  }
+
   async snapshot() {
     const descriptor = (this.ctx.settings.describe?.() ?? []).find((row: any) => row.ns === this.namespace)
     const value = this.scope.get() as EmailSettingsValue
@@ -1048,6 +1064,7 @@ export class EmailSettingsBackend {
         applies: descriptor?.applies ?? 'live',
       },
       writable: this.ctx.settings.writable !== false,
+      configurationManagedAccounts: this.configurationManagedAccounts(),
       accounts: [...(this.effectiveAccounts().keys())],
       accountsDetail: {
         ...(draft.defaultAccount !== undefined ? { defaultAccount: draft.defaultAccount } : {}),
@@ -1082,9 +1099,14 @@ export class EmailSettingsBackend {
       // The card editor takes ownership of legacy shorthand/maps. Clear only
       // the superseded account storage, so removing the last card cannot
       // resurrect a hidden old account on the next read.
+      const incomingYaml = typeof value.accountsYaml === 'string' ? value.accountsYaml.trim() : undefined
+      const keepsMappedAccounts = this.configurationManagedAccounts().length > 0
+      if (keepsMappedAccounts && incomingYaml) {
+        throw new Error('现有账号由配置文件的 accounts 管理，请在配置文件中编辑；未覆盖任何账号。 / Existing accounts are managed by the configuration accounts map. Edit them there; no accounts were replaced.')
+      }
       const section: Record<string, unknown> = Object.hasOwn(value, 'accountsYaml')
-        ? { ...value, accounts: {}, user: '', password: '', authUser: '', authPassword: '' }
-        : { ...value }
+        ? keepsMappedAccounts ? withoutMappedAccountStorage(value) : { ...value, accounts: {}, user: '', password: '', authUser: '', authPassword: '' }
+        : keepsMappedAccounts ? withoutMappedAccountStorage(value) : { ...value }
       if (Object.hasOwn(value, 'accountsYaml')) {
         // The form displays the default card's resolved endpoints; those are not shared edits.
         delete section.imap
@@ -1099,7 +1121,7 @@ export class EmailSettingsBackend {
     // inherit it. Only once the write has committed — a draft, or a 409, must
     // not cost anybody their login. And never on an unreadable document: not
     // knowing the new account list is not the same as knowing it is empty.
-    const after = accountNamesOf(value)
+    const after = this.configurationManagedAccounts().length > 0 ? undefined : accountNamesOf(value)
     if (before !== undefined && after !== undefined) {
       for (const name of before) {
         if (!after.has(name)) clearTokenFor(name)

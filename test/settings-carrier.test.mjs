@@ -67,3 +67,45 @@ test('settings and static courier routes register through the authenticated conn
   assert.deepEqual(carrier.map(v => [v.path, v.methods]), [[SETTINGS_API_ROUTE, ['GET', 'POST']], [WHALE_API_ROUTE, ['GET']]])
   assert.equal(carrier[0].requestBody, 'buffered');assert.equal(carrier[1].requestBody, 'buffered');assert.equal(raw.length, 2)
 })
+
+function mapBackedFixture(overrides = {}) {
+  const value = EmailSettingsSchema({})
+  const writes = []
+  const ctx = { settings: { writable: true, describe: () => [{ ns: 'dsh-email', revision: 0, user: value }], async update(_ns, next, expected) {
+    assert.equal(expected, 0); writes.push(structuredClone(next))
+  }, async replace(_ns, next) { writes.push(structuredClone(next)) } } }
+  const config = { defaultAccount: 'qq', accounts: { qq: { provider: 'qq', user: 'a@example.test', password: 'p1' } }, sendApproval: true, ...overrides }
+  return { backend: new EmailSettingsBackend(ctx, { get: () => value, config }, undefined), writes }
+}
+
+test('an empty account form never erases mailboxes stored as an accounts map', async () => {
+  const f = mapBackedFixture(), value = { ...EmailSettingsSchema({}), accountsYaml: '', newMailPopup: false }
+  await f.backend.save(value, 0)
+  const section = f.writes[0]
+  assert.equal(Object.hasOwn(section, 'accounts'), false)
+  assert.equal(Object.hasOwn(section, 'password'), false)
+  assert.equal(Object.hasOwn(section, 'accountsYaml'), false)
+  assert.equal(Object.hasOwn(section, 'provider'), false)
+  assert.equal(Object.hasOwn(section, 'pop3'), false)
+  assert.equal(section.newMailPopup, false)
+})
+
+test('adding a card cannot silently replace configuration-owned accounts', async () => {
+  const f = mapBackedFixture(), value = { ...EmailSettingsSchema({}), accountsYaml: 'work: {provider: qq, user: w@example.test, password: p2}\n' }
+  await assert.rejects(f.backend.save(value, 0), /accounts map/)
+  assert.equal(f.writes.length, 0)
+})
+
+test('snapshot explicitly identifies configuration-owned accounts without copying their secrets', async () => {
+  const snapshot = await mapBackedFixture().backend.snapshot()
+  assert.deepEqual(snapshot.configurationManagedAccounts, ['qq'])
+  assert.deepEqual(snapshot.accounts, ['qq'])
+  assert.equal(JSON.stringify(snapshot).includes('p1'), false)
+})
+
+test('removing the last YAML-owned card still clears a hidden legacy map', async () => {
+  const f = mapBackedFixture({ accountsYaml: 'work: {provider: qq, user: w@example.test, password: p2}\n' })
+  await f.backend.save({ ...EmailSettingsSchema({}), accountsYaml: '' }, 0)
+  assert.deepEqual(f.writes[0].accounts, {})
+  assert.equal(f.writes[0].user, '')
+})

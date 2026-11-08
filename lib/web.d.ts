@@ -190,10 +190,6 @@ export declare function postVerdict(headers: Record<string, unknown>): {
     status: number;
     message: string;
 } | undefined;
-/**
- * Browser-facing backend: snapshot the settings namespace, save it with
- * optimistic concurrency, and test a draft account over a live IMAP login.
- */
 export declare class EmailSettingsBackend {
     private readonly ctx;
     private readonly scope;
@@ -207,6 +203,7 @@ export declare class EmailSettingsBackend {
     private userSection;
     /** Effective config for the stored value (row + user-set fields only). */
     private effectiveStored;
+    private configurationManagedAccounts;
     snapshot(): Promise<{
         settings: {
             value: EmailSettingsValue;
@@ -214,6 +211,7 @@ export declare class EmailSettingsBackend {
             applies: any;
         };
         writable: boolean;
+        configurationManagedAccounts: string[];
         accounts: string[];
         accountsDetail: {
             error?: string | undefined;
@@ -239,6 +237,7 @@ export declare class EmailSettingsBackend {
             applies: any;
         };
         writable: boolean;
+        configurationManagedAccounts: string[];
         accounts: string[];
         accountsDetail: {
             error?: string | undefined;
@@ -263,6 +262,7 @@ export declare class EmailSettingsBackend {
             applies: any;
         };
         writable: boolean;
+        configurationManagedAccounts: string[];
         accounts: string[];
         accountsDetail: {
             error?: string | undefined;
