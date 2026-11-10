@@ -1,7 +1,7 @@
 import { lookup } from 'node:dns/promises'
 import { get } from 'node:https'
 import { isIP } from 'node:net'
-import { publicAddress, syntheticAddress, validPublicRecords, type PublicAddress } from './public-address.js'
+import { publicAddress, syntheticAddress, syntheticAddress6, validPublicRecords, type PublicAddress } from './public-address.js'
 
 export class PublicDownloadError extends Error {
   constructor(public readonly code: string, message: string) { super(message); this.name = 'PublicDownloadError' }
@@ -104,7 +104,7 @@ export async function resolvePublicAddresses(host: string, signal: AbortSignal, 
   try { rows = await withAbort((dependencies.lookup ?? (name => lookup(name, { all: true })))(host), signal) }
   catch { signal.throwIfAborted(); throw new PublicDownloadError('PUBLIC_DNS_FAILED', '无法解析图片或附件域名，请稍后重试 / Cannot resolve the public download host') }
   if (validPublicRecords(rows)) return rows
-  if (!rows.length || rows.length > 32 || !rows.every(row => row.family === 4 && syntheticAddress(row.address)) || !publicDnsName(host)) throw blocked()
+  if (!rows.length || rows.length > 32 || !rows.every(row => (row.family === 4 && syntheticAddress(row.address)) || (row.family === 6 && syntheticAddress6(row.address))) || !publicDnsName(host)) throw blocked()
   const real = await withAbort((dependencies.query ?? queryPublicDns)(host, signal), signal)
   if (!validPublicRecords(real)) throw blocked()
   return real
