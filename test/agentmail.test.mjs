@@ -91,6 +91,13 @@ test(
     )
   },
 )
+test('email_read omits absent rich data and normalizes nonfinite attachment sizes', async () => {
+  const api = new AgentMailClient(settings(), async () => Response.json({ message_id: 'm1', text: 'hello', attachments: [{ attachment_id: 'a1', size: '1e309' }] }))
+  const message = await api.read('default', 'm1', 'INBOX')
+  assert.equal(Object.hasOwn(message, 'rich'), false)
+  assert.equal(message.attachments[0].size, 0)
+  assert.doesNotThrow(() => JSON.stringify(message))
+})
 test('API identities cannot cross accounts or normalize path segments', async () => {
   let calls = 0
   const malformed = new AgentMailClient(settings(), async () => {

@@ -70,20 +70,21 @@ export async function parseRawMessage(source: Buffer, maxBodyChars: number): Pro
   const limited = truncateText(text, maxBodyChars)
   const attachments: EmailAttachmentMeta[] = (parsed.attachments ?? []).map((att, index) => ({
     filename: att.filename ?? '(unnamed)',
-    contentType: att.contentType,
-    size: att.size,
+    contentType: typeof att.contentType === 'string' ? att.contentType : 'application/octet-stream',
+    size: Number.isFinite(att.size) && att.size >= 0 ? att.size : 0,
     part: 'attachment-' + index,
     ...(att.contentId ? { contentId: att.contentId } : {}),
   }))
+  const rich = richEmailBody(parsed.html, attachments)
   return {
-    date: parsed.date instanceof Date ? parsed.date.toISOString() : '',
+    date: parsed.date instanceof Date && Number.isFinite(parsed.date.getTime()) ? parsed.date.toISOString() : '',
     from: flattenAddresses(parsed.from),
     to: flattenAddresses(parsed.to),
     cc: flattenAddresses(parsed.cc),
     subject: parsed.subject ?? '',
     text: limited.text,
     attachments,
-    rich: richEmailBody(parsed.html, attachments),
+    ...(rich ? { rich } : {}),
     truncated: limited.truncated,
   }
 }

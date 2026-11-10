@@ -1,5 +1,10 @@
 # 更新记录
 
+## 0.24.2 (2026-11-10)
+
+- 修复 `email_read` 对纯文本邮件和无安全链接 HTML 仍返回 `rich: undefined` / `href: undefined`，导致宿主 lossless JSON 输出验证失败；IMAP、POP3、AgentMail 统一省略未生成的富文本字段，并将异常日期、附件大小及 UIDVALIDITY 归一化为安全值。
+- Add regression coverage for plain-text and unsafe-link read results, including recursive checks for undefined values.
+
 ## 0.24.1 (2026-11-10)
 
 - 修复 0.24.0「点开任意邮件即空屏」：`MailContent` 正文工具栏引用了只在 `MailFoldersDialog` 里声明的 `working`/`busy`（#41 误带），渲染期抛 `ReferenceError` 后 React 错误边界把整个 `main` 插槽卸载。回归保护改为对 `lib/client.js` 跑 TypeScript 语义检查，任何未声明标识符（TS2304）都会让测试失败（#46、#47）。

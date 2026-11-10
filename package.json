@@ -1,6 +1,6 @@
 {
   "name": "dsh-email",
-  "version": "0.24.1",
+  "version": "0.24.2",
   "description": "DSH 邮件工作台：图文回复与草稿、确认定时发送、Google/Outlook 授权、多邮箱及可选邮件任务。欢迎提交 issues 和 PR。",
   "type": "module",
   "main": "lib/index.js",

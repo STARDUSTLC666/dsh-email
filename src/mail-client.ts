@@ -151,7 +151,7 @@ function collectAttachmentParts(node: any, out: AttachmentPart[] = []): Attachme
       part: String(node.part),
       filename: String(filename),
       contentType: typeof node.type === 'string' ? node.type : 'application/octet-stream',
-      size: typeof node.size === 'number' ? node.size : 0,
+      size: typeof node.size === 'number' && Number.isFinite(node.size) && node.size >= 0 ? node.size : 0,
       ...(typeof node.id === 'string' ? { contentId: node.id } : {}),
     })
   }
@@ -446,7 +446,8 @@ export class EmailPool {
   /** UIDVALIDITY 变了以后同一 uid 可能指向另一封邮件，缓存键必须带上它。 */
   private uidValidityOf(client: ImapFlow): number {
     const mailbox = client.mailbox
-    return mailbox === false ? 0 : Number(mailbox.uidValidity ?? 0)
+    const value = mailbox === false ? 0 : Number(mailbox.uidValidity ?? 0)
+    return Number.isSafeInteger(value) && value >= 0 ? value : 0
   }
 
   /** Remember a parsed attachment index so email_attachment can skip the refetch. */
@@ -1157,7 +1158,7 @@ export class EmailPool {
               cc: flattenAddresses(message.envelope.cc),
               subject: message.envelope.subject ?? '',
               text: limited.text,
-              rich,
+              ...(rich ? { rich } : {}),
               attachments,
               truncated: limited.truncated,
             }

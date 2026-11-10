@@ -21,6 +21,17 @@ test('rich content is inert: active tags, CSS, event attributes and unsafe links
   const rich=richEmailBody('<p onclick="evil()">A &amp; B<script>secret()</script><style>body{background:url(https://track.invalid)}</style><svg><image href="x"/></svg><form><input value="x"></form><a href="javascript:evil()">bad</a><a href="https://example.com/a">good</a><img src="http://127.0.0.1/x" alt="blocked"></p>');
   const text=JSON.stringify(rich);assert.ok(!/onclick|secret|background|javascript|<svg/.test(text));assert.equal(rich.images.length,0);assert.match(text,/A & B/);assert.match(text,/https:\/\/example.com\/a/)
 })
+test('rich content is lossless-JSON-safe when links have no safe href',()=>{
+  const rich=richEmailBody('<a>missing</a><a href="javascript:alert(1)">unsafe</a><a href="https://example.com/ok">safe</a>');
+  assert.doesNotThrow(()=>JSON.stringify(rich));
+  assert.equal(Object.hasOwn(rich.nodes[0],'href'),false);
+  assert.equal(Object.hasOwn(rich.nodes[1],'href'),false);
+  assert.equal(rich.nodes[2].href,'https://example.com/ok');
+})
+test('plain-text email read omits absent rich data',async()=>{
+  const body=await parseRawMessage(Buffer.from('From: sender@example.invalid\r\nSubject: plain text\r\n\r\nhello'),20000);
+  assert.equal(Object.hasOwn(body,'rich'),false);
+})
 test('MIME HTML preserves CID references and binds to the actual inline attachment',async()=>{
   const body=await parseRawMessage(messageSource(),20000);assert.equal(body.attachments[0].contentId,'<chart@fixture>');assert.equal(body.rich.images[0].attachment,0);assert.equal(body.rich.images[0].kind,'inline');assert.equal(body.rich.images[1].kind,'remote');assert.match(body.text,/END-OF-ORIGINAL/)
 })

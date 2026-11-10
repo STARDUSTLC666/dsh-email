@@ -289,6 +289,7 @@ export class AgentMailClient {
     signal?: AbortSignal,
   ): Promise<EmailReadResult> {
     const m = await this.original(name, uid, signal),
+      rich = richEmailBody(m.html),
       body = truncateText(
         m.text ?? m.extracted_text ?? stripHtml(m.html ?? ''),
         this.settings.maxBodyChars,
@@ -297,7 +298,7 @@ export class AgentMailClient {
       account: name,
       uid: this.id(uid),
       folder,
-      rich: richEmailBody(m.html),
+      ...(rich ? { rich } : {}),
       date: m.timestamp ?? '',
       from: parsedAddresses(m.from ?? ''),
       to: parsedAddresses((m.to ?? []).join(', ')),
@@ -308,7 +309,7 @@ export class AgentMailClient {
       attachments: (m.attachments ?? []).map((a: any) => ({
         filename: a.filename ?? 'attachment',
         contentType: a.content_type ?? 'application/octet-stream',
-        size: Number(a.size) || 0,
+        size: Number.isFinite(Number(a.size)) && Number(a.size) >= 0 ? Number(a.size) : 0,
         part: String(a.attachment_id),
       })),
     }
