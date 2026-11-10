@@ -1,5 +1,11 @@
 # 更新记录
 
+## 0.24.1 (2026-11-10)
+
+- 修复 0.24.0「点开任意邮件即空屏」：`MailContent` 正文工具栏引用了只在 `MailFoldersDialog` 里声明的 `working`/`busy`（#41 误带），渲染期抛 `ReferenceError` 后 React 错误边界把整个 `main` 插槽卸载。回归保护改为对 `lib/client.js` 跑 TypeScript 语义检查，任何未声明标识符（TS2304）都会让测试失败（#46、#47）。
+- 修复 Clash/mihomo Fake-IP 同时返回虚拟 IPv6 时外部图片全部被拒：`2001:2::/48`（benchmarking，也是 mihomo 默认 `fake-ip-range6`）与 `fdfe:dcba:9876::/48`（sing-box 标记）现在被识别为占位符，可以回退到加密 DNS；真实 ULA（`fc00::/7`）、私网地址与字面量主机仍然拒绝，DoH 结果继续经过 `validPublicRecords()`（#45、#47）。
+- 合并 #47 的两处修复、4 个 Fake-IP 回归用例，并新增客户端 bundle 未声明标识符守卫。
+
 ## 0.24.0 (2026-11-08)
 
 - 防止设置页空表单或新增卡片覆盖 `accounts` 映射及继承凭据；旧宿主空表单明确显示配置文件管理的账号，通用设置可保存；当前原生宿主的完整账号卡片继续可编辑，删除最后一个账号时仍清除旧回退（#43）。
