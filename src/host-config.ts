@@ -27,6 +27,8 @@ export const Config: z = z.object({
   trustedRecipientsYaml: z.string().volatile(),
   maxAttachmentBytes: z.number().volatile(), bodySearchFallback: z.boolean().volatile(),
   bodySearchLimit: z.number().volatile(), idleTimeoutMs: z.number().volatile(),
+  consumers: z.array(z.object({ id: z.string(), account: z.string(), folder: z.string().default('INBOX'), senders: z.array(z.string()).default([]), subject: z.string().default(''), enabled: z.boolean().default(true) })).volatile(),
+  consumerPollSeconds: z.number().volatile(),
   legacySettingsImported: z.boolean().volatile(),
 })
 

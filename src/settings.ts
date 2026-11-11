@@ -1,6 +1,7 @@
 import z from 'schemastery'
 import { ENDPOINT_DEFAULTS, normalizeSettingsEndpoint, PROVIDER_NAMES, type EmailConfig } from './config.js'
 import { parseRecipientPolicies } from './recipient-policy.js'
+import { normalizeMailConsumers } from './mail-consumers.js'
 
 /** Settings-document namespace this plugin owns (editable from the Web settings page). */
 export const SETTINGS_NAMESPACE = 'dsh-email'
@@ -10,7 +11,7 @@ export const SETTINGS_NAMESPACE = 'dsh-email'
  * The form edits the default/shorthand account; its advanced YAML area
  * edits named accounts through accountsYaml.
  */
-export const EmailSettingsSchema = z.object({
+export const EmailSettingsSchema: z = z.object({
   receiveProtocol: z.union(['imap', 'pop3']).default('imap'),
   pop3: z.object({ host: z.string().default(''), port: z.number().default(995), secure: z.boolean().default(true) }),
   provider: z.string().default(''),
@@ -26,6 +27,11 @@ export const EmailSettingsSchema = z.object({
   maxBodyChars: z.number().default(20000),
   downloadDir: z.string().default(''),
   accountsYaml: z.string().role('secret').default(''),
+  consumers: z.array(z.object({
+    id: z.string(), account: z.string(), folder: z.string().default('INBOX'),
+    senders: z.array(z.string()).default([]), subject: z.string().default(''), enabled: z.boolean().default(true),
+  })),
+  consumerPollSeconds: z.number().min(30).max(3600),
   // Reusable IMAP/SMTP endpoints for the account cards. No credentials, so no
   // role('secret') — and deliberately not projected into EmailConfig, or
   // editing a preset would change the pool fingerprint and drop live sessions.
@@ -62,6 +68,8 @@ export interface EmailSettingsValue {
   maxBodyChars: number
   downloadDir: string
   accountsYaml: string
+  consumers?: Array<{ id: string; account: string; folder?: string; senders?: string[]; subject?: string; enabled?: boolean }>
+  consumerPollSeconds?: number
   serverPresets?: string
   imap: { host: string; port: number; secure: boolean }
   smtp: { host: string; port: number; secure: boolean }
@@ -84,6 +92,8 @@ export function toSettingsBase(config: EmailConfig): Partial<EmailSettingsValue>
     ...(config.newMailPopup !== undefined ? { newMailPopup: config.newMailPopup } : {}),
     ...(config.trustedRecipientsYaml !== undefined ? { trustedRecipientsYaml: config.trustedRecipientsYaml } : {}),
     ...(config.maxBodyChars !== undefined ? { maxBodyChars: config.maxBodyChars } : {}),
+    ...(config.consumers !== undefined ? { consumers: config.consumers.map(consumer => ({ ...consumer })) } : {}),
+    ...(config.consumerPollSeconds !== undefined ? { consumerPollSeconds: config.consumerPollSeconds } : {}),
     ...(config.downloadDir !== undefined && config.downloadDir !== '' ? { downloadDir: config.downloadDir } : {}),
     ...(config.serverPresets !== undefined && config.serverPresets !== '' ? { serverPresets: config.serverPresets } : {}),
     ...(config.imap !== undefined ? {
@@ -171,6 +181,8 @@ export function toEmailConfig(value: EmailSettingsValue, user?: Partial<EmailSet
   if (has('replyTimeZone')) set('replyTimeZone', draft.replyTimeZone)
   if (has('trustedRecipientsYaml')) set('trustedRecipientsYaml', draft.trustedRecipientsYaml)
   if (has('maxBodyChars')) set('maxBodyChars', draft.maxBodyChars)
+  if (has('consumers')) set('consumers', draft.consumers)
+  if (has('consumerPollSeconds')) set('consumerPollSeconds', draft.consumerPollSeconds)
   if (has('downloadDir')) set('downloadDir', draft.downloadDir)
   if (has('accountsYaml')) set('accountsYaml', draft.accountsYaml)
   if (has('proxy')) set('proxy', draft.proxy)
@@ -246,6 +258,10 @@ export function validateSettingsValue(value: EmailSettingsValue, extraProviders:
   if (draft.trustedRecipientsYaml !== undefined) {
     if (typeof draft.trustedRecipientsYaml !== 'string') throw new Error('可信收件人规则必须为文本')
     parseRecipientPolicies(draft.trustedRecipientsYaml)
+  }
+  if (draft.consumers !== undefined) normalizeMailConsumers(draft.consumers)
+  if (draft.consumerPollSeconds !== undefined && (!Number.isInteger(draft.consumerPollSeconds) || draft.consumerPollSeconds < 30 || draft.consumerPollSeconds > 3600)) {
+    throw new Error('consumerPollSeconds must be between 30 and 3600')
   }
   const provider = draft.provider
   if (isSet(provider) && provider !== '' && !['agentmail', 'agentmail-eu', ...PROVIDER_NAMES].includes(provider) && !extraProviders.includes(provider)) {

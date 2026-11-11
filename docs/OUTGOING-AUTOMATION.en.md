@@ -43,3 +43,41 @@ The key authorizes whitelisted senders to initiate work in approved directories.
 Advanced all/any rules can match subject/body/from/to/cc with contains/equals/regex. Named captures become ${name} placeholders in workspace/session/prompt templates; ${body} is stripped body text. Workspace results must still match an approved alias. Regex evaluation runs in a bounded worker.
 
 Keep DSH running. The ledger holds at most 200 records; finished records can be cleared. Polls inspect the latest 100 messages and pause on a coverage gap. Duplicate mail is not re-executed. Restarted in-progress tasks require attention and are not replayed. Manual takeover, configuration changes, a 30-minute tracking deadline, failure or missing final text stop automatic replies; native sessions can continue in DSH. This is not an always-on unattended service. AgentMail testing remains simulated until a user supplies a real account.
+
+## Local arrival subscriptions (`emailTasks`)
+
+Other DSH plugins can subscribe to mailbox arrivals in-process, without turning mail into a task and without touching the model. With no subscribers the plugin adds no extra scanning.
+
+```js
+export const inject = ['emailTasks']
+
+export function apply(ctx, config) {
+  const off = ctx.emailTasks.subscribe('my-consumer', async event => {
+    // Metadata only: account / folder / uid / uidValidity / sender / subject / date
+    // event.signal aborts on timeout or teardown; exit cooperatively.
+  })
+  ctx.effect(() => off)
+}
+```
+
+The consumer id must be configured and enabled first:
+
+```yaml
+consumers:
+  - id: my-consumer
+    account: work
+    folder: INBOX
+    senders: [alice@example.com]
+    subject: invoice
+    enabled: true
+consumerPollSeconds: 60
+```
+
+- Envelopes only (sender, subject, date, UID). Bodies and attachments are never downloaded, no session is created and nothing is sent automatically.
+- The first scan establishes a baseline; mail already in the mailbox does not fire. Each mailbox is inspected for at most the newest 100 messages per round.
+- Numeric UIDs use a UID watermark; string UIDs use a strict date watermark and dispatch nothing when dates are unreliable, recording the reason instead.
+- A UIDVALIDITY, account or consumer-configuration change rebuilds the baseline so old mail is never reported as new.
+- One failing mailbox does not affect the others; `status()` reports `lastError`, `inFlight`, `droppedEvents`, `handlerFailures` and `handlerTimeouts`.
+- Each consumer runs at most four handlers at once; events beyond that are dropped and counted.
+- A handler that exceeds the timeout (10 seconds by default) is aborted through `signal` and releases its slot; teardown aborts and waits for cooperative completion.
+- This is best-effort: arrivals while DSH is closed are not replayed.

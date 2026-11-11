@@ -13,6 +13,7 @@ import { EmailService, type MailDependencies } from './mail-service.js'
 import { installScheduleApproval } from './schedule-tool.js'
 import { disposeOAuthFlows } from './oauth2.js'
 import { MailTaskBackend, installMailTasks } from './mail-tasks.js'
+import { MailConsumerBackend, installMailConsumers, normalizeMailConsumers } from './mail-consumers.js'
 export const Config = ConfigSchema
 
 export const name = 'tool-email'
@@ -29,6 +30,7 @@ export function apply(ctx: any, config: Config = {}): void {
 /** Shared application assembly; transports can be supplied by embedders and protocol fixtures. */
 export function installEmailApplication(ctx:any,config:Config={},dependencies:MailDependencies={}):void {
   config = liveConfig(config)
+  normalizeMailConsumers(config.consumers)
   installLegacySettingsImport(ctx, config, SETTINGS_NAMESPACE, 'tool-email', Object.keys(EmailSettingsSchema.dict!))
   if (typeof ctx.settings.configure === 'function' && typeof ctx.inject === 'function') {
     ctx.inject(['settings'], (settingsCtx: any) => {
@@ -48,6 +50,7 @@ export function installEmailApplication(ctx:any,config:Config={},dependencies:Ma
   installEmailDrafts(ctx, drafts)
   installEmailMailbox(ctx, new EmailMailboxBackend(runtime, drafts))
   installMailTasks(ctx,new MailTaskBackend(runtime))
+  installMailConsumers(ctx, new MailConsumerBackend(runtime, config))
   for (const definition of buildEmailTools(runtime, drafts)) ctx.tools.register(definition)
   installSendApproval(ctx, runtime)
   installScheduleApproval(ctx,drafts)
@@ -76,3 +79,4 @@ export { EmailService } from './mail-service.js'
 export { EmailMailboxBackend, installEmailMailbox, MAILBOX_ROUTE } from './mailbox-web.js'
 export { prepareMailBody, sanitizeOutgoingHtml } from './outgoing-body.js'
 export { replyLanguage, replyDate } from './reply-locale.js'
+export { MailConsumerBackend, normalizeMailConsumers, type EmailArrivalEvent, type EmailArrivalHandler, type EmailTasksStatus, type MailConsumerConfig } from './mail-consumers.js'

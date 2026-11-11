@@ -1,5 +1,14 @@
 # 更新记录
 
+## 0.25.0 (2026-11-11)
+
+- 新增可选的新邮件到达订阅 `emailTasks`：其他插件按 consumer 订阅发件人/主题，只读信封、不下载正文、不创建会话、不自动发送（#44）。首次扫描只建基线，数字 UID 用 UID 水位、字符串 UID 用严格日期水位；UIDVALIDITY、账号或 consumer 配置变化时重建基线，单个邮箱失败不影响其他邮箱。
+- 订阅具备并发上限、超时中止与卸载等待：每个 consumer 最多 4 个 handler，超时通过 `signal` abort 并释放并发槽，`status()` 如实报告丢弃数、失败数与超时数。`consumers` 与 `consumerPollSeconds` 进入设置 schema，可在界面读写并 round-trip。
+- 工作台界面复用 DSH 官方 locale runtime（`addLanguage` / `register` / `bind`），补齐英语、西班牙语、法语、德语、日语、巴西葡萄牙语、俄语：157 个界面词条与 301 条内联文案全部翻译，宿主已提供的语言不重复注册，卸载时释放字典（#48、#49）。
+- 旧宿主没有 locale 服务时保留原有中英行为；不支持的界面语言按英语回退，不再出现 `card.xxx` 这类缺键标识。
+- 修复邮件订阅在同一轮投递出错后，下一次扫描把「并发上限丢弃事件」「handler 失败」等错误静默清空的问题。
+- 统一 `email_draft` 工具描述为英语，与其余工具一致。
+
 ## 0.24.2 (2026-11-10)
 
 - 修复 `email_read` 对纯文本邮件和无安全链接 HTML 仍返回 `rich: undefined` / `href: undefined`，导致宿主 lossless JSON 输出验证失败；IMAP、POP3、AgentMail 统一省略未生成的富文本字段，并将异常日期、附件大小及 UIDVALIDITY 归一化为安全值。

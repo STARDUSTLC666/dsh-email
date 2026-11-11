@@ -22,6 +22,8 @@ Version 0.23 adds safe HTML send/reply/draft previews, reviewed scheduled sends,
 - Use IMAP/POP3/SMTP, Outlook OAuth or AgentMail accounts.
 - Read messages, search and download attachments in the workbench.
 - Review the sender, To/Cc, content and attachments before confirming.
+- Run in Chinese, English, Spanish, French, German, Japanese, Brazilian Portuguese or Russian, using the DSH locale runtime.
+- Subscribe in-process to mailbox arrivals through `emailTasks`, without reading bodies or starting sessions.
 
 <details>
 <summary>See a workbench example</summary>

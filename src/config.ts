@@ -173,6 +173,10 @@ export interface EmailConfig extends AccountConfig {
   bodySearchFallback?: boolean
   /** How many recent messages the body-search fallback parses. Default 30. */
   bodySearchLimit?: number
+  /** Opt-in local email arrival consumers; empty by default. */
+  consumers?: Array<{ id: string; account: string; folder?: string; senders?: string[]; subject?: string; enabled?: boolean }>
+  /** Consumer scan interval in seconds. Default 60. */
+  consumerPollSeconds?: number
   /** Per-attachment and total-attachment byte cap. Default 20 MiB. */
   maxAttachmentBytes?: number
   /** Unused IMAP connections close after this many ms. Default 60000. */

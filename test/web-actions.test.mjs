@@ -2024,7 +2024,8 @@ test('the settings editor names the application an empty clientId falls back to'
   // that will actually be used, and keeps the「register one」warning for builds
   // that carry no built-in application at all.
   assert.match(source, /card\.oauthDefaultClientId/, 'the built-in id comes from the card')
-  assert.equal((source.match(/"oauth\.clientIdBuiltIn":/g) ?? []).length, 2, 'zh + en both state which app is used')
+  // One entry per supported UI locale: zh, en, es, fr, de, ja, pt, ru.
+  assert.equal((source.match(/"oauth\.clientIdBuiltIn":/g) ?? []).length, 8, 'every supported locale states which app is used')
   assert.match(source, /builtInClientId !== "" \? builtInClientId/, 'the field previews the app in effect')
   assert.match(source, /builtInClientId === ""\s*\n\s*\? h\("div", \{ className: "dshe-alert warn" \}/,
     'the「no application」warning is only for builds without a built-in app')

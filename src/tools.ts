@@ -75,7 +75,7 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
     ...(drafts?.action&&drafts.store?[scheduleTool(drafts as EmailDraftBackend)]:[]),
     ...(drafts ? [{
       name: 'email_draft',
-      description: '准备可编辑的纯文本或 HTML 邮件草稿，不投递邮件。reply 可引用原邮件并保留回复/转发线程。用户在设置 → 邮件 → 草稿中检查正文和附件，预览并确认后发送。',
+      description: 'Prepare an editable plain-text or HTML draft without delivering it. reply quotes the original message and keeps the reply/forward thread. The user reviews the body and attachments in Settings → Email → Drafts and sends only after confirming a preview.',
       parameters: DRAFT_PARAMETERS,
       output: { schema: { type: 'object', properties: { id: { type: 'string' }, state: { type: 'string' }, subject: { type: 'string' } }, required: ['id', 'state', 'subject'] }, render: (_args: unknown, value: unknown): TextBlock[] => [{ type: 'text', text: '本地草稿已保存，邮件未发送。请在设置 → 邮件 → 草稿中打开并检查。\n草稿编号：' + (value as { id: string }).id + '\n主题：' + (value as { subject: string }).subject }] },
       timeoutMs: QUERY_TIMEOUT_MS,

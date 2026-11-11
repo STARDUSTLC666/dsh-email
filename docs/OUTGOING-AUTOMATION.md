@@ -69,3 +69,41 @@ Google 测试应用的刷新令牌寿命、组织策略与发布验证要求由 
 ```
 
 DSH 需保持运行；最多 200 条任务记录，界面可清理已结束记录。轮询最多检查最新 100 封，超出连续窗口会明确暂停并要求重新建立起点。相同邮件不重复执行。重启后进行中任务转为需查看，不自动重放；人工接手、配置改变、运行超 30 分钟、会话失败或无最终文本时停止自动回复，原会话可在 DSH 中继续。任务不是全天候无人值守服务。AgentMail 仍只有模拟账号验收，真实服务需用户另行配置。
+
+## 本地新邮件订阅（`emailTasks`）
+
+其他 DSH 插件可以在进程内订阅新邮件到达，不需要把邮件转成任务，也不经过模型。默认没有订阅者，因此不额外扫描。
+
+```js
+export const inject = ['emailTasks']
+
+export function apply(ctx, config) {
+  const off = ctx.emailTasks.subscribe('my-consumer', async event => {
+    // event 只含元数据：account / folder / uid / uidValidity / sender / subject / date
+    // event.signal 在超时或卸载时中止，请协作式退出
+  })
+  ctx.effect(() => off)
+}
+```
+
+订阅者 ID 必须在 `consumers` 中预先配置并启用：
+
+```yaml
+consumers:
+  - id: my-consumer
+    account: work
+    folder: INBOX
+    senders: [alice@example.com]
+    subject: invoice
+    enabled: true
+consumerPollSeconds: 60
+```
+
+- 只读取信封（发件人、主题、日期、UID），不下载正文或附件，不创建会话、不自动发送。
+- 首次扫描只建立基线，之前已在邮箱里的邮件不会触发；每个邮箱每轮最多检查最新 100 封。
+- 数字 UID 用 UID 水位；字符串 UID 用严格日期水位，日期不可靠时不派发并记录错误。
+- UIDVALIDITY、账号设置或 consumer 配置改变时重建基线，避免把旧邮件当成新邮件。
+- 单个邮箱失败不影响其他邮箱；`status()` 返回 `lastError`、`inFlight`、`droppedEvents`、`handlerFailures`、`handlerTimeouts`。
+- 每个 consumer 同时最多 4 个 handler；超过上限的事件会被丢弃并计入 `droppedEvents`。
+- handler 超时（默认 10 秒）会 abort `signal` 并释放并发槽；卸载时中止并等待协作式完成。
+- 这是 best-effort 通知，不保证不丢事件：DSH 关闭期间的邮件不会补发。

@@ -26,3 +26,4 @@ export { EmailService } from './mail-service.js';
 export { EmailMailboxBackend, installEmailMailbox, MAILBOX_ROUTE } from './mailbox-web.js';
 export { prepareMailBody, sanitizeOutgoingHtml } from './outgoing-body.js';
 export { replyLanguage, replyDate } from './reply-locale.js';
+export { MailConsumerBackend, normalizeMailConsumers, type EmailArrivalEvent, type EmailArrivalHandler, type EmailTasksStatus, type MailConsumerConfig } from './mail-consumers.js';
