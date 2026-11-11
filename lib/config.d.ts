@@ -302,6 +302,16 @@ export interface ServerPreset {
     };
 }
 /**
+ * The provider value the settings page reserves for its「自定义服务器」entry.
+ *
+ * Such an account stores no `provider`; its endpoints live on the account
+ * itself. A preset with the same name would be shadowed by that dropdown entry
+ * (the page skips it), and hand-written YAML could otherwise copy preset
+ * endpoints into the account on the next card save. Reject it here, exactly as
+ * the presets editor does.
+ */
+export declare const CUSTOM_SERVER_PROVIDER = "__custom__";
+/**
  * Parse the settings-page server presets: a name -> endpoints map, e.g.
  * `corp: { imap: { host: imap.corp }, smtp: { host: smtp.corp } }`.
  * Blank text means "no presets"; a malformed document fails loud, because a

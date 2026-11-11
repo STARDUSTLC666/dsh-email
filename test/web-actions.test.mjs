@@ -439,7 +439,7 @@ test('serializeAccounts keeps comments (the step-1 writer cannot)', async t => {
   assert.equal(parsed.defaultAccount, 'work')
 })
 
-test('serializeAccounts: a custom account writes no provider key; stored endpoints and unknown keys survive', async t => {
+test('serializeAccounts: a custom-server card writes its endpoints and keeps unknown keys', async t => {
   const { post } = mount(t)
   const source = 'work:\n  user: w@x.y\n  imap:\n    socketTimeoutMs: 9000\n    host: imap.old\n'
   const { body } = await post({
@@ -457,18 +457,16 @@ test('serializeAccounts: a custom account writes no provider key; stored endpoin
   const out = body.value.accountsYaml
   assert.equal(/provider/.test(out), false, 'provider "" would resolve as 「provider "" 未知」')
   assert.match(out, /socketTimeoutMs: 9000/, 'an advanced key must survive in place')
-  // A provider-less account has nothing but its stored endpoints to connect
-  // with, and the provider did not change, so they are not stale and stay put.
-  // The card never writes endpoints (they are edited through presets or the raw
-  // YAML), so the posted imap.new is dropped rather than stored.
-  assert.match(out, /host: imap\.old/, 'the endpoint that drives the connection survives')
-  assert.equal(/imap\.new/.test(out), false, 'a card does not write endpoints')
+  // A provider-less account is the custom-server case: the card is the editor
+  // for its endpoints, so the posted values are what gets stored.
+  assert.match(out, /host: imap\.new/, 'the card writes the endpoint it shows')
+  assert.equal(/imap\.old/.test(out), false, 'the replaced endpoint does not survive beside it')
   const parsed = parseAccountsYaml(out)
   assert.equal('provider' in parsed.map.work, false)
   assert.equal(parsed.map.work.imap.socketTimeoutMs, 9000)
-  assert.equal(parsed.map.work.imap.host, 'imap.old')
-  assert.equal('port' in parsed.map.work.imap, false, 'fields the account never declared are still not invented')
-  assert.equal('secure' in parsed.map.work.imap, false)
+  assert.equal(parsed.map.work.imap.host, 'imap.new')
+  assert.equal(parsed.map.work.imap.port, 143)
+  assert.equal(parsed.map.work.imap.secure, false)
 })
 
 test('serializeAccounts: no accounts serializes to "" (never "{}")', async t => {

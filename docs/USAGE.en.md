@@ -139,6 +139,24 @@ To reuse one set of connection endpoints across accounts, define your own provid
 
 The settings page's "Server presets" fold-out edits these presets visually, and the account cards' provider dropdown automatically gains the preset names — picking one pre-fills its endpoints into the account. A preset holds connection endpoints only — **never an email address or authorization code**. `port`/`secure` may be omitted (defaults are 993/465 with SSL).
 
+### Custom server (enter details)
+
+When an intranet or self-hosted mail server is not among the built-in providers or server presets, set the account card's **Provider** dropdown to **Custom server (enter details)** in Settings → Email → Email accounts.
+
+- Then enter the IMAP incoming server (host, port, SSL/TLS) and the SMTP outgoing server (host, port, SSL/TLS) directly on the card.
+- Leave the outgoing host blank to reuse the incoming host; leave a port blank to use 993 (IMAP) / 465 (SMTP).
+- The account still only needs the email address and authorization code / app password; fill them in and click that card's **Test connection** to verify.
+- In `accountsYaml`, such accounts omit `provider` and carry the endpoints in the account's `imap` / `smtp` sections; when the incoming protocol is POP3, the endpoints live in the `pop3` / `smtp` sections instead (the outgoing server may stay blank for receiving only):
+
+```yaml
+work:
+  user: someone@corp.example
+  imap: { host: imap.corp.example, port: 993, secure: true }
+  smtp: { host: smtp.corp.example, port: 465, secure: true }
+```
+
+The existing **Server presets (custom providers, advanced)** feature is unchanged: keep using a preset when several accounts share one set of servers, and use **Custom server (enter details)** when a single account needs its own endpoints. The two do not conflict, and an account's own `imap`/`smtp` still takes precedence over its selected preset.
+
 ## Presets
 
 | provider | IMAP | SMTP |
@@ -156,14 +174,14 @@ The settings page's "Server presets" fold-out edits these presets visually, and 
 
 | Field | Default | Description |
 |---|---|---|
-| `provider` | — | Preset name; auto-fills imap/smtp addresses. Explicitly written host/port/secure take precedence |
+| `provider` | — | Provider preset name (built-in or `serverPresets`); auto-fills imap/smtp addresses. Omit it when entering endpoints by hand; explicitly written host/port/secure always take precedence |
 | `user` | required | Login email address |
 | `password` | required* | Authorization code / app-specific password; *can also use the env var `DSH_EMAIL_PASSWORD` |
 | `senderName` | — | Display name for the From header; the address itself stays `user` |
 | `authUser` | = `user` | Login account. Alias / SMTP-relay setups: `user` is the address mail is sent from, this is the account IMAP/SMTP authenticates with |
 | `authPassword` | = `password` | Password for `authUser`; only needed when the login account differs from `user` and has its own password |
-| `imap.host/port/secure` | per preset | Incoming server (also `connectionTimeoutMs` / `socketTimeoutMs` for timeouts) |
-| `smtp.host/port/secure` | per preset | Outgoing server |
+| `imap.host/port/secure` | per preset | Incoming server; with no preset (custom server) enter it directly (also `connectionTimeoutMs` / `socketTimeoutMs` for timeouts) |
+| `smtp.host/port/secure` | per preset | Outgoing server; with no preset enter it directly; in the settings page a blank host reuses the incoming host |
 | `inboxFolder` | `INBOX` | Default folder for read/send tools |
 | `sendApproval` | `true` | Confirm before sending (strongly recommended) |
 | `maxBodyChars` | `20000` | Body truncation limit for `email_read` (1000–200000) |

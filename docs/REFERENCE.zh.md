@@ -19,6 +19,7 @@
 ## 功能
 
 - 通过 IMAP / SMTP 收发、回复和转发邮件。
+- 支持内置服务商、`serverPresets` 自定义服务商预设，以及「自定义服务器（手动填写）」：内网 / 自建邮件服务器可直接在账号卡片填 IMAP 收信与 SMTP 发信端点。
 - 通过邮箱地址与 API Key 添加 AgentMail US / EU 账号，无需配置 IMAP / SMTP。
 - 在「收发邮件」页浏览收件箱与已发送，搜索、翻页、阅读正文、下载附件、标记已读和星标。
 - 管理附件、搜索结果与邮箱整理操作。
@@ -51,6 +52,8 @@ dsh plugin --profile desktop add dsh-email
 ## 依赖与配置
 
 普通邮箱需要授权码、应用专用密码或对应 OAuth 授权；AgentMail 需要对应区域的邮箱与 API Key，见 [AgentMail 配置](AGENTMAIL.md)。DSH 的模型 API Key 与邮箱登录分别配置。
+
+账号的连接端点有三种选法：内置服务商、`serverPresets` 里自定义的预设，以及账号卡片里的「自定义服务器（手动填写）」。选最后一项时直接填 IMAP 收信服务器与 SMTP 发信服务器：发信主机留空沿用收信主机，端口留空按 993（IMAP）/ 465（SMTP）处理。这类账号在 `accountsYaml` 里不写 `provider`，端点写在账号的 `imap` / `smtp` 段（POP3 收信账号则写在 `pop3` / `smtp` 段）；原有的「服务器预设（自定义服务商，高级）」继续保留，多个账号复用同一组服务器时可继续用预设。
 
 详细配置、工具参数与排错见[使用说明](USAGE.md)。从源码独立开发时，Node 要求以 [package.json](../package.json) 为准。
 
