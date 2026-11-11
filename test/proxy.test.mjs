@@ -49,6 +49,20 @@ test('the account proxy wins over the environment, which wins over a direct conn
   assert.equal(resolveProxyUrl('http://127.0.0.1:7897', { NO_PROXY: '*' }, 'imap.gmail.com'), 'http://127.0.0.1:7897/')
 })
 
+test('a loopback mail host ignores an environment proxy but still honours an explicit one', () => {
+  const env = { HTTPS_PROXY: 'http://env.test:8080', ALL_PROXY: 'socks5://env.test:1080' }
+  // A CONNECT to 127.0.0.1 through an external proxy would target the proxy's own
+  // loopback, so a local relay or test fixture must stay direct.
+  for (const host of ['127.0.0.1', '127.1.2.3', 'localhost', 'LOCALHOST', 'smtp.localhost', '::1', '[::1]']) {
+    assert.equal(resolveProxyUrl(undefined, env, host), undefined, host)
+  }
+  // The escape hatch stays: an explicitly typed proxy is the user's decision.
+  assert.equal(resolveProxyUrl('http://127.0.0.1:7897', env, 'localhost'), 'http://127.0.0.1:7897/')
+  // Non-loopback hosts keep inheriting the environment.
+  assert.equal(resolveProxyUrl(undefined, env, 'smtp.qq.com'), 'http://env.test:8080/')
+  assert.equal(resolveProxyUrl(undefined, env, '10.0.0.5'), 'http://env.test:8080/')
+})
+
 test('openProxiedSocket tunnels through an HTTP CONNECT proxy', async () => {
   const proxy = await stubProxy()
   try {

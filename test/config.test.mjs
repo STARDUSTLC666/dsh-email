@@ -70,9 +70,18 @@ test('unknown provider fails loud with the supported list', () => {
 })
 
 test('missing user / password / hosts each produce an actionable error', () => {
-  assert.throws(() => resolveEmailSettings({}), /邮箱地址未填写/)
-  assert.throws(() => resolveEmailSettings({ provider: 'qq', user: 'a@b.c' }), /授权码.*未填写/)
-  assert.throws(() => resolveEmailSettings({ user: 'a@b.c', password: 'p' }), /imap.host 未填写/)
+  // The environment password is a real feature, so a developer machine that sets
+  // it would otherwise turn「missing password」into a pass-through and hide the
+  // guidance this test is about. Pin the absent-variable case explicitly.
+  const saved = process.env[EMAIL_PASSWORD_ENV]
+  delete process.env[EMAIL_PASSWORD_ENV]
+  try {
+    assert.throws(() => resolveEmailSettings({}), /邮箱地址未填写/)
+    assert.throws(() => resolveEmailSettings({ provider: 'qq', user: 'a@b.c' }), /授权码.*未填写/)
+    assert.throws(() => resolveEmailSettings({ user: 'a@b.c', password: 'p' }), /imap.host 未填写/)
+  } finally {
+    if (saved !== undefined) process.env[EMAIL_PASSWORD_ENV] = saved
+  }
 })
 
 test('password falls back to the environment variable (single account only)', () => {

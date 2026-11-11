@@ -73,6 +73,23 @@ export function parseProxyUrl(value: string | null | undefined): URL | undefined
   return url
 }
 
+/**
+ * A target that only exists on this machine. An env-configured proxy cannot
+ * reach it: a CONNECT to 127.0.0.1 or ::1 would ask the *proxy host* for its own
+ * loopback, which is wrong at best and blocked at worst. A local SMTP relay or
+ * test fixture must therefore stay direct even when HTTPS_PROXY is set.
+ *
+ * An explicit per-account `proxy` still wins — resolveProxyUrl returns before
+ * consulting this, so a user who really means to tunnel keeps that choice.
+ */
+function isLoopbackTarget(host: string): boolean {
+  const bare = host.trim().toLowerCase().replace(/^\[(.*)\]$/, '$1')
+  if (bare === '' ) return false
+  if (bare === 'localhost' || bare.endsWith('.localhost')) return true
+  if (bare === '::1') return true
+  return /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(bare)
+}
+
 function noProxyBypassed(host: string, env: NodeJS.ProcessEnv): boolean {
   const raw = NO_PROXY_ENV_NAMES.map(name => env[name]).find(value => typeof value === 'string' && value.trim() !== '')
   if (raw === undefined) return false
@@ -97,6 +114,7 @@ export function resolveProxyUrl(explicit: string | null | undefined, env: NodeJS
   if (explicit?.trim().toLowerCase() === 'direct') return undefined
   const configured = parseProxyUrl(explicit)
   if (configured !== undefined) return configured.href
+  if (host !== undefined && isLoopbackTarget(host)) return undefined
   if (host !== undefined && noProxyBypassed(host, env)) return undefined
   for (const name of PROXY_ENV_NAMES) {
     const value = env[name]

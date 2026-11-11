@@ -34,13 +34,21 @@ test('email_health 账号配置完整时 ok=true', async () => {
 })
 
 test('email_health 无账号时 ok=false 且有配置指引', async () => {
-  const ctx = fakeCtx()
-  apply(ctx, {})
-  const health = ctx.tools.defs.find((d) => d.name === 'email_health')
-  const value = await health.execute({})
-  assert.equal(value.ok, false)
-  assert.match(String(value.checks[0].detail), /配置不完整/)
-  assert.match(String(value.checks[0].detail), /邮箱地址.*授权码.*设置.*邮件/)
+  // An ambient DSH_EMAIL_PASSWORD would satisfy the password check and change
+  // the guidance this test asserts, so the empty-install case is pinned.
+  const saved = process.env.DSH_EMAIL_PASSWORD
+  delete process.env.DSH_EMAIL_PASSWORD
+  try {
+    const ctx = fakeCtx()
+    apply(ctx, {})
+    const health = ctx.tools.defs.find((d) => d.name === 'email_health')
+    const value = await health.execute({})
+    assert.equal(value.ok, false)
+    assert.match(String(value.checks[0].detail), /配置不完整/)
+    assert.match(String(value.checks[0].detail), /邮箱地址.*授权码.*设置.*邮件/)
+  } finally {
+    if (saved !== undefined) process.env.DSH_EMAIL_PASSWORD = saved
+  }
 })
 
 // --- OAuth2 accounts ---------------------------------------------------------
