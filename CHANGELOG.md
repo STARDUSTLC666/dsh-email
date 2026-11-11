@@ -1,5 +1,9 @@
 # 更新记录
 
+## Unreleased
+
+- 新邮件到达事件 `EmailArrivalEvent` 增加 `hasAttachments`：沿用列表阶段已有的附件标记，不额外读取正文或附件，消费者可据此先过滤再决定是否调用 `email_read` / `email_attachment`（#44）。
+
 ## 0.25.0 (2026-11-11)
 
 - 新增可选的新邮件到达订阅 `emailTasks`：其他插件按 consumer 订阅发件人/主题，只读信封、不下载正文、不创建会话、不自动发送（#44）。首次扫描只建基线，数字 UID 用 UID 水位、字符串 UID 用严格日期水位；UIDVALIDITY、账号或 consumer 配置变化时重建基线，单个邮箱失败不影响其他邮箱。

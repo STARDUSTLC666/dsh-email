@@ -79,7 +79,7 @@ export const inject = ['emailTasks']
 
 export function apply(ctx, config) {
   const off = ctx.emailTasks.subscribe('my-consumer', async event => {
-    // event 只含元数据：account / folder / uid / uidValidity / sender / subject / date
+    // event 只含元数据：account / folder / uid / uidValidity / sender / subject / date / hasAttachments
     // event.signal 在超时或卸载时中止，请协作式退出
   })
   ctx.effect(() => off)
@@ -99,7 +99,8 @@ consumers:
 consumerPollSeconds: 60
 ```
 
-- 只读取信封（发件人、主题、日期、UID），不下载正文或附件，不创建会话、不自动发送。
+- 只读取信封（发件人、主题、日期、UID、是否带附件），不下载正文或附件，不创建会话、不自动发送。
+- `hasAttachments` 来自列表阶段的 MIME 结构（IMAP 以 `attachment` 处置为准），只作提示；需要确切附件清单时用 `email_read` / `email_attachment`。
 - 首次扫描只建立基线，之前已在邮箱里的邮件不会触发；每个邮箱每轮最多检查最新 100 封。
 - 数字 UID 用 UID 水位；字符串 UID 用严格日期水位，日期不可靠时不派发并记录错误。
 - UIDVALIDITY、账号设置或 consumer 配置改变时重建基线，避免把旧邮件当成新邮件。

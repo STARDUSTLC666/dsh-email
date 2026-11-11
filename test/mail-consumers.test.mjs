@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { MailConsumerBackend, installMailConsumers, normalizeMailConsumers } from '../lib/mail-consumers.js'
 
-const row = (uid, { sender = 'sender@example.test', subject = 'hello', date = '2026-01-01T00:00:00.000Z' } = {}) => ({
+const row = (uid, { sender = 'sender@example.test', subject = 'hello', date = '2026-01-01T00:00:00.000Z', hasAttachments = false } = {}) => ({
   uid,
   date,
   from: [{ address: sender }],
@@ -10,7 +10,7 @@ const row = (uid, { sender = 'sender@example.test', subject = 'hello', date = '2
   seen: false,
   flagged: false,
   size: 12,
-  hasAttachments: false,
+  hasAttachments,
 })
 
 function fixture(config = {}) {
@@ -75,6 +75,19 @@ test('first scan establishes a baseline and later arrivals fan out to matching c
   assert.equal(events.alice[0].sender, 'alice@example.test')
   assert.equal(events.alice[0].eventId, events.subject[0].eventId)
   offAlice(); offSubject(); await f.backend.stop()
+})
+
+test('events carry the listing attachment hint as a strict boolean', async () => {
+  const f = fixture()
+  const events = []
+  const off = f.backend.subscribe('default-consumer', event => events.push(event))
+  await tickWith(f, [row(1, { hasAttachments: true })])
+  const withAttachment = row(2, { hasAttachments: true })
+  const unknownFlag = { ...row(3), hasAttachments: undefined }
+  await tickWith(f, [unknownFlag, withAttachment, row(1, { hasAttachments: true })])
+  assert.deepEqual(events.map(event => [event.uid, event.hasAttachments]).sort(), [[2, true], [3, false]])
+  off()
+  await f.backend.stop()
 })
 
 test('filters sender and subject without reading message bodies', async () => {

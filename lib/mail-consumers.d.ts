@@ -17,6 +17,12 @@ export interface EmailArrivalEvent {
     sender: string;
     subject?: string;
     date?: string;
+    /**
+     * Whether the listing reports at least one attachment. A cheap hint from the
+     * envelope/MIME structure (IMAP: an `attachment` disposition), not a guarantee;
+     * use email_read / email_attachment for the authoritative list.
+     */
+    hasAttachments: boolean;
     /** Consumers should stop work when this signal is aborted. */
     signal?: AbortSignal;
 }
