@@ -75,9 +75,11 @@ consumerPollSeconds: 60
 
 - Envelopes only (sender, subject, date, UID). Bodies and attachments are never downloaded, no session is created and nothing is sent automatically.
 - The first scan establishes a baseline; mail already in the mailbox does not fire. Each mailbox is inspected for at most the newest 100 messages per round.
+- Scan positions are saved to `~/.dsh/data/dsh-email/mail-consumers-v1.json` (honours `DSH_HOME`): hashes, UIDs and watermarks only, never senders, subjects or credentials. After a restart the first scan compares against the saved position, so mail that arrived while DSH was closed is delivered; if a consumer has not registered yet, that catch-up waits up to one poll interval. An unreadable file is reported in `lastError` and the baseline is rebuilt.
+- Disabling every consumer discards the saved positions, so re-enabling starts from a fresh baseline instead of replaying the disabled period. Changing a password or other credential keeps the position; changing the mailbox identity (user, server) rebuilds the baseline.
 - Numeric UIDs use a UID watermark; string UIDs use a strict date watermark and dispatch nothing when dates are unreliable, recording the reason instead.
 - A UIDVALIDITY, account or consumer-configuration change rebuilds the baseline so old mail is never reported as new.
 - One failing mailbox does not affect the others; `status()` reports `lastError`, `inFlight`, `droppedEvents`, `handlerFailures` and `handlerTimeouts`.
 - Each consumer runs at most four handlers at once; events beyond that are dropped and counted.
 - A handler that exceeds the timeout (10 seconds by default) is aborted through `signal` and releases its slot; teardown aborts and waits for cooperative completion.
-- This is best-effort: arrivals while DSH is closed are not replayed.
+- This is best-effort: events whose handler fails, times out, is not registered or exceeds the concurrency cap are not replayed; more than 100 arrivals while DSH is closed also rebuild the baseline.

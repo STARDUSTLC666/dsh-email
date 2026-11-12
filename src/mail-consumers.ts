@@ -1,4 +1,7 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
+import { mkdir, open, readFile, rename, stat, unlink } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { join, resolve } from 'node:path'
 import type { EmailRuntime } from './runtime.js'
 import type { AddressEntry, ListedMessage } from './types.js'
 
@@ -101,8 +104,97 @@ function addressOf(value: AddressEntry): string {
   return typeof value.address === 'string' ? value.address.trim() : ''
 }
 
+const SECRET_FIELD = /pass(word)?|secret|token|api_?key|credential/i
+
+/** Drop credential fields so the persisted binding never hashes a secret. */
+function withoutSecrets(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutSecrets)
+  if (value instanceof Map) return withoutSecrets(Object.fromEntries(value))
+  if (!value || typeof value !== 'object') return value
+  const out: Record<string, unknown> = {}
+  for (const key of Object.keys(value).sort()) {
+    if (!SECRET_FIELD.test(key)) out[key] = withoutSecrets((value as Record<string, unknown>)[key])
+  }
+  return out
+}
+
 function bindingFor(account: unknown, accountName: string, folder: string, consumers: MailConsumerConfig[]): string {
-  return createHash('sha256').update(JSON.stringify([accountName, folder, account, consumers])).digest('hex')
+  return createHash('sha256').update(JSON.stringify([accountName, folder, withoutSecrets(account), consumers])).digest('hex')
+}
+
+/** One mailbox's scan position as written to disk: hashes, UIDs and watermarks only. */
+export interface PersistedConsumerCursor {
+  configBinding: string
+  binding: string
+  uidValidity: number
+  ids: string[]
+  maxNumericUid: number
+  maxDateMs: number
+  dateReliable: boolean
+}
+
+export interface MailConsumerCursorStore {
+  load(): Promise<Record<string, PersistedConsumerCursor>>
+  save(cursors: Record<string, PersistedConsumerCursor>): Promise<void>
+}
+
+const MAX_CURSOR_FILE_BYTES = 1024 * 1024
+const HEX64 = /^[0-9a-f]{64}$/
+
+function validCursor(value: unknown): value is PersistedConsumerCursor {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const row = value as Record<string, unknown>
+  const nonNegative = (item: unknown) => typeof item === 'number' && Number.isFinite(item) && item >= 0
+  return typeof row.configBinding === 'string' && HEX64.test(row.configBinding)
+    && typeof row.binding === 'string' && HEX64.test(row.binding)
+    && Number.isSafeInteger(row.uidValidity) && (row.uidValidity as number) >= 0
+    && Array.isArray(row.ids) && row.ids.length <= SCAN_LIMIT && row.ids.every(id => typeof id === 'string' && id.length <= 1024)
+    && nonNegative(row.maxNumericUid) && nonNegative(row.maxDateMs)
+    && typeof row.dateReliable === 'boolean'
+}
+
+/**
+ * Scan positions for email consumers, kept so a restart compares against the last
+ * scan instead of re-baselining. Stores no subjects, senders or credentials.
+ */
+export class FileMailConsumerCursorStore implements MailConsumerCursorStore {
+  readonly root: string
+  readonly file: string
+  constructor(home = process.env.DSH_HOME?.trim() || join(homedir(), '.dsh')) {
+    this.root = resolve(home, 'data/dsh-email')
+    this.file = join(this.root, 'mail-consumers-v1.json')
+  }
+
+  async load(): Promise<Record<string, PersistedConsumerCursor>> {
+    try {
+      if ((await stat(this.file)).size > MAX_CURSOR_FILE_BYTES) throw new Error('too large')
+      const doc = JSON.parse(await readFile(this.file, 'utf8'))
+      if (!doc || doc.version !== 1 || !doc.mailboxes || typeof doc.mailboxes !== 'object' || Array.isArray(doc.mailboxes)) throw new Error('invalid')
+      const entries = Object.entries(doc.mailboxes as Record<string, unknown>)
+      if (entries.length > MAX_CONSUMERS || entries.some(([, cursor]) => !validCursor(cursor))) throw new Error('invalid')
+      return Object.fromEntries(entries) as Record<string, PersistedConsumerCursor>
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return {}
+      throw new Error('email consumer cursor file is unreadable; baselines will be rebuilt')
+    }
+  }
+
+  async save(cursors: Record<string, PersistedConsumerCursor>): Promise<void> {
+    await mkdir(this.root, { recursive: true, mode: 0o700 })
+    const temp = join(this.root, '.mail-consumers-' + randomUUID() + '.json')
+    try {
+      const handle = await open(temp, 'wx', 0o600)
+      try {
+        await handle.writeFile(JSON.stringify({ version: 1, mailboxes: cursors }))
+        await handle.sync()
+      } finally {
+        await handle.close()
+      }
+      await rename(temp, this.file)
+    } finally {
+      await unlink(temp).catch(() => {})
+    }
+  }
 }
 
 function consumerMatches(config: MailConsumerConfig, message: ListedMessage): boolean {
@@ -132,15 +224,86 @@ export class MailConsumerBackend {
   private handlerFailures = 0
   private handlerTimeouts = 0
   private appReady = false
+  /** Persisted cursors are read once per start, before the first scan. */
+  private loaded = false
+  /** Mailboxes restored from disk whose catch-up scan has not run yet. */
+  private readonly restored = new Set<string>()
+  private readyAt = 0
+  private savedSnapshot = ''
+  private saving: Promise<void> = Promise.resolve()
+  private persistError: string | undefined
   constructor(
     private readonly runtime: EmailRuntime,
     private readonly config: { consumers?: unknown; consumerPollSeconds?: number },
     private readonly handlerTimeoutMs = HANDLER_TIMEOUT_MS,
+    private readonly store: MailConsumerCursorStore | null = new FileMailConsumerCursorStore(),
   ) {}
 
   markAppReady(): void {
     this.appReady = true
     this.syncPolling()
+  }
+
+  private async loadCursors(): Promise<void> {
+    if (this.loaded) return
+    this.loaded = true
+    if (!this.store) return
+    try {
+      const saved = await this.store.load()
+      for (const [key, cursor] of Object.entries(saved)) {
+        this.cursors.set(key, {
+          binding: cursor.binding,
+          uidValidity: cursor.uidValidity,
+          ids: new Set(cursor.ids),
+          maxNumericUid: cursor.maxNumericUid,
+          maxDateMs: cursor.maxDateMs,
+          dateReliable: cursor.dateReliable,
+        })
+        this.configBinding.set(key, cursor.configBinding)
+        this.restored.add(key)
+      }
+      this.savedSnapshot = this.snapshot()
+    } catch (error) {
+      // Reported once through lastError: the next successful write replaces the
+      // file, so this is the only trace that a baseline was rebuilt.
+      this.lastError = error instanceof Error ? error.message : 'email consumer cursor file is unreadable'
+    }
+  }
+
+  private snapshot(): string {
+    const out: Record<string, PersistedConsumerCursor> = {}
+    for (const [key, cursor] of [...this.cursors].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
+      const configBinding = this.configBinding.get(key)
+      if (configBinding === undefined) continue
+      out[key] = {
+        configBinding,
+        binding: cursor.binding,
+        uidValidity: cursor.uidValidity,
+        ids: [...cursor.ids],
+        maxNumericUid: cursor.maxNumericUid,
+        maxDateMs: cursor.maxDateMs,
+        dateReliable: cursor.dateReliable,
+      }
+    }
+    return JSON.stringify(out)
+  }
+
+  /** Writes are serialized and skipped when nothing changed since the last write. */
+  private persist(): Promise<void> {
+    const store = this.store
+    if (!store) return Promise.resolve()
+    const next = this.snapshot()
+    if (next === this.savedSnapshot) return this.saving
+    this.saving = this.saving.then(async () => {
+      try {
+        await store.save(JSON.parse(next))
+        this.savedSnapshot = next
+        this.persistError = undefined
+      } catch {
+        this.persistError = 'email consumer cursor could not be saved; a restart will rebuild baselines'
+      }
+    })
+    return this.saving
   }
 
   private syncPolling(): void {
@@ -150,6 +313,7 @@ export class MailConsumerBackend {
       try {
         this.pollInterval()
         this.started = true
+        this.readyAt = Date.now()
         this.schedule(0)
       } catch (error) { this.lastError = error instanceof Error ? error.message : 'Invalid email consumer configuration' }
       return
@@ -159,6 +323,11 @@ export class MailConsumerBackend {
       if (this.timer) clearTimeout(this.timer)
       this.timer = undefined
       this.cursors.clear()
+      this.configBinding.clear()
+      this.restored.clear()
+      // Disabling is an explicit "stop watching": a later enable must start from a
+      // fresh baseline rather than replay the disabled period.
+      if (this.loaded) void this.persist()
     }
   }
 
@@ -196,7 +365,7 @@ export class MailConsumerBackend {
       running: this.started || this.running !== undefined,
       inFlight: [...this.subscriptions.values()].reduce((count, item) => count + item.pending, 0),
       ...(this.lastScanAt ? { lastScanAt: this.lastScanAt } : {}),
-      ...(this.lastError ? { lastError: this.lastError } : {}),
+      ...(this.lastError ?? this.persistError ? { lastError: this.lastError ?? this.persistError } : {}),
       droppedEvents: this.droppedEvents,
       handlerFailures: this.handlerFailures,
       handlerTimeouts: this.handlerTimeouts,
@@ -322,6 +491,7 @@ export class MailConsumerBackend {
     if (this.running) return this.running
     const running = (async () => {
       try {
+        await this.loadCursors()
         const configs = this.configs().filter(item => item.enabled)
         const activeKeys = new Set<string>()
         const mailboxes = new Map<string, MailConsumerConfig[]>()
@@ -332,12 +502,21 @@ export class MailConsumerBackend {
           rows.push(config)
           mailboxes.set(key, rows)
         }
-        for (const key of this.cursors.keys()) if (!activeKeys.has(key)) { this.cursors.delete(key); this.configBinding.delete(key) }
+        for (const key of this.cursors.keys()) if (!activeKeys.has(key)) { this.cursors.delete(key); this.configBinding.delete(key); this.restored.delete(key) }
         for (const [key, rows] of mailboxes) {
           const binding = createHash('sha256').update(JSON.stringify(rows)).digest('hex')
           if (this.configBinding.get(key) !== binding) {
             this.cursors.delete(key)
             this.configBinding.set(key, binding)
+            this.restored.delete(key)
+          }
+          // A restored cursor turns the first scan into a catch-up. Give consumer
+          // plugins one poll interval to register, so catch-up events are not
+          // dropped merely because the handler was not attached yet.
+          if (this.restored.has(key)) {
+            const waiting = rows.some(row => !this.subscriptions.get(row.id)?.active)
+            if (waiting && Date.now() - this.readyAt < this.pollInterval()) continue
+            this.restored.delete(key)
           }
           try {
             await this.scanMailbox(rows[0].account, rows[0].folder, rows)
@@ -355,6 +534,7 @@ export class MailConsumerBackend {
         const mailboxError = [...this.mailboxErrors.values()].at(-1)
         if (mailboxError !== undefined) this.lastError = mailboxError
         else if (this.lastError?.startsWith('email consumer scan failed for ')) this.lastError = undefined
+        await this.persist()
       } catch {
         this.lastError = 'email consumer scan failed; check account settings and DSH logs'
       }
@@ -389,11 +569,15 @@ export class MailConsumerBackend {
     if (this.timer) clearTimeout(this.timer)
     this.timer = undefined
     await this.running
+    await this.saving
     for (const subscription of this.subscriptions.values()) subscription.active = false
     for (const controller of this.handlerControllers) controller.abort(new Error('email consumer stopped'))
     this.subscriptions.clear()
     this.cursors.clear()
     this.configBinding.clear()
+    this.restored.clear()
+    this.loaded = false
+    this.savedSnapshot = ''
     await Promise.race([
       Promise.all([...this.handlerPromises]),
       new Promise(resolve => {
