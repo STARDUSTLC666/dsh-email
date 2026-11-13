@@ -44,7 +44,7 @@ Open **Plugins** in the DSH desktop app and install `dsh-email`. If the CLI is a
 dsh plugin --profile desktop add dsh-email
 ```
 
-For the web profile, replace `desktop` with `web`. Restart that DSH profile after installation. The package’s DSH requirement is `>=0.2.1-rc.3`.
+For the web profile, replace `desktop` with `web`. Restart that DSH profile after installation. The package’s DSH requirement is `>=0.2.2-rc.3`.
 
 ## Start using it
 
