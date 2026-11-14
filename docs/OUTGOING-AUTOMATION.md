@@ -102,9 +102,11 @@ consumerPollSeconds: 60
 - 只读取信封（发件人、主题、日期、UID、是否带附件），不下载正文或附件，不创建会话、不自动发送。
 - `hasAttachments` 来自列表阶段的 MIME 结构（IMAP 以 `attachment` 处置为准），只作提示；需要确切附件清单时用 `email_read` / `email_attachment`。
 - 首次扫描只建立基线，之前已在邮箱里的邮件不会触发；每个邮箱每轮最多检查最新 100 封。
+- 扫描进度存放在当前 DSH 配置档目录的 `data/dsh-email/<插件实例哈希>/mail-consumers-v1.json`，只含哈希与水位，不含发件人、主题或凭据。重启后首轮扫描可补报扫描窗口内的新邮件，最多等待一个轮询间隔让 consumer 注册。文件损坏时在 `lastError` 报告并重建基线。
+- 停用全部 consumer 会清除已保存的进度，之后重新启用从新基线开始，不会补发停用期间的邮件。修改密码等凭据不影响进度；更换邮箱身份（如用户名、服务器）会重建基线。
 - 数字 UID 用 UID 水位；字符串 UID 用严格日期水位，日期不可靠时不派发并记录错误。
 - UIDVALIDITY、账号设置或 consumer 配置改变时重建基线，避免把旧邮件当成新邮件。
 - 单个邮箱失败不影响其他邮箱；`status()` 返回 `lastError`、`inFlight`、`droppedEvents`、`handlerFailures`、`handlerTimeouts`。
 - 每个 consumer 同时最多 4 个 handler；超过上限的事件会被丢弃并计入 `droppedEvents`。
 - handler 超时（默认 10 秒）会 abort `signal` 并释放并发槽；卸载时中止并等待协作式完成。
-- 这是 best-effort 通知，不保证不丢事件：DSH 关闭期间的邮件不会补发。
+- 这是 best-effort 通知，不保证不丢事件：handler 失败、超时、未注册或超过并发上限的事件不会重放；关闭期间新邮件超过 100 封时同样重建基线。

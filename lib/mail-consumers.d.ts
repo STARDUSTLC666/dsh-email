@@ -40,11 +40,37 @@ export interface EmailTasksStatus {
     handlerTimeouts: number;
 }
 export declare function normalizeMailConsumers(raw: unknown): MailConsumerConfig[];
+/** One mailbox's scan position as written to disk: hashes, UIDs and watermarks only. */
+export interface PersistedConsumerCursor {
+    configBinding: string;
+    binding: string;
+    uidValidity: number;
+    ids: string[];
+    maxNumericUid: number;
+    maxDateMs: number;
+    dateReliable: boolean;
+}
+export interface MailConsumerCursorStore {
+    load(): Promise<Record<string, PersistedConsumerCursor>>;
+    save(cursors: Record<string, PersistedConsumerCursor>): Promise<void>;
+}
+/**
+ * Scan positions for email consumers, kept so a restart compares against the last
+ * scan instead of re-baselining. Stores no subjects, senders or credentials.
+ */
+export declare class FileMailConsumerCursorStore implements MailConsumerCursorStore {
+    readonly root: string;
+    readonly file: string;
+    constructor(profileDir: string, entryId?: string);
+    load(): Promise<Record<string, PersistedConsumerCursor>>;
+    save(cursors: Record<string, PersistedConsumerCursor>): Promise<void>;
+}
 /** Best-effort, process-local email arrival notifications. It never reads bodies or invokes DSH sessions. */
 export declare class MailConsumerBackend {
     private readonly runtime;
     private readonly config;
     private readonly handlerTimeoutMs;
+    private store;
     private readonly subscriptions;
     private readonly cursors;
     private readonly handlerPromises;
@@ -60,11 +86,25 @@ export declare class MailConsumerBackend {
     private handlerFailures;
     private handlerTimeouts;
     private appReady;
+    private generation;
+    /** Persisted cursors are read once per start, before the first scan. */
+    private loaded;
+    /** Mailboxes restored from disk whose catch-up scan has not run yet. */
+    private readonly restored;
+    private readyAt;
+    private savedSnapshot;
+    private saving;
+    private persistError;
     constructor(runtime: EmailRuntime, config: {
         consumers?: unknown;
         consumerPollSeconds?: number;
-    }, handlerTimeoutMs?: number);
+    }, handlerTimeoutMs?: number, store?: MailConsumerCursorStore | null);
+    useProfileStore(profileDir: string, entryId?: string): void;
     markAppReady(): void;
+    private loadCursors;
+    private snapshot;
+    /** Writes are serialized and skipped when nothing changed since the last write. */
+    private persist;
     private syncPolling;
     private configs;
     private pollInterval;

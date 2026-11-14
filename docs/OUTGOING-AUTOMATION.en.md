@@ -76,9 +76,11 @@ consumerPollSeconds: 60
 - Envelopes only (sender, subject, date, UID, whether attachments are present). Bodies and attachments are never downloaded, no session is created and nothing is sent automatically.
 - `hasAttachments` comes from the listing's MIME structure (on IMAP, an `attachment` disposition) and is only a hint; use `email_read` / `email_attachment` for the authoritative list.
 - The first scan establishes a baseline; mail already in the mailbox does not fire. Each mailbox is inspected for at most the newest 100 messages per round.
+- Scan positions are saved in the active DSH profile under `data/dsh-email/<plugin instance hash>/mail-consumers-v1.json`. The file contains hashes and watermarks. The first scan after restarting can report arrivals within the scan window and waits up to one polling interval for consumers to register. An unreadable file is reported in `lastError` and the baseline is rebuilt.
+- Disabling every consumer discards the saved positions, so re-enabling starts from a fresh baseline instead of replaying the disabled period. Changing a password or other credential keeps the position; changing the mailbox identity (user, server) rebuilds the baseline.
 - Numeric UIDs use a UID watermark; string UIDs use a strict date watermark and dispatch nothing when dates are unreliable, recording the reason instead.
 - A UIDVALIDITY, account or consumer-configuration change rebuilds the baseline so old mail is never reported as new.
 - One failing mailbox does not affect the others; `status()` reports `lastError`, `inFlight`, `droppedEvents`, `handlerFailures` and `handlerTimeouts`.
 - Each consumer runs at most four handlers at once; events beyond that are dropped and counted.
 - A handler that exceeds the timeout (10 seconds by default) is aborted through `signal` and releases its slot; teardown aborts and waits for cooperative completion.
-- This is best-effort: arrivals while DSH is closed are not replayed.
+- This is best-effort: events whose handler fails, times out, is not registered or exceeds the concurrency cap are not replayed; more than 100 arrivals while DSH is closed also rebuild the baseline.

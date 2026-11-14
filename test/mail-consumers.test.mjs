@@ -1,6 +1,20 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { MailConsumerBackend, installMailConsumers, normalizeMailConsumers } from '../lib/mail-consumers.js'
+import { mkdtemp, readFile, rm, stat, writeFile, mkdir } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { FileMailConsumerCursorStore, MailConsumerBackend, installMailConsumers, normalizeMailConsumers } from '../lib/mail-consumers.js'
+
+/** In-memory cursor store; keeps tests away from the real DSH_HOME. */
+function memoryStore(initial = {}) {
+  let saved = structuredClone(initial)
+  return {
+    saves: 0,
+    async load() { return structuredClone(saved) },
+    async save(next) { this.saves++; saved = structuredClone(next) },
+    get value() { return saved },
+  }
+}
 
 const row = (uid, { sender = 'sender@example.test', subject = 'hello', date = '2026-01-01T00:00:00.000Z', hasAttachments = false } = {}) => ({
   uid,
@@ -29,11 +43,16 @@ function fixture(config = {}) {
       },
     }),
   }
-  const backend = new MailConsumerBackend(runtime, {
+  const store = config.store ?? memoryStore()
+  const backendConfig = {
     consumers: config.consumers ?? [{ id: 'default-consumer', account: 'default', folder: 'INBOX' }],
     consumerPollSeconds: 30,
-  }, config.handlerTimeoutMs)
+  }
+  const backend = new MailConsumerBackend(runtime, backendConfig, config.handlerTimeoutMs, store)
   return {
+    store,
+    backendConfig,
+    accounts,
     backend,
     runtime,
     calls,
@@ -170,6 +189,7 @@ test('app-ready polling starts when an enabled consumer is added later', async (
   const config = { consumers: [] }
   const f = fixture(config)
   f.backend.start()
+  await f.backend.tick()
   assert.equal(f.backend.status().running, false)
   config.consumers.push({ id: 'late', account: 'default' })
   const off = f.backend.subscribe('late', () => {})
@@ -181,7 +201,7 @@ test('handler timeout frees a concurrency slot while keeping in-flight state hon
   const f = fixture({ messages: [row(1)] })
   let resolveFirst
   const events = []
-  const backend = new MailConsumerBackend(f.backend.runtime, { consumers: [{ id: 'default-consumer', account: 'default' }], consumerPollSeconds: 30 }, 10)
+  const backend = new MailConsumerBackend(f.backend.runtime, { consumers: [{ id: 'default-consumer', account: 'default' }], consumerPollSeconds: 30 }, 10, null)
   const off = backend.subscribe('default-consumer', event => {
     events.push(event.uid)
     return new Promise(resolve => { resolveFirst = resolve })
@@ -244,7 +264,7 @@ test('the per-consumer concurrency cap drops excess events instead of queueing f
   const backend = new MailConsumerBackend(f.runtime, {
     consumers: [{ id: 'busy', account: 'default', folder: 'INBOX' }],
     consumerPollSeconds: 30,
-  }, 60_000)
+  }, 60_000, null)
   let release
   const started = []
   const resolvers = []
@@ -275,7 +295,10 @@ test('install registers the emailTasks service, starts on appReady and stops on 
   const disposeHooks = []
   const ctx = {
     provide(name, value) { provided.set(name, value) },
-    inject(name, fn) { assert.deepEqual(name, ['appReady'], 'only the appReady service is injected'); fn({ appReady: { onReady(fn) { readyHooks.push(fn) } } }) },
+    inject(name, fn) {
+      if (name[0] === 'appReady') fn({ appReady: { onReady(fn) { readyHooks.push(fn) } } })
+      else assert.deepEqual(name, ['profileContext'])
+    },
     on(name, fn) { if (name === 'dispose') disposeHooks.push(fn) },
   }
   installMailConsumers(ctx, f.backend)
@@ -310,3 +333,142 @@ test('install registers the emailTasks service, starts on appReady and stops on 
   off()
 })
 
+
+const restart = (f, store = f.store) => new MailConsumerBackend(f.runtime, f.backendConfig, undefined, store)
+
+test('a restart compares against the persisted cursor instead of re-baselining', async () => {
+  const f = fixture({ messages: [row(1)] })
+  await f.backend.tick()
+  await f.backend.stop()
+  assert.equal(Object.keys(f.store.value).length, 1, 'the baseline is persisted')
+
+  // Mail that arrived while DSH was closed.
+  f.setMessages([row(1), row(2), row(3)])
+  const backend = restart(f)
+  const events = []
+  const off = backend.subscribe('default-consumer', event => events.push(event))
+  await backend.tick()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(events.map(event => event.uid).sort(), [2, 3])
+  // The catch-up advanced the cursor, so the next scan reports nothing again.
+  await backend.tick()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(events.length, 2)
+  off(); await backend.stop()
+})
+
+test('the catch-up scan waits one poll interval for handlers to register', async () => {
+  const f = fixture({ messages: [row(1)] })
+  await f.backend.tick()
+  await f.backend.stop()
+  f.setMessages([row(1), row(2)])
+
+  const backend = restart(f)
+  backend.start()
+  await backend.tick()
+  assert.equal(backend.status().droppedEvents, 0, 'an unregistered handler defers the catch-up instead of dropping it')
+  const events = []
+  const off = backend.subscribe('default-consumer', event => events.push(event))
+  await backend.tick()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(events.map(event => event.uid), [2])
+  off(); await backend.stop()
+
+  // Past the grace period the catch-up runs anyway; a missing handler is reported as a drop.
+  f.setMessages([row(1), row(2), row(3)])
+  const late = restart(f)
+  late.start()
+  late.readyAt = Date.now() - 31_000
+  await late.tick()
+  assert.equal(late.status().droppedEvents, 1)
+  assert.match(late.status().lastError, /no registered handler/)
+  await late.stop()
+})
+
+test('credential changes keep the cursor; a mailbox identity change still re-baselines', async () => {
+  const f = fixture({ messages: [row(1)], accounts: [['default', { user: 'me@example.test', provider: 'fixture', password: 'one' }]] })
+  await f.backend.tick()
+  await f.backend.stop()
+  f.accounts[0][1].password = 'two'
+  f.setMessages([row(1), row(2)])
+  let backend = restart(f)
+  const events = []
+  let off = backend.subscribe('default-consumer', event => events.push(event))
+  await backend.tick()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(events.map(event => event.uid), [2])
+  off(); await backend.stop()
+
+  f.accounts[0][1].user = 'other@example.test'
+  f.setMessages([row(1), row(2), row(3)])
+  backend = restart(f)
+  off = backend.subscribe('default-consumer', event => events.push(event))
+  await backend.tick()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(events.length, 1, 'a different mailbox identity rebuilds the baseline')
+  off(); await backend.stop()
+})
+
+test('disabling every consumer discards the persisted cursor', async () => {
+  const f = fixture({ messages: [row(1)] })
+  const off = f.backend.subscribe('default-consumer', () => {})
+  f.backend.start()
+  await f.backend.tick()
+  assert.ok(Object.keys(f.store.value).length > 0)
+  off()
+  f.backendConfig.consumers = [{ id: 'default-consumer', account: 'default', enabled: false }]
+  f.backend.status()
+  await f.backend.stop()
+  assert.deepEqual(f.store.value, {})
+})
+
+test('disabling before an in-flight mailbox read completes cannot repersist its cursor', async () => {
+  const f = fixture({ messages: [row(1)] })
+  f.backend.start()
+  await f.backend.tick()
+  let finish
+  f.runtime.getPool = () => ({ list: () => new Promise(resolve => { finish = resolve }) })
+  const scan = f.backend.tick()
+  await new Promise(resolve => setImmediate(resolve))
+  f.backendConfig.consumers[0].enabled = false
+  f.backend.status()
+  finish({ count: 2, uidValidity: 7, messages: [row(1), row(2)] })
+  await scan
+  await f.backend.stop()
+  assert.deepEqual(f.store.value, {})
+})
+
+test('the cursor file holds no credentials or message metadata and is private', async t => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-email-consumers-'))
+  t.after(() => rm(home, { recursive: true, force: true }))
+  const store = new FileMailConsumerCursorStore(home)
+  const f = fixture({
+    store,
+    accounts: [['default', { user: 'me@example.test', provider: 'fixture', password: 'hunter2-secret', apiKey: 'key-secret' }]],
+    messages: [row(1, { sender: 'boss@example.test', subject: 'quarterly-plan' })],
+  })
+  await f.backend.tick()
+  await f.backend.stop()
+  const text = await readFile(store.file, 'utf8')
+  for (const needle of ['hunter2', 'key-secret', 'boss@example.test', 'quarterly-plan']) assert.ok(!text.includes(needle), needle)
+  if (process.platform !== 'win32') assert.equal((await stat(store.file)).mode & 0o777, 0o600)
+  assert.match(Object.keys(await store.load())[0], /^[a-f0-9]{64}$/)
+  assert.deepEqual(await new FileMailConsumerCursorStore(join(home, 'other-profile')).load(), {})
+  assert.deepEqual(await new FileMailConsumerCursorStore(home, 'other-entry').load(), {})
+})
+
+test('an unreadable cursor file is reported and replaced by a fresh baseline', async t => {
+  const home = await mkdtemp(join(tmpdir(), 'dsh-email-consumers-'))
+  t.after(() => rm(home, { recursive: true, force: true }))
+  const store = new FileMailConsumerCursorStore(home)
+  await mkdir(store.root, { recursive: true })
+  await writeFile(store.file, '{not json')
+  const f = fixture({ store, messages: [row(1), row(2)] })
+  const events = []
+  const off = f.backend.subscribe('default-consumer', event => events.push(event))
+  await f.backend.tick()
+  assert.deepEqual(events, [], 'no cursor means a baseline, never a replay')
+  assert.match(f.backend.status().lastError ?? '', /unreadable/)
+  off(); await f.backend.stop()
+  assert.match(Object.keys(await store.load())[0], /^[a-f0-9]{64}$/)
+})
