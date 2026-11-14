@@ -53,7 +53,7 @@ export const inject = ['emailTasks']
 
 export function apply(ctx, config) {
   const off = ctx.emailTasks.subscribe('my-consumer', async event => {
-    // Metadata only: account / folder / uid / uidValidity / sender / subject / date
+    // Metadata only: account / folder / uid / uidValidity / sender / subject / date / hasAttachments
     // event.signal aborts on timeout or teardown; exit cooperatively.
   })
   ctx.effect(() => off)
@@ -73,7 +73,8 @@ consumers:
 consumerPollSeconds: 60
 ```
 
-- Envelopes only (sender, subject, date, UID). Bodies and attachments are never downloaded, no session is created and nothing is sent automatically.
+- Envelopes only (sender, subject, date, UID, whether attachments are present). Bodies and attachments are never downloaded, no session is created and nothing is sent automatically.
+- `hasAttachments` comes from the listing's MIME structure (on IMAP, an `attachment` disposition) and is only a hint; use `email_read` / `email_attachment` for the authoritative list.
 - The first scan establishes a baseline; mail already in the mailbox does not fire. Each mailbox is inspected for at most the newest 100 messages per round.
 - Numeric UIDs use a UID watermark; string UIDs use a strict date watermark and dispatch nothing when dates are unreliable, recording the reason instead.
 - A UIDVALIDITY, account or consumer-configuration change rebuilds the baseline so old mail is never reported as new.
