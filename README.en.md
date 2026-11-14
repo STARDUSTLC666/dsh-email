@@ -20,6 +20,7 @@
 Version 0.23 adds safe HTML send/reply/draft previews, reviewed scheduled sends, explicit Google OAuth, Tencent enterprise mail presets, localized reply quotations and optional mail-triggered DSH tasks. See the [workflow and operating boundaries](docs/OUTGOING-AUTOMATION.en.md). Existing Gmail app-password accounts continue to work. Scheduling requires a running DSH; task execution and automatic result replies are opt-in.
 
 - Use IMAP/POP3/SMTP, Outlook OAuth or AgentMail accounts.
+- Besides built-in providers and server presets, the provider dropdown offers **Custom server (enter details)**: enter IMAP/SMTP endpoints directly for intranet or self-hosted mail servers. A blank outgoing host reuses the incoming host, and blank ports default to 993/465.
 - Read messages, search and download attachments in the workbench.
 - Review the sender, To/Cc, content and attachments before confirming.
 - Run in Chinese, English, Spanish, French, German, Japanese, Brazilian Portuguese or Russian, using the DSH locale runtime.

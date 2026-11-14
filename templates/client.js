@@ -171,6 +171,14 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             ["outlook", "provider.outlook"],
             ["icloud", "provider.icloud"],
         ];
+        /**
+         * 「自定义服务器」在服务商下拉里的哨兵值。这种账号在 YAML 里不写 provider，而是把
+         * host/port/secure 直接写在账号自己的 imap/smtp 段里 —— 后端 resolveAccount() 原生
+         * 支持这种账号（它的错误信息一直写着「或省略 provider 直接填 imap.host 与
+         * smtp.host」），这里只是给这种账号一个可以点选的下拉项。
+         * 双下划线包起来，避免和 serverPresets 里的预设名撞车（预设编辑器会拒绝同名）。
+         */
+        const CUSTOM_SERVER_PROVIDER = "__custom__";
         const EMPTY = {
             provider: "",
             user: "",
@@ -215,6 +223,9 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             ".dshe-field input[type=text],.dshe-field input[type=password],.dshe-field input[type=number],.dshe-field select,.dshe-field textarea{width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--dsw-alias-border-l2,#dedbd5);border-radius:9px;background:var(--dsw-specific-input-major,#fff);color:var(--dsw-alias-label-primary,#26231f);font:inherit;font-size:13px}",
             ".dshe-field select option{background:var(--dsw-alias-bg-layer-1,#fff);color:var(--dsw-alias-label-primary,#26231f)}",
             ".dshe-check{display:flex;gap:8px;align-items:center;font-size:13px}",
+            ".dshe-endpoint-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}",
+            ".dshe-endpoint-row input[type=text]{flex:1 1 180px;min-width:150px;width:auto}",
+            ".dshe-endpoint-row input[type=number]{width:110px}",
             ".dshe-global{display:grid;gap:10px;padding:11px 12px;border:1px dashed var(--dsw-alias-border-l2,#dedbd5);border-radius:11px}",
             ".dshe-actions{display:flex;gap:8px;flex-wrap:wrap}",
             ".dshe-btn{display:inline-flex;align-items:center;height:32px;padding:0 14px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2,#dedbd5);background:var(--dsw-alias-button-elevated-fill,transparent);color:inherit;font-size:13px;font-weight:600;cursor:pointer}",
@@ -389,6 +400,14 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "card.autoSaveHintNoDefault": " 现在有多个账号但没有默认账号，必须先指定一个。",
                 "card.builtinEndpoints": " · {imap} ｜ {smtp}",
                 "card.customEndpoint": " · {endpoint}",
+                "provider.customServer": "自定义服务器（手动填写）",
+                "card.customServerHint": "内网或自建邮件服务器：填收信服务器地址即可；发信服务器留空时沿用收信服务器。端口留空按默认值处理（IMAP 993 / SMTP 465）。",
+                "card.imapServerLabel": "IMAP 收信服务器",
+                "card.smtpServerLabel": "SMTP 发信服务器（留空沿用收信服务器）",
+                "card.portLabel": "端口",
+                "card.tlsLabel": "SSL / TLS",
+                "card.errNoCustomHost": "自定义服务器账号还没填收信服务器地址，这份改动先不保存。",
+                "preset.errReservedName": "预设名不能是「{name}」：这个值保留给「自定义服务器」下拉项，请换一个名字。",
                 // OAuth2 登录区
                 "oauth.clientIdLabel": "应用（客户端）ID",
                 "oauth.clientIdPlaceholder": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
@@ -562,6 +581,14 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "card.autoSaveHintNoDefault": " There are several accounts but no default account yet; you must pick one first.",
                 "card.builtinEndpoints": " · {imap} | {smtp}",
                 "card.customEndpoint": " · {endpoint}",
+                "provider.customServer": "Custom server (enter details)",
+                "card.customServerHint": "For an intranet or self-hosted mail server: enter the incoming server. The outgoing server follows it when left blank. Empty ports fall back to the defaults (IMAP 993 / SMTP 465).",
+                "card.imapServerLabel": "IMAP incoming server",
+                "card.smtpServerLabel": "SMTP outgoing server (blank = incoming server)",
+                "card.portLabel": "Port",
+                "card.tlsLabel": "SSL / TLS",
+                "card.errNoCustomHost": "A custom-server account has no incoming server yet, so this change is not saved.",
+                "preset.errReservedName": "A preset cannot be named “{name}”: that value is reserved for the custom-server option. Pick another name.",
                 // OAuth2 登录区
                 "oauth.clientIdLabel": "Application (client) ID",
                 "oauth.clientIdPlaceholder": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
@@ -766,6 +793,14 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "card.autoSaveHintNoDefault": " Hay varias cuentas, pero aún no hay una predeterminada; primero debes elegir una.",
                 "card.builtinEndpoints": " · {imap} | {smtp}",
                 "card.customEndpoint": " · {endpoint}",
+                "provider.customServer": "Servidor personalizado (introducir datos)",
+                "card.customServerHint": "Para un servidor de correo interno o propio: introduce el servidor de entrada. El de salida usará el mismo si se deja vacío. Los puertos vacíos usan los valores predeterminados (IMAP 993 / SMTP 465).",
+                "card.imapServerLabel": "Servidor IMAP de entrada",
+                "card.smtpServerLabel": "Servidor SMTP de salida (vacío = servidor de entrada)",
+                "card.portLabel": "Puerto",
+                "card.tlsLabel": "SSL / TLS",
+                "card.errNoCustomHost": "La cuenta de servidor personalizado aún no tiene servidor de entrada; este cambio no se guarda.",
+                "preset.errReservedName": "El preajuste no puede llamarse «{name}»: ese valor está reservado para la opción de servidor personalizado. Elige otro nombre.",
                 // oauth
                 "oauth.clientIdLabel": "ID de aplicación (cliente)",
                 "oauth.clientIdPlaceholder": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
@@ -881,6 +916,14 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "card.autoSaveHintNoDefault": " Plusieurs comptes sont configurés, mais aucun n’est défini par défaut ; vous devez d’abord en choisir un.",
                 "card.builtinEndpoints": " · {imap} | {smtp}",
                 "card.customEndpoint": " · {endpoint}",
+                "provider.customServer": "Serveur personnalisé (saisie manuelle)",
+                "card.customServerHint": "Pour un serveur de messagerie interne ou auto-hébergé : saisissez le serveur d’entrée. Le serveur de sortie reprend celui d’entrée s’il est laissé vide. Les ports vides utilisent les valeurs par défaut (IMAP 993 / SMTP 465).",
+                "card.imapServerLabel": "Serveur IMAP d’entrée",
+                "card.smtpServerLabel": "Serveur SMTP de sortie (vide = serveur d’entrée)",
+                "card.portLabel": "Port",
+                "card.tlsLabel": "SSL / TLS",
+                "card.errNoCustomHost": "Le compte à serveur personnalisé n’a pas encore de serveur d’entrée ; cette modification n’est pas enregistrée.",
+                "preset.errReservedName": "Un préréglage ne peut pas s’appeler « {name} » : cette valeur est réservée à l’option de serveur personnalisé. Choisissez un autre nom.",
                 // oauth
                 "oauth.clientIdLabel": "ID d’application (client)",
                 "oauth.clientIdPlaceholder": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
@@ -996,6 +1039,14 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "card.autoSaveHintNoDefault": " Es gibt mehrere Konten, aber noch kein Standardkonto. Wählen Sie zuerst eines aus.",
                 "card.builtinEndpoints": " · {imap} | {smtp}",
                 "card.customEndpoint": " · {endpoint}",
+                "provider.customServer": "Benutzerdefinierter Server (manuelle Eingabe)",
+                "card.customServerHint": "Für einen internen oder selbst gehosteten Mailserver: Trage den eingehenden Server ein. Der ausgehende Server übernimmt ihn, wenn er leer bleibt. Leere Ports nutzen die Standardwerte (IMAP 993 / SMTP 465).",
+                "card.imapServerLabel": "IMAP-Eingangsserver",
+                "card.smtpServerLabel": "SMTP-Ausgangsserver (leer = Eingangsserver)",
+                "card.portLabel": "Port",
+                "card.tlsLabel": "SSL / TLS",
+                "card.errNoCustomHost": "Beim Konto mit benutzerdefiniertem Server fehlt noch der Eingangsserver; diese Änderung wird nicht gespeichert.",
+                "preset.errReservedName": "Eine Voreinstellung darf nicht „{name}“ heißen: Dieser Wert ist für die Option „benutzerdefinierter Server“ reserviert. Wähle einen anderen Namen.",
                 // oauth
                 "oauth.clientIdLabel": "Anwendungs- (Client-) ID",
                 "oauth.clientIdPlaceholder": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
@@ -1111,6 +1162,14 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "card.autoSaveHintNoDefault": " 複数のアカウントがありますが、デフォルトが未設定です。先に1つ選択してください。",
                 "card.builtinEndpoints": " · {imap} ｜ {smtp}",
                 "card.customEndpoint": " · {endpoint}",
+                "provider.customServer": "カスタムサーバー（手動入力）",
+                "card.customServerHint": "社内または自前のメールサーバー向け: 受信サーバーを入力してください。送信サーバーが空欄の場合は受信サーバーを使用します。ポートが空欄の場合は既定値（IMAP 993 / SMTP 465）を使用します。",
+                "card.imapServerLabel": "IMAP 受信サーバー",
+                "card.smtpServerLabel": "SMTP 送信サーバー（空欄＝受信サーバー）",
+                "card.portLabel": "ポート",
+                "card.tlsLabel": "SSL / TLS",
+                "card.errNoCustomHost": "カスタムサーバーのアカウントに受信サーバーが未入力のため、この変更は保存されません。",
+                "preset.errReservedName": "プリセット名に「{name}」は使えません。この値は「カスタムサーバー」オプション用に予約されています。別の名前を指定してください。",
                 // oauth
                 "oauth.clientIdLabel": "アプリケーション（クライアント）ID",
                 "oauth.clientIdPlaceholder": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
@@ -1226,6 +1285,14 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "card.autoSaveHintNoDefault": " Há várias contas, mas nenhuma está definida como padrão; escolha uma primeiro.",
                 "card.builtinEndpoints": " · {imap} | {smtp}",
                 "card.customEndpoint": " · {endpoint}",
+                "provider.customServer": "Servidor personalizado (preenchimento manual)",
+                "card.customServerHint": "Para um servidor de e-mail interno ou próprio: informe o servidor de entrada. O de saída usa o mesmo quando deixado em branco. Portas em branco usam os padrões (IMAP 993 / SMTP 465).",
+                "card.imapServerLabel": "Servidor IMAP de entrada",
+                "card.smtpServerLabel": "Servidor SMTP de saída (em branco = servidor de entrada)",
+                "card.portLabel": "Porta",
+                "card.tlsLabel": "SSL / TLS",
+                "card.errNoCustomHost": "A conta de servidor personalizado ainda não tem servidor de entrada; esta alteração não será salva.",
+                "preset.errReservedName": "Uma predefinição não pode se chamar “{name}”: esse valor é reservado para a opção de servidor personalizado. Escolha outro nome.",
                 // oauth
                 "oauth.clientIdLabel": "ID do aplicativo (cliente)",
                 "oauth.clientIdPlaceholder": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
@@ -1341,6 +1408,14 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "card.autoSaveHintNoDefault": " Настроено несколько аккаунтов, но основной не выбран; сначала выберите его.",
                 "card.builtinEndpoints": " · {imap} | {smtp}",
                 "card.customEndpoint": " · {endpoint}",
+                "provider.customServer": "Свой сервер (ручной ввод)",
+                "card.customServerHint": "Для внутреннего или собственного почтового сервера: укажите сервер входящей почты. Сервер исходящей почты будет тем же, если оставить поле пустым. Пустые порты используют значения по умолчанию (IMAP 993 / SMTP 465).",
+                "card.imapServerLabel": "IMAP-сервер входящей почты",
+                "card.smtpServerLabel": "SMTP-сервер исходящей почты (пусто = сервер входящей)",
+                "card.portLabel": "Порт",
+                "card.tlsLabel": "SSL / TLS",
+                "card.errNoCustomHost": "У аккаунта со своим сервером ещё не указан сервер входящей почты; изменение не сохраняется.",
+                "preset.errReservedName": "Предустановка не может называться «{name}»: это значение зарезервировано для варианта «свой сервер». Укажите другое имя.",
                 // oauth
                 "oauth.clientIdLabel": "Идентификатор приложения (клиента)",
                 "oauth.clientIdPlaceholder": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
@@ -3125,6 +3200,31 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
          * authKind/oauthState/oauthUser 是卡片的登录态投影，只用于显示与本地判定，
          * 不进 draftToInput（它们不是 YAML 的字段，后端认的是账号自己的 oauth 段）。
          */
+        /**
+         * 卡片对应的服务商取值：真实服务商名 / 自定义服务器哨兵 / 空（还没选）。
+         * 没有 provider 但快照已经带着显式端点的卡片，是 YAML 里手写的自定义服务器
+         * 账号，也可能是刚存下的自定义账号 —— 下拉要选中「自定义服务器」，
+         * 端点才会以可编辑的输入框出现。
+         */
+        function providerOfCard(card) {
+            const named = card.provider === undefined || card.provider === null ? "" : String(card.provider);
+            if (named !== "")
+                return named;
+            const hasEndpoint = card.receiveProtocol === "pop3"
+                ? String(card.pop3?.host || "").trim() !== ""
+                : String(card.imap?.host || "").trim() !== "" || String(card.smtp?.host || "").trim() !== "";
+            return hasEndpoint ? CUSTOM_SERVER_PROVIDER : "";
+        }
+        /**
+         * 自定义服务器账号的端点齐了吗：POP3 只看 pop3.host，IMAP 只看 imap.host ——
+         * 发信主机可以留空，draftToInput 会用收信主机补齐（与卡片标签「留空沿用收信
+         * 服务器」一致）。
+         */
+        function customEndpointsPresent(draft) {
+            if (draft.receiveProtocol === 'pop3')
+                return String(draft.pop3?.host || "").trim() !== "";
+            return String(draft.imap?.host || "").trim() !== "";
+        }
         function draftFromCard(card) {
             return {
                 proxy: "", proxyMode: card.proxyMode || "inherit", hasProxy: card.hasProxy === true, proxyDirty: false,
@@ -3134,7 +3234,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 receiveProtocol: card.receiveProtocol === 'pop3' ? 'pop3' : 'imap',
                 pop3: card.pop3 || { host: '', port: 995, secure: true },
                 smtp: card.smtp,
-                provider: card.provider === undefined || card.provider === null ? "" : String(card.provider),
+                provider: providerOfCard(card),
                 user: card.user === undefined || card.user === null ? "" : String(card.user),
                 password: "",
                 // 登录密码与 password 同一套三态契约：卡片永远拿不到明文，只有"是否已存"。
@@ -3172,15 +3272,19 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             return map;
         }
         /**
-         * 下拉的选项集合：8 个内置 + serverPresets 里的自定义名。自定义项的显示文案取预设
-         * 自己的 label（预设编辑器里那个「显示名」），没写 label 才退回预设名。
+         * 下拉的选项集合：内置服务商 + AgentMail + serverPresets 里的自定义名 +
+         * 永远存在的「自定义服务器」。自定义预设项的显示文案取预设自己的 label
+         * （预设编辑器里那个「显示名」），没写 label 才退回预设名。
          */
         function providerOptions(presets) {
             const out = PROVIDERS.map(([value, labelKey]) => ({ value, label: t(labelKey) }));
             out.push({ value: "agentmail", label: "AgentMail (US API)" }, { value: "agentmail-eu", label: "AgentMail (EU API)" });
+            // 内网/自建服务器没有预设名可用：选中它以后端点在卡片里直接填，
+            // 账号的 imap/smtp 段就是端点的存放处。
+            out.push({ value: CUSTOM_SERVER_PROVIDER, label: t("provider.customServer") });
             const custom = (presets && presets.custom) || {};
             for (const name of Object.keys(custom)) {
-                if (name === "")
+                if (name === "" || name === CUSTOM_SERVER_PROVIDER)
                     continue;
                 if (out.some((option) => option.value === name))
                     continue;
@@ -3208,10 +3312,13 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             return value === "" ? [placeholder].concat(out) : out.concat([placeholder]);
         }
         /**
-         * 选服务商：只把 provider 键写进草稿。端点一个都不展开 —— 账号在 YAML 里只记
-         * provider id，host/port/secure 由后端在解析时从预设表展开，前端抄一份只会是
+         * 选服务商：大部分服务商只把 provider 键写进草稿 —— 端点不展开，账号在 YAML 里
+         * 只记 provider id，host/port/secure 由后端在解析时从预设表展开，前端抄一份只会是
          * 一份会过期的副本（预设改了它不会跟着变，保存时还会把它写回 YAML）。
          * 预设名合不合法由后端裁定：它才是预设表的持有者。
+         *
+         * 「自定义服务器」是例外：它没有预设可展开，端点就存在账号自己的 imap/smtp 段
+         * 里。所以选中它时把端点草稿清成空白、端口填默认值（993/465），交给用户填。
          *
          * 换服务商 = 换一套凭证：旧服务商的密码留着毫无意义（后端也不会拿它去连新主机），
          * 而 oauth2 的服务商本来就不要密码。所以这里顺手清掉 password 和登录态投影，
@@ -3219,12 +3326,15 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
          */
         function applyPreset(draft, provider) {
             const next = provider === undefined || provider === null ? "" : String(provider);
+            const custom = next === CUSTOM_SERVER_PROVIDER;
             return Object.assign({}, draft, {
                 provider: next,
-                receiveProtocol: next.startsWith('agentmail') ? 'imap' : draft.receiveProtocol,
-                imap: undefined,
-                pop3: undefined,
-                smtp: undefined,
+                receiveProtocol: custom || next.startsWith('agentmail')
+                    ? (custom && draft.receiveProtocol === 'pop3' ? 'pop3' : 'imap')
+                    : draft.receiveProtocol,
+                imap: custom ? { host: "", port: 993, secure: true } : undefined,
+                pop3: custom ? { host: "", port: 995, secure: true } : undefined,
+                smtp: custom ? { host: "", port: 465, secure: true } : undefined,
                 password: "",
                 authKind: undefined,
                 authKindSetting: '',
@@ -3236,8 +3346,10 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
         }
         /**
          * 草稿 -> serializeAccounts 的输入。密码三态在这里定型：'' 或 untouched 都不带
-         * password 键（继承已存密码），只有用户真的打了字才写进去。端点一概不带：账号只存
-         * provider id，后端 resolveAccount() 在连接时从预设表展开（带上也会被后端洗掉）。
+         * password 键（继承已存密码），只有用户真的打了字才写进去。服务商账号的端点一概
+         * 不带：账号只存 provider id，后端 resolveAccount() 在连接时从预设表展开。
+         * 「自定义服务器」账号是唯一的例外：它没有预设，端点必须随卡片写进账号的
+         * imap/smtp 段，否则后端没有任何地方能把它展开出来。
          *
          * OAuth2 账号没有密码可带：登录结果（refresh token）由后端 oauthLogin/oauthPoll
          * 自己落盘，前端一个字都不写。authKind/oauthState/oauthUser 是显示用的投影，
@@ -3250,13 +3362,31 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 user: draft.user,
                 inboxFolder: draft.inboxFolder,
             };
+            const endpoint = value => ({host:String(value?.host || '').trim(),...(String(value?.port ?? '') !== '' ? {port:Number(value.port)} : {}),secure:value?.secure !== false});
             if (draft.receiveProtocol !== undefined) input.receiveProtocol = draft.receiveProtocol;
             if (draft.receiveProtocol === 'pop3') {
-                const endpoint = value => ({host:String(value?.host || '').trim(),...(String(value?.port ?? '') !== '' ? {port:Number(value.port)} : {}),secure:value?.secure !== false});
                 input.pop3 = endpoint(draft.pop3);
+                // Send an explicit blank host when the user clears the SMTP endpoint.
                 if (draft.smtp) input.smtp = endpoint(draft.smtp);
+            } else if (String(draft.provider || '') === CUSTOM_SERVER_PROVIDER) {
+                // 自定义服务器：端点直接写进账号的 imap/smtp 段（后端 resolveAccount 的
+                // 「省略 provider 直接填 imap.host 与 smtp.host」路径）。端口留空时把
+                // 默认值显式写下去（IMAP 993 / SMTP 465），避免「文档说 993、YAML 里
+                // 却没有 port、连接层只能靠隐式默认」的歧义。
+                const endpointWithDefault = (value, defaultPort) => ({
+                    host: String(value?.host || '').trim(),
+                    port: String(value?.port ?? '') !== '' ? Number(value.port) : defaultPort,
+                    secure: value?.secure !== false,
+                });
+                const imap = endpointWithDefault(draft.imap, 993);
+                const smtp = endpointWithDefault(draft.smtp, 465);
+                // 发信服务器主机留空时沿用收信服务器：内网/自建邮箱通常同一台机器，
+                // 用户只需要填一次地址。
+                if (smtp.host === '') smtp.host = imap.host;
+                input.imap = imap;
+                input.smtp = smtp;
             }
-            if (draft.provider)
+            if (draft.provider && draft.provider !== CUSTOM_SERVER_PROVIDER)
                 input.provider = draft.provider;
             if (!isOauthDraft(draft) && draft.password)
                 input.password = draft.password;
@@ -3285,14 +3415,18 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             return input;
         }
         /**
-         * 半填账号：名字、邮箱地址、服务商三者缺一都算。服务商是账号的连接身份 —— 没有它
-         * 没有服务商且未填完整的自定义服务器时，就没有端点可展开。
+         * 半填账号：名字、邮箱地址、服务商三者缺一都算。服务商是账号的连接身份：
+         * 没有服务商又没有完整的自定义服务器端点时，就没有端点可展开。
+         * 「自定义服务器」账号没有预设可查，端点本身就在卡片里，按端点是否填齐判断。
          * OAuth2 账号不要密码：有 (name, provider, user) 就算填完了。
          */
         function accountIncomplete(draft) {
-            return String(draft.name || "").trim() === ""
-                || String(draft.user || "").trim() === ""
-                || (String(draft.provider || "").trim() === "" && !(draft.receiveProtocol === 'pop3' ? draft.pop3?.host : draft.imap?.host && draft.smtp?.host));
+            if (String(draft.name || "").trim() === "" || String(draft.user || "").trim() === "")
+                return true;
+            const provider = String(draft.provider || "").trim();
+            if (provider === CUSTOM_SERVER_PROVIDER)
+                return !customEndpointsPresent(draft);
+            return provider === "" && !customEndpointsPresent(draft);
         }
         /** 改过名字后草稿要跟着键走：旧键删掉，整份草稿（含 imap/smtp）搬到新键下。 */
         function renameDrafts(drafts, oldName, nextName) {
@@ -3355,6 +3489,15 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 const target = endpoints(fallback);
                 return name + t("card.builtinEndpoints", { imap: presetEndpointText(target.imap), smtp: presetEndpointText(target.smtp) });
             };
+            if (provider === CUSTOM_SERVER_PROVIDER) {
+                // POP3 自定义账号的端点存在 pop3/smtp 段，meta 行要按它自己的协议说。
+                if (draft.receiveProtocol === 'pop3') {
+                    const host = actual.pop3 && typeof actual.pop3.host === "string" ? actual.pop3.host.trim() : "";
+                    const endpoint = host !== "" ? "POP3 " + host + ":" + portLabel(actual.pop3.port) : t("preset.endpointMissing");
+                    return t("provider.custom") + t("card.customEndpoint", { endpoint });
+                }
+                return actual.imap?.host || actual.smtp?.host ? describe(t("provider.custom")) : t("provider.custom");
+            }
             if (provider === "")
                 return actual.imap?.host || actual.smtp?.host ? describe(t("provider.custom")) : t("card.noProvider");
             const entry = PROVIDERS.filter(([value]) => value === provider)[0];
@@ -3463,6 +3606,11 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 if (Object.prototype.hasOwnProperty.call(seen, name)) {
                     return { error: t("preset.errDuplicate", { name }) };
                 }
+                // 哨兵值是服务商下拉里「自定义服务器」的选中值，预设不能用它当名字，
+                // 否则两个下拉项会撞成同一个 value。
+                if (name === CUSTOM_SERVER_PROVIDER) {
+                    return { error: t("preset.errReservedName", { name: t("provider.customServer") }) };
+                }
                 seen[name] = true;
                 const label = String(draft.label === undefined || draft.label === null ? "" : draft.label).trim();
                 const imapHost = String(draft.imap.host || "").trim();
@@ -3558,8 +3706,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
          */
         function oauthViewOf(draft, cards) {
             const live = (cards || []).filter((c) => String(c.name) === String(draft.name))[0] || null;
-            const sameProvider = live !== null
-                && String(live.provider === undefined || live.provider === null ? "" : live.provider) === String(draft.provider || "");
+            const sameProvider = live !== null && providerOfCard(live) === String(draft.provider || "");
             const draftKind = draft.authKind === "oauth2" || draft.authKind === "password" ? draft.authKind : "";
             const liveKind = live && (live.authKind === "oauth2" || live.authKind === "password") ? live.authKind : "";
             const authKind = sameProvider && liveKind !== "" ? liveKind : (draftKind !== "" ? draftKind : authKindOf(draft.provider));
@@ -3785,6 +3932,12 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                     // 服务商就是账号的连接身份：没有它，后端写回时会把 provider 键删掉，这个账号
                     // 永远连不上。名字和它都属于「这还是一张半填的卡」，一起拦在这里。
                     incomplete(t("card.errNoProvider"));
+                    return null;
+                }
+                if (names.some((name) => String(draftsNow[name].provider || "").trim() === CUSTOM_SERVER_PROVIDER && !customEndpointsPresent(draftsNow[name]))) {
+                    // 自定义服务器账号没有预设可查，端点是它唯一的连接信息；端点没填齐之前
+                    // 写进 YAML 也连不上。
+                    incomplete(t("card.errNoCustomHost"));
                     return null;
                 }
                 if (built.some((card) => card.name === "defaultAccount")) {
@@ -4043,6 +4196,59 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                     setBusy("");
                 }
             };
+            /**
+             * 自定义服务器账号的端点编辑行：主机 + 端口 + TLS 放在同一个单元格里。
+             * 收信主机变化时同步发信主机（它为空、或还停在旧的收信主机上时）：内网/自建
+             * 邮箱通常同一台机器，用户不必把地址抄两遍，后端要求 IMAP 账号两个 host 都在。
+             */
+            const endpointRow = (name, draft, kind, labelKey, placeholder) => {
+                const value = draft[kind] || { host: "", port: kind === "imap" ? 993 : 465, secure: true };
+                return h("div", { className: "dshe-field", style: { gridColumn: "1 / -1" } }, [
+                    h("label", null, t(labelKey)),
+                    h("div", { className: "dshe-endpoint-row" }, [
+                        h("input", {
+                            type: "text",
+                            "aria-label": t(labelKey),
+                            value: value.host || "",
+                            placeholder,
+                            disabled: busy !== "",
+                            onChange: (e) => {
+                                const host = e.target.value;
+                                if (kind !== "imap") {
+                                    patchDraft(name, { smtp: Object.assign({}, value, { host }) });
+                                    return;
+                                }
+                                const smtp = draft.smtp || { host: "", port: 465, secure: true };
+                                const follows = String(smtp.host || "").trim() === "" || String(smtp.host) === String(draft.imap?.host || "");
+                                patchDraft(name, follows
+                                    ? { imap: Object.assign({}, value, { host }), smtp: Object.assign({}, smtp, { host }) }
+                                    : { imap: Object.assign({}, value, { host }) });
+                            },
+                        }),
+                        h("input", {
+                            type: "number", min: 1, max: 65535,
+                            "aria-label": t("card.portLabel"),
+                            value: value.port ?? "",
+                            disabled: busy !== "",
+                            onChange: (e) => {
+                                const raw = String(e.target.value).trim();
+                                patchDraft(name, { [kind]: Object.assign({}, value, { port: raw === "" ? undefined : Number(raw) }) });
+                            },
+                        }),
+                        h("label", { className: "dshe-check" }, [
+                            h("input", {
+                                type: "checkbox",
+                                "aria-label": t("card.tlsLabel"),
+                                checked: value.secure !== false,
+                                disabled: busy !== "",
+                                onChange: (e) => patchDraft(name, { [kind]: Object.assign({}, value, { secure: e.target.checked }) }),
+                            }),
+                            t("card.tlsLabel"),
+                        ]),
+                    ]),
+                    kind === "imap" && h("div", { className: "dshe-hint" }, t("card.customServerHint")),
+                ]);
+            };
             const defaultMissing = order.length > 1 && !defaultAccount;
             return h("div", { className: "dshe-acc-list" }, [
                 detail.error
@@ -4175,6 +4381,11 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                                         h('select', {'aria-label':dt('收信协议','Incoming protocol'),value:draft.receiveProtocol || 'imap',disabled:busy !== '',onChange:e=>patchDraft(name,{receiveProtocol:e.target.value,inboxFolder:'INBOX',pop3:draft.pop3 || {host:'',port:995,secure:true}})},[
                                             h('option',{value:'imap'},'IMAP'),h('option',{value:'pop3',disabled:oauthCard},'POP3')]),
                                         draft.receiveProtocol === 'pop3' && h('p',{className:'dshe-hint',role:'note'},dt('POP3 只读取收件箱，发送使用 SMTP。无服务器已读、星标或已发送文件夹；搜索会说明扫描范围。','POP3 reads the inbox and uses SMTP for sending. Server read/star flags and a Sent folder are unavailable; search shows its scan coverage.')),
+                                    ]),
+                                    // 自定义服务器账号的端点：没有预设可展开，直接写在卡片里。
+                                    draft.provider === CUSTOM_SERVER_PROVIDER && draft.receiveProtocol !== 'pop3' && h(React.Fragment, null, [
+                                        endpointRow(name, draft, "imap", "card.imapServerLabel", "imap.corp.example"),
+                                        endpointRow(name, draft, "smtp", "card.smtpServerLabel", "smtp.corp.example"),
                                     ]),
                                     draft.receiveProtocol === 'pop3' && h(React.Fragment,null,['pop3','smtp'].map(kind=>{
                                         const value=draft[kind] || {host:'',port:kind==='pop3'?995:465,secure:true};

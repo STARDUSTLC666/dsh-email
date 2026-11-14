@@ -514,6 +514,32 @@ function washEndpoint(account: YAMLMap, key: 'imap' | 'smtp'): void {
 }
 
 /**
+ * Write one card endpoint into the account's own `imap`/`smtp`/`pop3` map.
+ *
+ * Only a custom-server account (no provider) and a POP3 account store their
+ * endpoints on the account; a provider-backed IMAP account gets them from the
+ * preset at resolution time. An empty host means "the card has nothing to say
+ * about this endpoint", so the key is removed rather than left behind pointing
+ * at the server the user just cleared.
+ */
+function writeEndpoint(doc: Document, account: YAMLMap, key: 'imap' | 'smtp' | 'pop3', endpoint: NonNullable<AccountCardInput['imap']>): void {
+  if (endpoint.port !== undefined) {
+    if (!Number.isInteger(endpoint.port) || endpoint.port < 1 || endpoint.port > 65535) throw new Error(key.toUpperCase() + ' 端口必须在 1-65535 之间')
+  }
+  if (endpoint.secure !== undefined && typeof endpoint.secure !== 'boolean') throw new Error('TLS 开关必须为布尔值')
+  if (endpoint.host !== undefined && (typeof endpoint.host !== 'string' || /\s/.test(endpoint.host.trim()))) throw new Error(key.toUpperCase() + ' 主机地址无效')
+  const host = endpoint.host?.trim()
+  if (host === '') {
+    account.delete(key)
+    return
+  }
+  const target = ensureMap(doc, account, key)
+  if (host !== undefined) target.set('host', host)
+  if (endpoint.port !== undefined) target.set('port', endpoint.port)
+  if (endpoint.secure !== undefined) target.set('secure', endpoint.secure)
+}
+
+/**
  * The `provider` value that may be written back to accountsYaml.
  *
  * The account stores a provider *id* and nothing else, so a name the provider
@@ -543,10 +569,11 @@ function persistedProvider(provider: unknown, customNames: ReadonlySet<string>):
  * disappears (writing it back resolves as 「provider "" 未知」) and a numeric
  * password becomes a string (YAML would otherwise read back a number).
  *
- * The card's `imap`/`smtp` are deliberately *not* written: an account stores a
- * provider id, and the endpoints are expanded from the preset table at
- * resolution time. Writing them back would freeze a stale copy of a preset the
- * user may later edit.
+ * A provider-backed card's `imap`/`smtp` are deliberately *not* written: an
+ * account stores a provider id, and the endpoints are expanded from the preset
+ * table at resolution time. Writing them back would freeze a stale copy of a
+ * preset the user may later edit. A custom-server card (no provider) is the
+ * exception — its endpoints exist nowhere else, so they are written.
  *
  * `inheritedPassword` is the value stored in the source YAML for this account.
  * It is used only when the card carries no password at all — see the three-state
@@ -565,9 +592,29 @@ function normalizeCardForYaml(
   else if (card.proxy.trim() !== '') out.proxy = card.proxy.trim()
   if (card.receiveProtocol !== undefined) out.receiveProtocol = card.receiveProtocol
   if (card.pop3 !== undefined) out.pop3 = card.pop3
-  if (card.receiveProtocol === 'pop3' && card.smtp !== undefined) out.smtp = card.smtp
+  if (card.receiveProtocol === 'pop3' && card.smtp !== undefined && card.smtp.host?.trim() !== '') out.smtp = card.smtp
   const provider = persistedProvider(card.provider, customNames)
   if (provider !== undefined) out.provider = provider
+  // A custom-server account (no provider) carries its endpoints itself: there is
+  // no preset to expand them from. A provider-backed account's endpoints stay
+  // out of the document so they cannot freeze a stale copy of its preset. Only a
+  // card that explicitly names no provider counts — an unknown provider name is
+  // not a server choice.
+  if (typeof card.provider !== 'string' || card.provider.trim() === '') {
+    if (provider === undefined && card.receiveProtocol !== 'pop3') {
+      for (const key of ['imap', 'smtp'] as const) {
+        const endpoint = card[key]
+        if (endpoint === undefined) continue
+        if (endpoint.port !== undefined && (!Number.isInteger(endpoint.port) || endpoint.port < 1 || endpoint.port > 65535)) {
+          throw new Error(key.toUpperCase() + ' 端口必须在 1-65535 之间')
+        }
+        if (endpoint.secure !== undefined && typeof endpoint.secure !== 'boolean') throw new Error('TLS 开关必须为布尔值')
+        const host = typeof endpoint.host === 'string' ? endpoint.host.trim() : ''
+        if (host === '') continue
+        out[key] = { host, ...(endpoint.port !== undefined ? { port: endpoint.port } : {}), ...(endpoint.secure !== undefined ? { secure: endpoint.secure } : {}) }
+      }
+    }
+  }
   if (card.user !== undefined) out.user = card.user
   if (card.password === undefined) {
     // 未提供 = 保持原样，且原样包括「原来是什么类型」：数字密码原样留下数字。
@@ -671,7 +718,7 @@ function fallbackSerialize(
     raw[name] = normalized
     const previous = stored?.[card.originalName || name] as Record<string,unknown>|undefined
     const sameClient = card.clientId === undefined || card.clientId === previous?.clientId
-    const sameIssuer = card.provider === undefined || card.provider === previous?.provider
+    const sameIssuer = normalized.provider === previous?.provider
     const secret = card.clientSecret ?? (sameClient && sameIssuer ? previous?.clientSecret : undefined)
     if (typeof secret === 'string' && secret) normalized.clientSecret = secret
     if (card.oauthProvider) normalized.oauthProvider = card.oauthProvider
@@ -765,9 +812,12 @@ function serializeAccountsDraft(
       writeField(account,'oauthProvider',card.oauthProvider)
     }
     const apiProvider = (value: unknown) => value === 'agentmail' || value === 'agentmail-eu'
-    if (apiProvider(previousProvider) !== apiProvider(nextProvider)) {
+    const switchingToManual = typeof previousProvider === 'string' && nextProvider === undefined
+      && !card.provider && (card.imap !== undefined || card.pop3 !== undefined)
+    if (switchingToManual || apiProvider(previousProvider) !== apiProvider(nextProvider)) {
       account.delete('password'); account.delete('apiKey'); account.delete('authPassword'); account.delete('authKind')
     }
+    if (switchingToManual) account.delete('clientId')
     if (card.password !== undefined && apiProvider(nextProvider)) account.delete('apiKey')
     writeField(account, 'provider', nextProvider)
     writeField(account, 'user', card.user)
@@ -825,27 +875,36 @@ function serializeAccountsDraft(
       if (!['imap', 'pop3'].includes(card.receiveProtocol)) throw new Error('收信协议只能是 IMAP 或 POP3')
       account.set('receiveProtocol', card.receiveProtocol)
     }
-    // Endpoints are never written by a card: they come from the preset, or from
-    // what the account already stores. They are washed only when the provider
-    // actually changed, because that is the one case where the stored copy is
-    // stale by definition — it belongs to the previous provider. Washing on
-    // every save would repoint a self-hosted account at the preset merely
-    // because the user opened this panel.
+    // Endpoints are never written for a provider-backed account: they come from
+    // the preset, or from what the account already stores. They are washed only
+    // when the provider actually changed, because that is the one case where the
+    // stored copy is stale by definition — it belongs to the previous provider.
+    // Washing on every save would repoint a self-hosted account at the preset
+    // merely because the user opened this panel.
     if (nextProvider !== undefined && nextProvider !== previousProvider) {
       washEndpoint(account, 'imap')
       washEndpoint(account, 'smtp')
       account.delete('pop3')
     }
-    if (card.receiveProtocol === 'pop3') for (const key of ['pop3', 'smtp'] as const) {
-      const endpoint = card[key]
-      if (!endpoint) continue
-      const target = ensureMap(doc, account, key)
-      if (endpoint.host !== undefined) target.set('host', endpoint.host.trim())
-      if (endpoint.port !== undefined) {
-        if (!Number.isInteger(endpoint.port) || endpoint.port < 1 || endpoint.port > 65535) throw new Error(key.toUpperCase() + ' 端口必须在 1-65535 之间')
-        target.set('port', endpoint.port)
+    // A POP3 account stores its own endpoints regardless of provider: the
+    // protocol is an account-level choice, not something a preset can supply.
+    if (card.receiveProtocol === 'pop3') {
+      for (const key of ['pop3', 'smtp'] as const) {
+        const endpoint = card[key]
+        if (endpoint) writeEndpoint(doc, account, key, endpoint)
       }
-      if (endpoint.secure !== undefined) { if (typeof endpoint.secure !== 'boolean') throw new Error('TLS 开关必须为布尔值'); target.set('secure', endpoint.secure) }
+    }
+    // A custom-server account (no provider) has no preset to expand from, so its
+    // endpoints live on the account itself. A provider-backed IMAP account never
+    // writes them, and the wash above removed any stale copy when it changed.
+    // Only a card that explicitly names no provider counts: an unknown provider
+    // name is not a server choice, and must not be reinterpreted as one.
+    const customServer = typeof card.provider !== 'string' || card.provider.trim() === ''
+    if (customServer && nextProvider === undefined && card.receiveProtocol !== 'pop3') {
+      for (const key of ['imap', 'smtp'] as const) {
+        const endpoint = card[key]
+        if (endpoint) writeEndpoint(doc, account, key, endpoint)
+      }
     }
   }
 

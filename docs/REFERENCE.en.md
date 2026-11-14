@@ -19,6 +19,7 @@ Open the workbench from the native DSH sidebar. See the [workbench guide](WORKBE
 ## What it does
 
 - Read, send, reply and forward using IMAP and SMTP.
+- Built-in providers, `serverPresets` custom provider presets, and **Custom server (enter details)**: enter IMAP incoming and SMTP outgoing endpoints directly on an account card for intranet or self-hosted mail servers.
 - Add AgentMail US/EU inboxes with an email address and API key, without IMAP/SMTP setup.
 - Browse Inbox/Sent, page/search messages, read plain text, download attachments and set read/star flags in Mailbox.
 - Manage attachments, search results and mailbox organization.
@@ -51,6 +52,8 @@ For a POP3 account, choose the incoming protocol in Account settings and test th
 ## Requirements and configuration
 
 IMAP accounts require mail credentials, an app password or provider OAuth authorization. AgentMail requires its regional inbox address and API key; see [AgentMail setup](AGENTMAIL.en.md). Mail authentication is separate from the DSH model API key.
+
+Connection endpoints have three sources: a built-in provider, a custom preset in `serverPresets`, or **Custom server (enter details)** on the account card. With the last option, enter the IMAP incoming server and SMTP outgoing server directly; a blank outgoing host reuses the incoming host, and blank ports default to 993 (IMAP) / 465 (SMTP). Such accounts omit `provider` in `accountsYaml` and carry the endpoints in the account's `imap` / `smtp` sections (POP3 accounts use `pop3` / `smtp`). **Server presets (custom providers, advanced)** remain available for several accounts that share one set of servers.
 
 Detailed configuration, tool arguments and troubleshooting are in the [usage guide](USAGE.en.md). For standalone development, follow the Node requirement in [package.json](../package.json).
 

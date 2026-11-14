@@ -139,6 +139,24 @@ dsh plugin --profile web remove dsh-email
 
 设置页的「服务器预设」折叠区能可视化增删改这些预设，账号卡片的服务商下拉里会自动多出预设名，选中即把端点预填进账号。预设只记连接参数，**不含邮箱地址和授权码**；`port`/`secure` 可省略（默认 993/465 与 SSL）。
 
+### 自定义服务器（手动填写）
+
+内网或自建邮件服务器不在内置服务商和服务器预设里时，在「设置 → 邮件 → 邮箱账号」的账号卡片里，把「服务商」下拉选为「自定义服务器（手动填写）」。
+
+- 选中后直接在卡片里填 IMAP 收信服务器（主机、端口、SSL/TLS）和 SMTP 发信服务器（主机、端口、SSL/TLS）。
+- 发信服务器主机留空时沿用收信服务器主机；端口留空分别按 993（IMAP）/ 465（SMTP）处理。
+- 账号仍然只需要「邮箱地址 + 授权码 / 应用密码」，填好后点该卡片的「测试连接」验证。
+- 这类账号在 `accountsYaml` 里不写 `provider`，端点直接写在账号的 `imap` / `smtp` 段；如果收信协议选的是 POP3，端点写在 `pop3` / `smtp` 段（发信服务器可以留空，只收信也能用）：
+
+```yaml
+work:
+  user: someone@corp.example
+  imap: { host: imap.corp.example, port: 993, secure: true }
+  smtp: { host: smtp.corp.example, port: 465, secure: true }
+```
+
+原有的「服务器预设（自定义服务商，高级）」保持不变：多个账号复用同一组服务器时继续用预设更省事，只有单个账号需要手填端点时用「自定义服务器（手动填写）」。两者互不冲突，账号自己写的 `imap`/`smtp` 仍优先于所选预设。
+
 ### 常用邮箱预设
 
 | provider | IMAP | SMTP |
@@ -156,14 +174,14 @@ dsh plugin --profile web remove dsh-email
 
 | 字段 | 默认 | 说明 |
 |---|---|---|
-| `provider` | 无 | 预设名，自动填 imap/smtp 地址；显式写的 host/port/secure 优先 |
+| `provider` | 无 | 服务商预设名（内置或 `serverPresets`），自动填 imap/smtp 地址；手填端点时不写，显式写的 host/port/secure 始终优先 |
 | `user` | 必填 | 登录邮箱地址 |
 | `password` | 必填* | 授权码/应用专用密码；*也可用环境变量 `DSH_EMAIL_PASSWORD` |
 | `senderName` | 无 | 发件显示名：只改收件人看到的名称，发件地址仍是 `user` |
 | `authUser` | = `user` | 登录账号。别名 / SMTP 中继场景：`user` 是发件地址，这里填真正用于 IMAP/SMTP 认证的账号 |
 | `authPassword` | = `password` | `authUser` 对应的密码；只有登录账号与 `user` 不同、且密码也不一样时才需要 |
-| `imap.host/port/secure` | 按预设 | 收信服务器（另有 connectionTimeoutMs/socketTimeoutMs 可调超时） |
-| `smtp.host/port/secure` | 按预设 | 发信服务器 |
+| `imap.host/port/secure` | 按预设 | 收信服务器；无预设（自定义服务器）时直接填写（另有 connectionTimeoutMs/socketTimeoutMs 可调超时） |
+| `smtp.host/port/secure` | 按预设 | 发信服务器；无预设时直接填写，设置页里主机留空沿用收信服务器主机 |
 | `inboxFolder` | `INBOX` | 收发工具默认使用的文件夹 |
 | `sendApproval` | `true` | 发信前弹确认（强烈建议保留） |
 | `maxBodyChars` | `20000` | email_read 正文截断上限（1000–200000） |

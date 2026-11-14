@@ -46,11 +46,16 @@ test('account cards display explicitly configured servers instead of provider de
   assert.ok(meta(/imap\.updated\.example:2993/), 'a fresh snapshot updates only the displayed server, preserving edits')
 })
 
-test('a custom account with both explicit servers is complete without a provider preset', () => {
+test('a custom-server account is complete once its incoming server is set', () => {
   const props = { detail: { list: [{ name: 'custom', user: 'fixture@example.test', imap: { host: 'imap.private.example' }, smtp: { host: 'smtp.private.example' } }] }, presets: { builtin: {}, custom: {} } }
   const complete = editor('AccountCardsEditor', props)
   assert.equal(complete.find(complete.render(), node => node.type === 'span' && node.children.includes('未完成')), undefined)
+  // The outgoing host may stay blank: it follows the incoming host on save, and
+  // the card says exactly that, so it must not mark the account incomplete.
   props.detail.list[0].smtp = undefined
+  const outgoingBlank = editor('AccountCardsEditor', props)
+  assert.equal(outgoingBlank.find(outgoingBlank.render(), node => node.type === 'span' && node.children.includes('未完成')), undefined)
+  props.detail.list[0].imap = { host: '' }
   const incomplete = editor('AccountCardsEditor', props)
   assert.ok(incomplete.find(incomplete.render(), node => node.type === 'span' && node.children.includes('未完成')))
 })
