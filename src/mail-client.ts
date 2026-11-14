@@ -5,8 +5,9 @@ import { folderPath, assertCustomFolder, previewFolderMutation, purgeConfirmedFo
 import nodemailer, { type Transporter } from 'nodemailer'
 import type SMTPTransport from 'nodemailer/lib/smtp-transport/index.js'
 import { createConnection, type Socket } from 'node:net'
-import { mkdir, stat, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { constants } from 'node:fs'
+import { mkdir, open, stat, writeFile } from 'node:fs/promises'
+import { basename, join } from 'node:path'
 import type { Readable } from 'node:stream'
 import type { AuthKind, ResolvedEmailConfig, ResolvedEmailSettings } from './config.js'
 import { getFreshAccessToken, OAuth2Error } from './oauth2.js'
@@ -1369,7 +1370,7 @@ export class EmailPool {
   async send(accountName: string | undefined, to: string, subject: string, text: string | undefined, cc: string | undefined, attachmentPaths: string[] | undefined, signal?: AbortSignal, html?: string): Promise<EmailSendResult> {
     const name = this.resolveName(accountName)
     const cfg = this.account(name)
-    const attachments = await validateAttachmentPaths(attachmentPaths ?? [], this.settings.maxAttachmentBytes, signal)
+    const attachments = await readSmtpAttachments(attachmentPaths ?? [], this.settings.maxAttachmentBytes, signal)
     const info = await this.sendMail(name, cfg, {
       from: senderOf(cfg),
       to,
@@ -1483,6 +1484,31 @@ export async function validateAttachmentPaths(paths: string[], maxBytes: number,
     out.push({ path })
   }
   return out
+}
+
+/** Hand SMTP stable bytes so MIME processing never needs file or URL access. */
+async function readSmtpAttachments(paths: string[], maxBytes: number, signal?: AbortSignal): Promise<Array<{ filename: string; content: Buffer }>> {
+  const files = await validateAttachmentPaths(paths, maxBytes, signal)
+  const attachments: Array<{ filename: string; content: Buffer }> = []
+  let remaining = maxBytes
+  for (const { path } of files) {
+    signal?.throwIfAborted()
+    const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK).catch(() => {
+      throw new MailError('附件路径不存在或不可读：' + path)
+    })
+    try {
+      const info = await file.stat()
+      if (!info.isFile()) throw new MailError('附件路径不是文件：' + path)
+      if (info.size > remaining) throw new MailError('附件总大小超过上限 maxAttachmentBytes=' + maxBytes + ' 字节')
+      signal?.throwIfAborted()
+      const content = await collectStream(file.createReadStream({ autoClose: false }), remaining, signal)
+      remaining -= content.length
+      attachments.push({ filename: basename(path), content })
+    } finally {
+      await file.close()
+    }
+  }
+  return attachments
 }
 
 /** Drain a download stream into a Buffer with a hard byte cap. */
