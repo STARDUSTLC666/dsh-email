@@ -51,25 +51,30 @@ function MailTrashDialog({ account, folder, uids, uidValidity, folders, busy, on
 }
 
 function MailContent({ detail, account, folder, selected }) {
-  const rich = detail.rich, [plain, setPlain] = React.useState(!rich?.nodes?.length), [remote, setRemote] = React.useState(false), [images, setImages] = React.useState({}), [retry, setRetry] = React.useState(0), [loading, setLoading] = React.useState(false);
+  const rich = detail.rich, [plain, setPlain] = React.useState(!rich?.nodes?.length), [remote, setRemote] = React.useState(false), [imageState, setImageState] = React.useState(null), [retry, setRetry] = React.useState(0), [loading, setLoading] = React.useState(false);
+  const imageLoad = React.useMemo(() => ({}), [rich, account, folder, selected, plain, remote, retry]);
+  const images = imageState?.load === imageLoad ? imageState.values : {};
+  const updateImage = (id, value) => setImageState(old => ({
+    load: imageLoad, values: { ...(old?.load === imageLoad ? old.values : {}), [id]: value },
+  }));
   __stardustUpdatesGuard(React, 'dsh-email.images', { busy: loading });
   React.useEffect(() => {
     if (plain || !rich?.images?.length) { setLoading(false); return; }
     const ctrl = new AbortController(), urls = [], queue = rich.images.filter(image => image.kind === 'inline' || remote);
-    setImages({}); setLoading(queue.length > 0);
+    setLoading(queue.length > 0);
     async function worker() {
       while (queue.length && !ctrl.signal.aborted) {
         const image = queue.shift();
         try {
           const blob = await mailboxApi('image', { account, folder, uid: selected, image: image.id, allowRemote: remote }, ctrl.signal);
           if (ctrl.signal.aborted) return;
-          const url = URL.createObjectURL(blob); urls.push(url); setImages(old => ({ ...old, [image.id]: { url } }));
-        } catch (error) { if (!ctrl.signal.aborted) setImages(old => ({ ...old, [image.id]: { error: true, message: emailError(error) } })); }
+          const url = URL.createObjectURL(blob); urls.push(url); updateImage(image.id, { url });
+        } catch (error) { if (!ctrl.signal.aborted) updateImage(image.id, { error: true, message: emailError(error) }); }
       }
     }
     Promise.all(Array.from({ length: Math.min(4, queue.length) }, worker)).finally(() => { if (!ctrl.signal.aborted) setLoading(false); });
     return () => { ctrl.abort(); for (const url of urls) URL.revokeObjectURL(url); };
-  }, [rich, account, folder, selected, plain, remote, retry]);
+  }, [imageLoad]);
   function nodes(values, path = 'r') {
     return (values || []).map((node, index) => {
       if (typeof node === 'string') return node;
@@ -77,7 +82,8 @@ function MailContent({ detail, account, folder, selected }) {
       if (node.tag === 'img') {
         const image = rich.images[node.image]; if (!image) return null;
         const loaded = images[image.id];
-        return loaded?.url && !loaded.error ? h('img', { key, src: loaded.url, alt: image.alt || dt('邮件图片', 'Email image'), className: 'email-rich-image', onError: () => setImages(old => ({ ...old, [image.id]: { ...old[image.id], error: true } })) }) : h('span', { key, className: 'email-image-placeholder', role: 'status' }, image.alt || dt('邮件图片', 'Email image'), ' · ', loaded?.error ? dt('加载失败，可重试', 'Failed to load; retry available') : image.kind === 'remote' && !remote ? dt('外部图片已阻止', 'External image blocked') : dt('正在加载…', 'Loading…'), loaded?.message ? h('span', { className: 'email-image-error' }, loaded.message) : null);
+        return loaded?.url && !loaded.error ? h('img', { key, src: loaded.url, alt: image.alt || dt('邮件图片', 'Email image'), className: 'email-rich-image', onError: () => setImageState(old => old?.load === imageLoad
+          ? { ...old, values: { ...old.values, [image.id]: { error: true } } } : old) }) : h('span', { key, className: 'email-image-placeholder', role: 'status' }, image.alt || dt('邮件图片', 'Email image'), ' · ', loaded?.error ? dt('加载失败，可重试', 'Failed to load; retry available') : image.kind === 'remote' && !remote ? dt('外部图片已阻止', 'External image blocked') : dt('正在加载…', 'Loading…'), loaded?.message ? h('span', { className: 'email-image-error' }, loaded.message) : null);
       }
       const props = { key };
       if (node.tag === 'a' && node.href) Object.assign(props, { href: node.href, target: '_blank', rel: 'noopener noreferrer', referrerPolicy: 'no-referrer' });
