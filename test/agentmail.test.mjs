@@ -98,6 +98,21 @@ test('email_read omits absent rich data and normalizes nonfinite attachment size
   assert.equal(message.attachments[0].size, 0)
   assert.doesNotThrow(() => JSON.stringify(message))
 })
+test('AgentMail reply-all submits original and extra Cc in the thread reply', async (t) => {
+  const peer = await createAgentMailPeer()
+  const service = new EmailService(settings(), { fetch: peer.fetcher })
+  t.after(async () => { service.dispose(); await peer.close() })
+  const original = peer.messages[0]
+  original.to.push('other@example.invalid')
+  original.cc = ['reviewer@example.invalid', peer.inbox, 'other@example.invalid']
+
+  const reply = await service.reply('default', 'INBOX', original.message_id, 'reply-all', 'Reviewed', '', 'extra@example.invalid')
+  assert.equal(reply.cc, 'reviewer@example.invalid, extra@example.invalid')
+  assert.equal(peer.sent.length, 1)
+  assert.match(peer.sent[0].path, /\/reply$/)
+  assert.deepEqual(peer.sent[0].body.to, ['vendor@example.invalid', 'other@example.invalid'])
+  assert.deepEqual(peer.sent[0].body.cc, ['reviewer@example.invalid', 'extra@example.invalid'])
+})
 test('API identities cannot cross accounts or normalize path segments', async () => {
   let calls = 0
   const malformed = new AgentMailClient(settings(), async () => {

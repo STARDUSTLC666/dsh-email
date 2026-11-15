@@ -1,6 +1,7 @@
 import {
   EmailPool,
   buildReplyMessage,
+  replyCc,
   validateAttachmentPaths,
 } from './mail-client.js'
 import { AgentMailClient, type MessageRef } from './agentmail.js'
@@ -13,6 +14,7 @@ import type {
   EmailReplyResult,
   EmailMarkAction,
   EmailSearchOptions,
+  InlineAttachmentRef,
 } from './types.js'
 import type { downloadPublicBytes } from './public-download.js'
 import type { ReplyOptions } from './reply-locale.js'
@@ -119,7 +121,7 @@ export class EmailService {
   async prepareReply(account: string | undefined, folder: string, uid: MessageRef, mode: EmailReplyMode, text: string, to: string, cc?: string, signal?: AbortSignal, options: ReplyOptions = {}) {
     const name = this.name(account), cfg = this.settings.accounts.get(name)!, original = await this.read(name, uid, folder, signal)
     const built = buildReplyMessage({ ...original, messageId: '', references: '' }, mode, [cfg.user, cfg.authUser], text, to, this.replyOptions(name, options))
-    return { ...built, account: name, cc: cc ?? built.cc ?? '', reply: { uid, folder: original.folder, ...(original.uidValidity ? { uidValidity: original.uidValidity } : {}), mode } }
+    return { ...built, account: name, cc: replyCc(built, cc), reply: { uid, folder: original.folder, ...(original.uidValidity ? { uidValidity: original.uidValidity } : {}), mode } }
   }
   list(
     account: string | undefined,
@@ -261,6 +263,12 @@ export class EmailService {
       })),
     }
   }
+  readInlineAttachment(ref: InlineAttachmentRef, byteLimit: number, signal?: AbortSignal): Promise<Buffer> {
+    const { account, folder, uid, uidValidity, index, attachment } = ref
+    if (this.usesPop3(account)) return this.pop3.readInlineAttachment(account, folder, uid, index, attachment.contentId, byteLimit, signal)
+    if (this.usesApi(account)) throw new Error('此邮箱服务未提供内嵌附件的 Content-ID')
+    return this.imap.readInlineAttachment(account, folder, this.number(uid), attachment, uidValidity, byteLimit, signal)
+  }
   downloadAttachment(
     account: string | undefined,
     folder: string,
@@ -381,8 +389,9 @@ export class EmailService {
       const name = this.name(account), cfg = this.settings.accounts.get(name)!
       const original = await this.pop3.original(name, uid, this.folder(account, folder), signal)
       const built = buildReplyMessage(original, mode, [cfg.user, cfg.authUser], text, to, this.replyOptions(account, options))
-      const sent = await this.imap.sendPrepared(name, built.to, built.subject, built.text, cc ?? built.cc ?? '', [], signal, undefined, built, built.html)
-      return { ...sent, mode, originalUid: uid, to: built.to.split(','), subject: built.subject }
+      const copy = replyCc(built, cc)
+      const sent = await this.imap.sendPrepared(name, built.to, built.subject, built.text, copy, [], signal, undefined, built, built.html)
+      return { ...sent, mode, originalUid: uid, to: built.to.split(','), ...(copy ? { cc: copy } : {}), subject: built.subject }
     }
     if (!this.usesApi(account))
       return this.imap.reply(
@@ -407,17 +416,18 @@ export class EmailService {
       built = buildReplyMessage(
         { ...original, messageId: String(uid), references: '' },
         mode,
-        cfg.user,
+        [cfg.user, cfg.authUser],
         text,
         to,
         this.replyOptions(account, options),
       ),
+      copy = replyCc(built, cc),
       sent = await this.api.send(
         name,
         built.to,
         built.subject,
         built.text,
-        cc ?? '',
+        copy,
         [],
         signal,
         mode === 'forward' ? undefined : { uid, folder },
@@ -428,6 +438,7 @@ export class EmailService {
       mode,
       originalUid: uid,
       to: built.to.split(','),
+      ...(copy ? { cc: copy } : {}),
       subject: built.subject,
     }
   }

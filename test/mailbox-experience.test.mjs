@@ -1,13 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { simpleParser } from 'mailparser'
 import { EmailService, EmailMailboxBackend, EmailDraftBackend, DraftStore, resolveEmailSettings, parseRawMessage, buildReplyMessage } from '../lib/index.js'
 import { richEmailBody, rasterMime } from '../lib/rich-body.js'
 import { moveImapMessages, previewImapTrash } from '../lib/imap-trash.js'
 import { downloadPublicBytes } from '../lib/public-download.js'
 import { createMailboxPeer, messageSource, imageBytes, originalText } from './helpers/mailbox-peer.mjs'
+import { createPop3Peer } from './helpers/pop3-peer.mjs'
 
 async function fixture(t, options={}) {
   const peer=await createMailboxPeer(options),root=await mkdtemp(join(import.meta.dirname,'.mailbox-experience-'))
@@ -52,6 +53,62 @@ test('real IMAP renders segmented HTML and inline MIME images without loading ex
   assert.equal((await f.request({action:'image',uid:8,image:message.rich.images[1].id,allowRemote:true})).status,400);assert.equal(f.downloads.length,1);
   assert.ok(f.peer.commands.some(command=>/BODY\.PEEK\[2\]/.test(command)));assert.ok(!f.peer.commands.some(command=>/BODY\.PEEK\[\]/.test(command)),'opening body does not download the full MIME/attachment');
 })
+test('IMAP CID image delivery fetches just its MIME part even when the download directory is unusable', { timeout: 20000 }, async t => {
+  const f = await fixture(t)
+  const unavailableDir = join(f.settings.downloadDir, 'not-a-directory')
+  await writeFile(unavailableDir, 'no directory here')
+  f.settings.downloadDir = unavailableDir
+  const opened = await (await f.request({ action: 'read', uid: 7 })).json()
+  assert.equal(opened.ok, true)
+  const image = { action: 'image', uid: 7, image: opened.value.rich.images[0].id }
+  const before = f.peer.commands.length
+  const response = await f.request(image)
+  assert.equal(response.status, 200, await response.clone().text())
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()), imageBytes)
+  const commands = f.peer.commands.slice(before)
+  assert.ok(commands.some(command => /BODY\.PEEK\[3\]/.test(command)))
+  assert.ok(!commands.some(command => /ENVELOPE|BODY\.PEEK\[(?:1|2)?\]/.test(command)))
+
+  f.pool.dispose()
+  f.peer.folders.get('INBOX').validity = 99
+  const beforeChange = f.peer.commands.length
+  assert.equal((await f.request(image)).status, 400)
+  assert.ok(!f.peer.commands.slice(beforeChange).some(command => /BODY\.PEEK\[/.test(command)))
+})
+test('POP3 CID image delivery fetches the original UIDL only once, without saving an attachment', { timeout: 20000 }, async t => {
+  const raw = Buffer.from(messageSource('POP3 CID fixture').toString('utf8').replace(/\r?\n/g, '\r\n'))
+  const peer = await createPop3Peer({ messages: [{ uid: 'original', raw }], fragment: false })
+  const folder = await mkdtemp(join(import.meta.dirname, '.mailbox-experience-'))
+  const downloadDir = join(folder, 'not-a-directory')
+  await writeFile(downloadDir, 'no directory here')
+  const settings = resolveEmailSettings({
+    receiveProtocol: 'pop3',
+    user: 'local@example.invalid',
+    password: 'fixture-secret',
+    pop3: { host: '127.0.0.1', port: peer.port, secure: false },
+    downloadDir,
+  })
+  const pool = new EmailService(settings)
+  t.after(async () => {
+    pool.dispose()
+    await peer.close()
+    assert.equal(dirname(folder), import.meta.dirname)
+    await rm(folder, { recursive: true, force: true })
+  })
+  const backend = new EmailMailboxBackend({ getPool: () => pool, getEffectiveSettings: () => settings })
+  const request = body => backend.fetch(new Request('http://127.0.0.1/api/dsh-email/mailbox', {
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-dsh-email-mailbox': '1' },
+    body: JSON.stringify({ account: 'default', folder: 'INBOX', ...body }),
+  }))
+  const uid = 'pop3:' + Buffer.from('original').toString('base64url')
+  const opened = await (await request({ action: 'read', uid })).json()
+  assert.equal(opened.ok, true, opened.error?.message)
+  const before = peer.commands.length
+  const response = await request({ action: 'image', uid, image: opened.value.rich.images[0].id })
+  assert.equal(response.status, 200, await response.clone().text())
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()), imageBytes)
+  assert.deepEqual(peer.commands.slice(before).filter(command => command.startsWith('RETR ')), ['RETR 1'])
+})
 test('Trash preview and cancel are read-only; bulk move and one-use Undo preserve mail', {timeout:20000},async t=>{
   const f=await fixture(t),preview=await f.backend.action({action:'trashPreview',account:'default',folder:'INBOX',uids:[7,8],uidValidity:11});assert.equal(preview.target,'Trash');assert.equal(preview.messages.length,2);assert.equal(f.peer.folders.get('INBOX').messages.length,2);assert.ok(!f.peer.commands.some(command=>/MOVE|STORE|EXPUNGE/.test(command)));assert.ok(f.peer.commands.some(command=>/^EXAMINE/.test(command)));
   const moved=await f.backend.action({action:'trashConfirm',account:'default',folder:'INBOX',receipt:preview.id,confirmed:true});assert.equal(moved.count,2);assert.ok(moved.undo);assert.equal(f.peer.folders.get('INBOX').messages.length,0);assert.equal(f.peer.folders.get('Trash').messages.length,2);
@@ -72,9 +129,25 @@ test('server without destination mapping offers no unreliable Undo and uncertain
   const client={mailbox:{uidValidity:1},capabilities:new Set(['MOVE']),list:async()=>[{path:'Trash',flags:new Set()}],fetchOne:async uid=>({uid}),messageMove:async()=>({})};assert.deepEqual(await moveImapMessages(client,'INBOX',[7],'Trash',1),{count:1});client.messageMove=async()=>{throw Error('connection lost')};await assert.rejects(moveImapMessages(client,'INBOX',[7],'Trash',1),/核对/)
 })
 test('reply draft quotes long original and actual SMTP message retains its original thread', {timeout:20000},async t=>{
-  const f=await fixture(t),draft=await f.backend.action({action:'replyDraft',account:'default',folder:'INBOX',uid:7});assert.match(draft.text,/END-OF-ORIGINAL/);assert.ok(draft.text.length>2000);assert.equal(f.peer.sent.length,0);assert.equal(draft.reply.uidValidity,11);
-  const edited=await f.drafts.action({action:'update',...draft,id:draft.id,revision:draft.revision,text:'收到，下一步继续。\n'+draft.text});assert.deepEqual(edited.reply,draft.reply);
-  const preview=await f.drafts.action({action:'preview',id:edited.id,revision:edited.revision});await f.drafts.action({action:'send',id:edited.id,preview:preview.id,confirmed:true});assert.equal(f.peer.sent.length,1);const sent=await simpleParser(f.peer.sent[0]);assert.equal(sent.inReplyTo,'<original@fixture.invalid>');assert.deepEqual(sent.references,['<earlier@fixture.invalid>','<original@fixture.invalid>']);assert.match(sent.text,/END-OF-ORIGINAL/)
+  const f = await fixture(t)
+  const draft = await f.backend.action({ action: 'replyDraft', account: 'default', folder: 'INBOX', uid: 7, replyAll: true })
+  assert.match(draft.text, /END-OF-ORIGINAL/)
+  assert.ok(draft.text.length > 2000)
+  assert.equal(draft.cc, '"Chen, Wei" <reviewer@example.invalid>')
+  assert.equal(draft.reply.uidValidity, 11)
+  assert.equal(f.peer.sent.length, 0)
+
+  const edited = await f.drafts.action({ ...draft, action: 'update', text: '收到，下一步继续。\n' + draft.text })
+  assert.deepEqual(edited.reply, draft.reply)
+  const preview = await f.drafts.action({ action: 'preview', id: edited.id, revision: edited.revision })
+  await f.drafts.action({ action: 'send', id: edited.id, preview: preview.id, confirmed: true })
+
+  assert.equal(f.peer.sent.length, 1)
+  const sent = await simpleParser(f.peer.sent[0])
+  assert.deepEqual(sent.cc.value, [{ address: 'reviewer@example.invalid', name: 'Chen, Wei' }])
+  assert.equal(sent.inReplyTo, '<original@fixture.invalid>')
+  assert.deepEqual(sent.references, ['<earlier@fixture.invalid>', '<original@fixture.invalid>'])
+  assert.match(sent.text, /END-OF-ORIGINAL/)
 })
 test('reply quote preserves ordinary long bodies but keeps an explicit 20k ceiling',()=>{
   const original={from:[{address:'from@example.invalid'}],to:[],cc:[],subject:'Subject',date:'',text:originalText,messageId:'original',references:''};assert.match(buildReplyMessage(original,'reply','me@example.invalid','').text,/END-OF-ORIGINAL/);assert.match(buildReplyMessage({...original,text:'字'.repeat(21000)},'reply','me@example.invalid','').text,/truncated/)

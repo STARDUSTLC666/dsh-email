@@ -247,8 +247,10 @@ export function renderSearch(value: EmailSearchResult): TextBlock[] {
     const window = scan.scanOffset === 0 ? '最近 ' + scan.scanned : '跳过最新 ' + scan.scanOffset + ' 封后的 ' + scan.scanned
     const completeness = scan.complete ? '完整信封扫描' : '未覆盖全文件夹'
     const continuation = scan.nextScanOffset === undefined ? '' : '；继续更早信封可用 headerScanOffset=' + scan.nextScanOffset + '、headerScanLimit=' + scan.scanLimit
-    const body = value.bodyScan ? '；正文只检查 ' + value.bodyScan.scanned + ' 封（上限 ' + value.bodyScan.scanLimit + '），正文未覆盖全文件夹' : '；未扫描正文'
-    const server = value.serverSearchFailed ? '服务端部分搜索失败' : '服务端候选 ' + (value.serverMatchCount ?? 0) + ' 条'
+    const body = value.bodyScan ? '；正文核验 ' + value.bodyScan.scanned + ' 封（最近 ' + value.bodyScan.scanLimit + ' 封内）'
+      + (value.hasMore ? '，该窗口还有匹配，可增加 offset 继续' : '') : '；未扫描正文'
+    const server = value.serverSearchFailed ? '服务端部分搜索失败'
+      : value.serverMatchCount === undefined ? '直接扫描指定窗口' : '服务端候选 ' + value.serverMatchCount + ' 条'
     const note = server + '；已扫描' + window + ' 封的信封（文件夹共 ' + scan.mailboxTotal + ' 封，' + completeness + '，窗口内信封命中 ' + scan.matched + ' 条）' + continuation + body
     const summary = (value.messages.length ? '本页 ' + value.messages.length + ' 条' : '本页未命中，不能据此断言整个邮箱没有匹配') + (value.offset > 0 ? '，已跳过最新 ' + value.offset + ' 条匹配' : '')
     const rows = value.messages.map((message, i) => '#' + (i + 1) + ' ' + describeMessage(message))
@@ -256,7 +258,9 @@ export function renderSearch(value: EmailSearchResult): TextBlock[] {
   }
   if (value.searchSource === 'server') {
     const rows = value.messages.map((message, i) => '#' + (i + 1) + ' ' + describeMessage(message))
-    return oneText('账号 ' + value.account + '，在文件夹 "' + value.folder + '" 中搜索 "' + value.query + '"：服务端报告 ' + value.count + ' 个候选；已核实本页 ' + value.messages.length + ' 条（跳过最新 ' + value.offset + ' 条）。' + (rows.length ? '\n\n' + rows.join('\n') : ''))
+    const next = value.hasMore === true ? '还有已核实的匹配，可增加 offset 继续。'
+      : value.hasMore === false ? '服务端候选已核完。' : '本次未核完服务端候选。'
+    return oneText('账号 ' + value.account + '，在文件夹 "' + value.folder + '" 中搜索 "' + value.query + '"：服务端报告 ' + value.count + ' 个候选；已核实本页 ' + value.messages.length + ' 条（跳过最新 ' + value.offset + ' 条）。' + next + (rows.length ? '\n\n' + rows.join('\n') : ''))
   }
   const scanned = value.countKind === 'scanned'
   // 回退扫描只看了最近 scannedLimit 封，不知道全文件夹匹配数：不能把本页条数说成「共 N 条」。
@@ -312,7 +316,8 @@ export function renderMark(value: EmailMarkResult): TextBlock[] {
 
 export function renderReply(value: EmailReplyResult): TextBlock[] {
   const rejected = value.rejected.length > 0 ? '；被拒：' + value.rejected.join(', ') : ''
-  return oneText('账号 ' + value.account + ' 已' + REPLY_LABELS[value.mode] + ' uid=' + value.originalUid + ' 的邮件：收件人 ' + value.to.join(', ') + '，主题「' + value.subject + '」，messageId: ' + value.messageId + rejected)
+  const cc = value.cc ? '，抄送 ' + value.cc : ''
+  return oneText('账号 ' + value.account + ' 已' + REPLY_LABELS[value.mode] + ' uid=' + value.originalUid + ' 的邮件：收件人 ' + value.to.join(', ') + cc + '，主题「' + value.subject + '」，messageId: ' + value.messageId + rejected)
 }
 
 export function renderWatch(value: EmailWatchResult): TextBlock[] {
@@ -352,6 +357,7 @@ export const replySchema = {
     rejected: strArray,
     response: { type: 'string' },
     to: strArray,
+    cc: { type: 'string' },
     subject: { type: 'string' },
   },
   additionalProperties: true,
@@ -376,9 +382,9 @@ export const descriptions = {
   "email_list": 'IMAP uid is a positive integer; AgentMail uid is an opaque string message_id. AgentMail returns page counts: inspect hasMore/countExact instead of assuming mailbox totals. List recent emails in a mailbox folder (newest first). Returns uid, date, sender, subject and flags without message bodies; use email_read with a uid to fetch the full text. Optional since/until (dates like 2026-08-01) filter by received date.',
   "email_read": 'Read one full email message by its uid (from email_list or email_search). Returns the plain-text body (HTML mail is converted; oversized bodies are truncated) plus attachment metadata; use email_attachment to download one.',
   "email_mark": 'AgentMail supports flags and only INBOX-to-Archive label archiving; arbitrary IMAP moves are not supported there. Change an existing message: mark it read/unread, star/unstar it, or move it to another folder. Use after email_list/email_search when the user wants to tidy the mailbox (archive, clear unread, flag important mail). Moving uses the server MOVE/COPY so the uid changes; the new uid is reported when the server provides it.',
-  "email_search": 'AgentMail accounts use API relevance search (searchSource=api), exclude spam/trash/blocked/unauthenticated mail, and page with offset; headerScanOffset and IMAP fallbacks do not apply. For IMAP: Search sender, recipients and subject; verify server candidates against envelopes and arrival dates. If server SEARCH is empty, fails, or has no confirmed matches, scan local headers in batches without downloading bodies/attachments (default newest 5000, max 20000). headerScanOffset/Limit select an older header window; use headerScan.nextScanOffset to continue. offset pages MATCHES within that window. If no headers match and headerScanOffset=0, optional body fallback scans only bodySearchLimit recent arrivals. Inspect searchSource/headerScan/bodyScan: partial or zero results never prove the whole mailbox has no match. Results use descending mailbox UID arrival order, not Date-header or INTERNALDATE sorting. since/until filter INTERNALDATE (Date header only if unavailable).',
+  "email_search": 'AgentMail accounts use API relevance search (searchSource=api), exclude spam/trash/blocked/unauthenticated mail, and page with offset; headerScanOffset and IMAP fallbacks do not apply. For IMAP: Search sender, recipients and subject; verify server candidates against envelopes and arrival dates. In server results count is the number of candidates, not verified matches. hasMore is true when there is a verified match beyond this page, false when candidates are exhausted, and omitted when verification stopped at its limit. If server SEARCH is empty, fails, or has no confirmed matches, scan local headers in batches without downloading bodies/attachments (default newest 5000, max 20000). headerScanOffset/Limit select an older header window; use headerScan.nextScanOffset to continue. offset pages MATCHES within that window. If no headers match and headerScanOffset=0, optional body fallback scans only bodySearchLimit recent arrivals. Inspect searchSource/headerScan/bodyScan: partial or zero results never prove the whole mailbox has no match. Results use descending mailbox UID arrival order, not Date-header or INTERNALDATE sorting. since/until filter INTERNALDATE (Date header only if unavailable).',
   "email_send": 'AgentMail has a plugin limit of 10 attachments / 4 MiB total and uses its inbox API; a receipt means submission, not delivery. Send an email from a configured account, optionally with file attachments (absolute paths, or relative to the current session workspace; process cwd is the fallback without a session). Saved blocked-address/domain rules reject To/Cc recipients even when sendApproval is off. Plugin confirmation is required by default, unless sendApproval is disabled or every To/Cc recipient matches saved trust rules with skipApproval enabled. Host permissions still apply. Full Access refuses a send that still requires plugin confirmation; use email_draft for human review and explicit sending. Never invent recipients or content without the user\'s instruction.',
-  "email_reply": 'AgentMail reply/reply-all uses its thread-aware reply API; forwarding creates a new message. Reply to, reply-all to, or forward an existing message (mode: reply | reply-all | forward). Recipients come from the original message (your own address is excluded automatically), the subject gets a single Re:/Fwd: prefix, the original text is quoted underneath, and In-Reply-To/References headers keep mail clients threading correctly. mode=forward needs the to parameter. Plugin confirmation is required unless sendApproval is disabled or allowTrustedReply is explicitly enabled and every actual To/Cc matches saved trusted skipApproval rules. Reply envelopes are pinned after approval. HTML and optional locale/timeZone overrides are supported. Blocked recipients still stop delivery before SMTP and host permissions remain in effect. Never invent recipients or content without the user\'s instruction.',
+  "email_reply": 'AgentMail reply/reply-all uses its thread-aware reply API; forwarding creates a new message. Reply to, reply-all to, or forward an existing message (mode: reply | reply-all | forward). Reply-all preserves original Cc recipients, excludes your own addresses and deduplicates original recipients. The optional cc field adds recipients. The subject gets a single Re:/Fwd: prefix, the original text is quoted underneath, and In-Reply-To/References headers keep mail clients threading correctly. mode=forward needs the to parameter. Plugin confirmation is required unless sendApproval is disabled or allowTrustedReply is explicitly enabled and every actual To/Cc matches saved trusted skipApproval rules. Reply envelopes are pinned after approval. HTML and optional locale/timeZone overrides are supported. Blocked recipients still stop delivery before SMTP and host permissions remain in effect. Never invent recipients or content without the user\'s instruction.',
   "email_folders": 'List the mailbox folders of an account (INBOX, Sent, Trash, custom folders, ...). Use the returned path values as the folder argument of the other email tools.',
   "email_health": 'AgentMail accounts show fixed regional API endpoints instead of IMAP/SMTP servers. Self-check for dsh-email: summarizes configured accounts (provider / IMAP / SMTP hosts) without any network connection and never shows passwords. Run this first when troubleshooting.',
   "email_attachment": 'AgentMail downloads are limited to 20 MiB or the smaller configured maximum. Download one attachment of a message to a local file (size capped by maxAttachmentBytes). The index matches the attachments array of email_read. Returns the absolute path of the written file.',

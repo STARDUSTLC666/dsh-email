@@ -22,6 +22,15 @@ export interface DraftFields { account: string; to: string; cc: string; subject:
 interface Document { version: 1; drafts: EmailDraft[] }
 export class DraftError extends Error { constructor(message: string, readonly code = 'draft-invalid') { super(message) } }
 const isId = (id: unknown): id is string => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id)
+
+function validReplyReference(reply: NonNullable<EmailDraft['reply']>): boolean {
+  const { uid, folder, uidValidity } = reply
+  const validUid = typeof uid === 'number' ? Number.isSafeInteger(uid) && uid > 0
+    : typeof uid === 'string' && uid.length > 0 && uid.length <= 998 && !/[\r\n\0]/.test(uid)
+  return validUid && typeof folder === 'string' && folder.length <= 1024
+    && (uidValidity === undefined || Number.isSafeInteger(uidValidity) && uidValidity > 0)
+}
+
 export function draftFields(input: unknown): DraftFields {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new DraftError('草稿内容必须是对象')
   const raw = input as Record<string, unknown>, fields = {} as DraftFields
@@ -55,8 +64,7 @@ export class DraftStore {
         if (!isId(draft.id) || !Number.isSafeInteger(draft.revision) || draft.revision < 1 || !['draft', 'scheduled', 'sending', 'sent', 'uncertain'].includes(draft.state)) throw new Error('invalid draft')
         draftFields(draft)
         if(draft.state==='scheduled'&&(!draft.sendAt||!/^[a-f0-9]{64}$/.test(draft.scheduleKey||'')||!draft.scheduledAttachments||Array.isArray(draft.scheduledAttachments)||Object.values(draft.scheduledAttachments).some(x=>typeof x!=='string'||!/^[a-f0-9]{64}$/.test(x))))throw new Error('invalid scheduled draft')
-        if (draft.reply && (!(typeof draft.reply.uid === 'number' && Number.isSafeInteger(draft.reply.uid) && draft.reply.uid > 0 || typeof draft.reply.uid === 'string' && draft.reply.uid.length > 0 && draft.reply.uid.length <= 998 && !/[\r\n\0]/.test(draft.reply.uid)) || typeof draft.reply.folder !== 'string' || draft.reply.folder.length > 1024)) throw new Error('invalid reply reference')
-        if (draft.reply?.uidValidity !== undefined && (!Number.isSafeInteger(draft.reply.uidValidity) || draft.reply.uidValidity <= 0)) throw new Error('invalid reply UIDVALIDITY')
+        if (draft.reply && !validReplyReference(draft.reply)) throw new Error('invalid reply reference')
         if (!Array.isArray(draft.attachments) || draft.attachments.length > 10 || draft.attachments.some(file => !isId(file.id) || !isAbsolute(file.path) || typeof file.filename !== 'string' || typeof file.owned !== 'boolean')) throw new Error('invalid attachments')
         if(draft.state==='scheduled'&&(Object.keys(draft.scheduledAttachments!).length!==draft.attachments.length||draft.attachments.some(file=>!file.owned||!Object.hasOwn(draft.scheduledAttachments!,file.id))))throw new Error('invalid scheduled attachments')
       }
@@ -97,11 +105,15 @@ export class DraftStore {
     if (!draft) throw new DraftError('草稿不存在或已被移除', 'draft-missing')
     return draft
   }
-  async create(fields: DraftFields, attachments: DraftAttachment[] = [], signal?: AbortSignal): Promise<EmailDraft> {
+  async create(fields: DraftFields, attachments: DraftAttachment[] = [], signal?: AbortSignal, reply?: EmailDraft['reply']): Promise<EmailDraft> {
     if (attachments.length > 10 || attachments.some(file => !isId(file.id) || !isAbsolute(file.path) || typeof file.filename !== 'string' || typeof file.owned !== 'boolean')) throw new DraftError('草稿最多 10 个有效本地附件')
+    if (reply && !validReplyReference(reply)) throw new DraftError('回复草稿的原邮件编号或文件夹无效')
     return this.mutate(doc => {
       if (doc.drafts.length >= 50) throw new DraftError('已有 50 份草稿，请先删除不再需要的草稿')
-      const now = new Date().toISOString(), draft: EmailDraft = { ...draftFields(fields), id: randomUUID(), revision: 1, attachments, state: 'draft', createdAt: now, updatedAt: now }
+      const now = new Date().toISOString(), draft: EmailDraft = {
+        ...draftFields(fields), id: randomUUID(), revision: 1, attachments, state: 'draft', createdAt: now, updatedAt: now,
+        ...(reply ? { reply: { ...reply } } : {}),
+      }
       doc.drafts.unshift(draft); return draft
     }, signal)
   }

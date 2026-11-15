@@ -57,7 +57,7 @@ export declare class DraftStore {
     private withLock;
     private mutate;
     get(id: string): Promise<EmailDraft>;
-    create(fields: DraftFields, attachments?: DraftAttachment[], signal?: AbortSignal): Promise<EmailDraft>;
+    create(fields: DraftFields, attachments?: DraftAttachment[], signal?: AbortSignal, reply?: EmailDraft['reply']): Promise<EmailDraft>;
     change(id: string, expectedRevision: unknown, action: (draft: EmailDraft) => void, signal?: AbortSignal): Promise<EmailDraft>;
     remove(id: string, revision: unknown, signal?: AbortSignal): Promise<void>;
     removeOwnedFile(id: string, file: DraftAttachment): Promise<void>;

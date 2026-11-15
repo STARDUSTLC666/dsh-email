@@ -6,6 +6,7 @@ import {
   EmailMailboxBackend,
   EmailDraftBackend,
   DraftStore,
+  EmailService,
   resolveEmailSettings,
   EmailPool,
 } from '../lib/index.js'
@@ -28,14 +29,18 @@ async function fixture(t) {
     date: '2026-10-21T00:00:00Z',
     from: [{ address: 'human@example.invalid' }],
     to: [{ address: config.user }],
-    cc: [],
+    cc: [{ address: 'reviewer@example.invalid' }, { address: config.user }],
     subject: '报价单',
     text: '<script>untrusted text</script>',
     attachments: [],
     truncated: false,
   }
+  const service = new EmailService(settings)
+  t.after(() => service.dispose())
+  service.read = async () => original
   const pool = {
-    read: async () => original,
+    read: service.read,
+    prepareReply: service.prepareReply.bind(service),
     list: async (...args) => {
       calls.push(args)
       return {
@@ -135,7 +140,8 @@ test('reply buttons create editable drafts without sending; confirmation retains
       folder: 'INBOX',
       uid: f.original.uid,
     })
-  assert.deepEqual(draft.reply, { uid: f.original.uid, folder: 'INBOX' })
+  assert.deepEqual(draft.reply, { uid: f.original.uid, folder: 'INBOX', mode: 'reply' })
+  assert.equal(draft.revision, 1)
   assert.equal(draft.to, 'human@example.invalid')
   assert.equal(f.calls.length, 0)
   assert.equal(
@@ -170,6 +176,25 @@ test('reply buttons create editable drafts without sending; confirmation retains
   })
   assert.deepEqual(f.calls[0][7], draft.reply)
   assert.equal(f.calls.length, 1)
+})
+
+test('reply-all carries Cc from the first saved revision through preview and confirmation', async (t) => {
+  const f = await fixture(t)
+  const draft = await f.backend.action({ action: 'replyDraft', uid: f.original.uid, replyAll: true })
+  const reloaded = await f.store.get(draft.id)
+  assert.equal(reloaded.revision, 1)
+  assert.equal(reloaded.to, 'human@example.invalid')
+  assert.equal(reloaded.cc, 'reviewer@example.invalid')
+  assert.deepEqual(reloaded.reply, { uid: f.original.uid, folder: 'INBOX', mode: 'reply-all' })
+  const preview = await f.drafts.action({ action: 'preview', id: reloaded.id, revision: reloaded.revision })
+  assert.deepEqual(preview.matching.rows.map(({ field, address }) => [field, address]), [
+    ['to', 'human@example.invalid'],
+    ['cc', 'reviewer@example.invalid'],
+  ])
+  assert.equal(f.calls.length, 0)
+  await f.drafts.action({ action: 'send', id: reloaded.id, preview: preview.id, confirmed: true })
+  assert.equal(f.calls[0][4], reloaded.cc)
+  assert.deepEqual(f.calls[0][7], reloaded.reply)
 })
 test('mailbox list preserves explicit account, folder and match pagination without mutating message content', async (t) => {
   const f = await fixture(t),

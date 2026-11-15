@@ -1,4 +1,5 @@
 import type { EmailAttachmentMeta, EmailRichBody } from './types.js';
+export declare const mailContentId: (value?: string) => string;
 export declare function safeMailLink(value: string): string | undefined;
 /** Parse into React data, never sanitized HTML or an executable DOM. */
 export declare function richEmailBody(html: unknown, attachments?: EmailAttachmentMeta[], styles?: boolean): EmailRichBody | undefined;

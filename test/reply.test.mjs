@@ -24,13 +24,24 @@ test('reply targets the original sender only, quotes the body, sets thread heade
   assert.match(built.text, /张三 <zhangsan@example.com> 写道：/)
 })
 
-test('reply-all excludes self, dedupes, keeps from + to + cc', () => {
-  const built = buildReplyMessage(original, 'reply-all', 'ME@qq.com', 'ok')
-  const to = built.to
-  assert.ok(to.includes('zhangsan@example.com'))
-  assert.ok(to.includes('lisi@example.com'))
-  assert.ok(to.includes('wangwu@example.com'))
-  assert.ok(!to.toLowerCase().includes('me@qq.com'))
+test('reply-all preserves To and Cc, excludes both account addresses and dedupes across fields', () => {
+  const built = buildReplyMessage({
+    ...original,
+    cc: [...original.cc, { address: 'LISI@example.com' }, { address: 'me@qq.com' }, { address: 'login@example.com' }],
+  }, 'reply-all', ['ME@qq.com', 'login@example.com'], 'ok')
+  assert.equal(built.to, '张三 <zhangsan@example.com>, lisi@example.com')
+  assert.equal(built.cc, 'wangwu@example.com')
+})
+
+test('reply-all to a sent copy with only external Cc still has a valid To', () => {
+  const built = buildReplyMessage({
+    ...original,
+    from: [{ address: 'me@qq.com' }],
+    to: [{ address: 'login@example.com' }],
+    cc: [{ address: 'one@example.com' }, { address: 'two@example.com' }],
+  }, 'reply-all', ['me@qq.com', 'login@example.com'], 'ok')
+  assert.equal(built.to, 'one@example.com')
+  assert.equal(built.cc, 'two@example.com')
 })
 
 test('reply-all falling back to sender when everyone else is self', () => {

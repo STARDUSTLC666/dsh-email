@@ -1,13 +1,14 @@
 import { ImapFlow } from 'imapflow'
-import { richEmailBody } from './rich-body.js'
+import { randomUUID } from 'node:crypto'
+import { mailContentId, richEmailBody } from './rich-body.js'
 import { previewImapTrash, moveImapMessages } from './imap-trash.js'
 import { folderPath, assertCustomFolder, previewFolderMutation, purgeConfirmedFolder, type FolderMutationSnapshot } from './imap-folders.js'
 import nodemailer, { type Transporter } from 'nodemailer'
 import type SMTPTransport from 'nodemailer/lib/smtp-transport/index.js'
 import { createConnection, type Socket } from 'node:net'
 import { constants } from 'node:fs'
-import { mkdir, open, stat, writeFile } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { mkdir, open, stat, unlink, writeFile } from 'node:fs/promises'
+import { basename, extname, join } from 'node:path'
 import type { Readable } from 'node:stream'
 import type { AuthKind, ResolvedEmailConfig, ResolvedEmailSettings } from './config.js'
 import { getFreshAccessToken, OAuth2Error } from './oauth2.js'
@@ -269,6 +270,11 @@ export interface BuiltReply {
   references?: string
 }
 
+/** Explicit Cc recipients are additional to those carried by reply-all. */
+export function replyCc(reply: BuiltReply, extra?: string): string {
+  return [reply.cc, extra?.trim()].filter(Boolean).join(', ')
+}
+
 /** Pull Message-ID / References out of a raw RFC822 source (header section only). */
 export function extractMessageIds(source: Buffer): { messageId: string; references: string } {
   const headerEnd = source.indexOf('\r\n\r\n')
@@ -282,7 +288,11 @@ export function extractMessageIds(source: Buffer): { messageId: string; referenc
 
 function formatAddress(entry: AddressEntry): string {
   if (entry.address === undefined) return entry.name ?? ''
-  return entry.name !== undefined && entry.name !== '' ? entry.name + ' <' + entry.address + '>' : entry.address
+  const name = entry.name?.replace(/[\r\n]+/g, ' ').trim()
+  if (!name) return entry.address
+  // Quote display names with address-list punctuation, such as "Last, First".
+  const label = /[",\\<>()[\]:;@]/.test(name) ? '"' + name.replace(/["\\]/g, '\\$&') + '"' : name
+  return label + ' <' + entry.address + '>'
 }
 
 function dedupeAddresses(entries: AddressEntry[], exclude: string | readonly string[]): AddressEntry[] {
@@ -333,9 +343,14 @@ export function buildReplyMessage(original: OriginalDigest, mode: EmailReplyMode
     }
   }
   let recipients: AddressEntry[]
+  let copyRecipients: AddressEntry[] = []
   if (mode === 'reply-all') {
-    recipients = dedupeAddresses([...original.from, ...original.to, ...original.cc], self)
-    if (recipients.length === 0) recipients = dedupeAddresses(original.from, '')
+    recipients = dedupeAddresses([...original.from, ...original.to], self)
+    copyRecipients = dedupeAddresses(original.cc, [...self, ...recipients.map(entry => entry.address ?? '')])
+    if (recipients.length === 0) {
+      // A sent copy may have only external Cc recipients left after removing self.
+      recipients = copyRecipients.length ? copyRecipients.splice(0, 1) : dedupeAddresses(original.from, '')
+    }
   } else {
     recipients = dedupeAddresses(original.from, '')
   }
@@ -350,6 +365,7 @@ export function buildReplyMessage(original: OriginalDigest, mode: EmailReplyMode
     + quoteText.split('\n').map(line => '> ' + line).join('\n')
   const built: BuiltReply = {
     to: recipients.map(formatAddress).join(', '),
+    ...(copyRecipients.length ? { cc: copyRecipients.map(formatAddress).join(', ') } : {}),
     subject: 'Re: ' + stripReplyPrefix(original.subject, /re:/),
     text: body.text + '\n\n' + quote,
     ...(body.html ? { html: body.html + '<p>' + escapeMailHtml(line) + '</p><blockquote>' + escapeMailHtml(quoteText).replace(/\n/g, '<br>') + '</blockquote>' } : {}),
@@ -884,30 +900,24 @@ export class EmailPool {
     return this.withImap(name, folderName, async (client) => {
       const mailbox = client.mailbox
       const total = mailbox === false ? 0 : mailbox.exists
-      // imapflow types uidValidity as number | bigint; the wire format is 32-bit.
-      const uidValidity = mailbox === false ? 0 : Number(mailbox.uidValidity ?? 0)
-      let scopeCount = total
-      let uids: number[] = []
-      const hasDateFilter = since !== undefined || until !== undefined
-      if (unreadOnly || hasDateFilter) {
-        const query: Record<string, unknown> = {}
-        if (unreadOnly) query.seen = false
-        if (since !== undefined) query.since = since
-        if (until !== undefined) query.before = until
-        const found = await client.search(query, { uid: true })
-        signal?.throwIfAborted()
-        uids = Array.isArray(found) ? found : []
-        scopeCount = uids.length
-      } else if (total > 0) {
-        const start = Math.max(1, total - (limit + offset) + 1)
-        const fetched = await client.fetchAll(start + ':*', { uid: true })
-        signal?.throwIfAborted()
-        uids = fetched.map(message => message.uid)
+      const uidValidity = this.uidValidityOf(client)
+      if (!unreadOnly && since === undefined && until === undefined) {
+        // Sequence numbers are contiguous even when UIDs have gaps. Use the
+        // selected mailbox's size to request only this page in one command.
+        const end = total - offset
+        const start = Math.max(1, end - limit + 1)
+        const messages = end >= start ? await this.fetchListed(client, start + ':' + end, signal) : []
+        return { account: name, count: total, folder: folderName, uidValidity, messages }
       }
-      uids.reverse()
-      const window = uids.slice(offset, offset + limit)
-      const messages = await this.fetchListed(client, window, signal)
-      return { account: name, count: scopeCount, folder: folderName, uidValidity, messages }
+      const query: Record<string, unknown> = {}
+      if (unreadOnly) query.seen = false
+      if (since !== undefined) query.since = since
+      if (until !== undefined) query.before = until
+      const found = await client.search(query, { uid: true })
+      signal?.throwIfAborted()
+      const uids = Array.isArray(found) ? [...found].sort((a, b) => b - a) : []
+      const messages = await this.fetchListed(client, uids.slice(offset, offset + limit), signal)
+      return { account: name, count: uids.length, folder: folderName, uidValidity, messages }
     }, true, signal)
   }
 
@@ -953,7 +963,8 @@ export class EmailPool {
       const dateRange: Record<string, unknown> = {}
       if (since !== undefined) dateRange.since = since
       if (until !== undefined) dateRange.before = until
-      const found = await Promise.allSettled([
+      // Older windows explicitly request a local scan.
+      const found = options.headerScanOffset ? [] : await Promise.allSettled([
         client.search({ subject: query, ...dateRange }, { uid: true }),
         client.search({ from: query, ...dateRange }, { uid: true }),
         client.search({ to: query, ...dateRange }, { uid: true }),
@@ -962,37 +973,37 @@ export class EmailPool {
       signal?.throwIfAborted()
       const serverSearchFailed = found.some(result => result.status === 'rejected')
       const uids = [...new Set(found.flatMap(result => result.status === 'fulfilled' && Array.isArray(result.value) ? result.value : []))].sort((a, b) => b - a)
-      if (uids.length > 0 && !serverSearchFailed && !options.headerScanOffset) {
-        // The sample has to cover the requested page (offset + limit) — the same
-        // window the fallback scan looks at — so one FETCH serves both the
-        // verification and the rows that are handed out.
-        const confirmed = await this.searchHits(client, uids, query, offset + limit, signal, since, until)
+      if (uids.length > 0 && !serverSearchFailed) {
+        const end = offset + limit
+        const { confirmed, exhausted } = await this.searchHits(client, uids, query, end + 1, signal, since, until)
         if (confirmed.length > 0) {
-          // The server's list holds up, so its size is reported as the match
-          // count; only rows that were confirmed are ever handed out.
-          return { account: name, query, count: uids.length, folder: folderName, offset, messages: confirmed.slice(offset, offset + limit), searchSource: 'server', serverMatchCount: uids.length }
+          return {
+            account: name, query, count: uids.length, countExact: false, folder: folderName, offset,
+            messages: confirmed.slice(offset, end), searchSource: 'server', serverMatchCount: uids.length,
+            ...(confirmed.length > end ? { hasMore: true } : exhausted ? { hasMore: false } : {}),
+          }
         }
       }
       // Header search is cheap and independent of the much smaller body scan.
       // Never turn a silent empty SEARCH into a claim about the whole mailbox.
       const headers = await this.searchHeaders(client, query, options, since, until, signal)
-      const coverage = { headerScan: headers.scan, serverMatchCount: uids.length, serverSearchFailed }
+      const coverage = { headerScan: headers.scan, ...(found.length ? { serverMatchCount: uids.length, serverSearchFailed } : {}) }
       if (headers.uids.length > 0) {
         const messages = await this.fetchListed(client, headers.uids.slice(offset, offset + limit), signal)
-        return { account: name, query, count: headers.uids.length, folder: folderName, offset, messages,
+        return { account: name, query, count: headers.uids.length, folder: folderName, offset, messages, hasMore: offset + limit < headers.uids.length,
           countKind: 'scanned', scannedLimit: headers.scan.scanned, searchSource: 'local-headers', ...coverage }
       }
       if (this.settings.bodySearchFallback && !options.headerScanOffset) {
-        const { messages, scanned } = await this.searchBodies(client, query, folderName, limit, offset, since, until, signal)
+        const { messages, scanned, hasMore } = await this.searchBodies(client, query, limit, offset, since, until, signal)
         // 本地扫描不知道全文件夹有多少匹配，count 只是本页条数：用 countKind
         // 让渲染说「本页 N 条（仅扫描最近 bodySearchLimit 封）」，不能说「共 N 条」。
         return {
-          account: name, query, count: messages.length, folder: folderName, offset, messages,
+          account: name, query, count: messages.length, folder: folderName, offset, messages, hasMore,
           countKind: 'scanned', scannedLimit: this.settings.bodySearchLimit,
           searchSource: 'local-body', bodyScan: { scanned, scanLimit: this.settings.bodySearchLimit }, ...coverage,
         }
       }
-      return { account: name, query, count: 0, folder: folderName, offset, messages: [], countKind: 'scanned', scannedLimit: headers.scan.scanned, searchSource: 'local-headers', ...coverage }
+      return { account: name, query, count: 0, folder: folderName, offset, messages: [], hasMore: false, countKind: 'scanned', scannedLimit: headers.scan.scanned, searchSource: 'local-headers', ...coverage }
     }, true, signal)
   }
 
@@ -1025,37 +1036,47 @@ export class EmailPool {
     } }
   }
 
-  /**
-   * Confirm server-side hits against the mailbox itself: fetch the envelopes
-   * of the newest candidates — the same window the body-scan fallback looks at
-   * — and keep only those that really carry the query in subject/from/to/cc,
-   * the four fields the server was asked about. No body is downloaded here,
-   * and uids the server made up simply return nothing.
-   */
-  private async searchHits(client: ImapFlow, uids: number[], query: string, need: number, signal?: AbortSignal, since?: Date, until?: Date): Promise<ListedMessage[]> {
-    const sample = uids.slice(0, Math.min(uids.length, Math.max(this.settings.bodySearchLimit, need)))
-    signal?.throwIfAborted()
-    const fetched = await client.fetchAll(sample, { uid: true, envelope: true, flags: true, size: true, bodyStructure: true, internalDate: true }, { uid: true })
-    signal?.throwIfAborted()
-    return fetched
-      .filter(message => {
+  /** Confirm the page and one lookahead match. Buffer only one candidate batch at a time. */
+  private async searchHits(client: ImapFlow, uids: number[], query: string, need: number, signal?: AbortSignal, since?: Date, until?: Date): Promise<{ confirmed: ListedMessage[]; exhausted: boolean }> {
+    const confirmed: ListedMessage[] = []
+    const firstBatchSize = this.settings.bodySearchLimit
+    // Keep the initial trust check independent of the requested page. Once a
+    // candidate matches, allow for stale or unrelated hits in later batches.
+    const batchLimit = 500
+    const maxCandidates = Math.min(uids.length, Math.max(firstBatchSize, need) + batchLimit)
+    let checked = 0
+    while (checked < maxCandidates && confirmed.length < need) {
+      signal?.throwIfAborted()
+      const batchSize = checked === 0 ? firstBatchSize : batchLimit
+      const batch = uids.slice(checked, Math.min(maxCandidates, checked + batchSize))
+      const requested = new Set(batch)
+      const fetched = await client.fetchAll(batch, { uid: true, envelope: true, flags: true, size: true, bodyStructure: true, internalDate: true }, { uid: true })
+      signal?.throwIfAborted()
+      checked += batch.length
+      for (const message of fetched.sort((a, b) => b.uid - a.uid)) {
+        if (!requested.delete(message.uid)) continue
         const date = message.internalDate ?? message.envelope?.date
-        if (since !== undefined && (date === undefined || date < since)) return false
-        if (until !== undefined && (date === undefined || date >= until)) return false
+        if (since !== undefined && (date === undefined || date < since)) continue
+        if (until !== undefined && (date === undefined || date >= until)) continue
         const envelope = message.envelope
         const addressText = [envelope?.from, envelope?.to, envelope?.cc].map(flattenAddressText).join(' ')
-        return messageMatchesQuery(envelope?.subject ?? '', addressText, '', query)
-      })
-      .map(message => listedFrom(message, message.size, structureHasAttachment(message.bodyStructure)))
-      .sort((a, b) => Number(b.uid) - Number(a.uid))
+        if (!messageMatchesQuery(envelope?.subject ?? '', addressText, '', query)) continue
+        confirmed.push(listedFrom(message, message.size, structureHasAttachment(message.bodyStructure)))
+        if (confirmed.length === need) break
+      }
+      // A whole batch with no confirmed hits is a poor basis for trusting SEARCH.
+      // Let the lighter sequence-based header scan cover the mailbox window.
+      if (confirmed.length === 0) break
+    }
+    return { confirmed, exhausted: checked === uids.length }
   }
 
   /** Client-side scan of the tail of the mailbox, newest first. */
-  private async searchBodies(client: ImapFlow, query: string, folder: string, limit: number, offset: number, since?: Date, until?: Date, signal?: AbortSignal): Promise<{ messages: ListedMessage[]; scanned: number }> {
+  private async searchBodies(client: ImapFlow, query: string, limit: number, offset: number, since?: Date, until?: Date, signal?: AbortSignal): Promise<{ messages: ListedMessage[]; scanned: number; hasMore: boolean }> {
     signal?.throwIfAborted()
     const mailbox = client.mailbox
     const total = mailbox === false ? 0 : mailbox.exists
-    if (total === 0) return { messages: [], scanned: 0 }
+    if (total === 0) return { messages: [], scanned: 0, hasMore: false }
     const start = Math.max(1, total - this.settings.bodySearchLimit + 1)
     // 只取信封与 MIME 结构；正文在下面按 text/* 分段下载，附件不进正文匹配。
     const fetched = await client.fetchAll(
@@ -1064,10 +1085,9 @@ export class EmailPool {
     )
     const out: ListedMessage[] = []
     let scanned = 0
-    for (const message of [...fetched].reverse()) {
+    for (const message of fetched.sort((a, b) => b.uid - a.uid)) {
       signal?.throwIfAborted()
-      if (out.length >= offset + limit) break
-      scanned++
+      if (out.length > offset + limit) break
       const receivedAt = message.internalDate ?? message.envelope?.date
       if (since !== undefined && (receivedAt === undefined || receivedAt < since)) continue
       if (until !== undefined && (receivedAt === undefined || receivedAt >= until)) continue
@@ -1080,6 +1100,7 @@ export class EmailPool {
         try {
           const parsed = await parseRawMessage(message.source, 4096)
           signal?.throwIfAborted()
+          scanned++
           body = parsed.text
         } catch (error) {
           signal?.throwIfAborted()
@@ -1087,7 +1108,11 @@ export class EmailPool {
         }
       } else if (message.bodyStructure !== undefined) {
         try {
-          body = await this.bodyTextFromParts(client, message.uid, message.bodyStructure, 4096 * 4, signal) ?? ''
+          const text = await this.bodyTextFromParts(client, message.uid, message.bodyStructure, 4096 * 4, signal)
+          if (text !== undefined) {
+            scanned++
+            body = text
+          }
         } catch (error) {
           signal?.throwIfAborted()
           // 单封邮件分段下载失败不应中断整批回退扫描，继续用 subject/from/to/cc 匹配。
@@ -1097,16 +1122,16 @@ export class EmailPool {
         out.push(listedFrom(message, message.size, structureHasAttachment(message.bodyStructure)))
       }
     }
-    return { messages: out.slice(offset, offset + limit), scanned }
+    return { messages: out.slice(offset, offset + limit), scanned, hasMore: out.length > offset + limit }
   }
 
-  private async fetchListed(client: ImapFlow, uids: number[], signal?: AbortSignal): Promise<ListedMessage[]> {
+  private async fetchListed(client: ImapFlow, range: string | number[], signal?: AbortSignal): Promise<ListedMessage[]> {
     signal?.throwIfAborted()
-    if (uids.length === 0) return []
+    if (range.length === 0) return []
     const fetched = await client.fetchAll(
-      uids,
+      range,
       { uid: true, envelope: true, flags: true, size: true, bodyStructure: true },
-      { uid: true },
+      typeof range === 'string' ? undefined : { uid: true },
     )
     signal?.throwIfAborted()
     return fetched
@@ -1322,9 +1347,49 @@ export class EmailPool {
     }, true, signal)
   }
 
-  async downloadAttachment(accountName: string | undefined, folder: string, uid: number, index: number, workspaceHint?: string, signal?: AbortSignal, byteLimit?: number, expectedValidity?: number): Promise<EmailAttachmentResult> {
+  private attachmentLimit(byteLimit?: number): number {
     const cap = Math.min(this.settings.maxAttachmentBytes, byteLimit ?? this.settings.maxAttachmentBytes)
     if (!Number.isSafeInteger(cap) || cap < 1) throw new MailError('无效下载上限')
+    return cap
+  }
+
+  private async downloadPart(client: ImapFlow, uid: number, attachment: AttachmentPart, cap: number, signal?: AbortSignal) {
+    signal?.throwIfAborted()
+    if (attachment.size > cap) {
+      throw new MailError('附件 "' + attachment.filename + '" 大小 ' + attachment.size + ' 字节，超过上限 maxAttachmentBytes=' + cap)
+    }
+    const download = await client.download(uid, attachment.part, { uid: true, maxBytes: cap })
+    signal?.throwIfAborted()
+    if (download.content === undefined) throw new MailError('附件分段已不存在，请重新读取邮件后再下载')
+    const bytes = await collectStream(download.content, cap, signal)
+    return { bytes, filename: download.meta?.filename ?? attachment.filename }
+  }
+
+  /** Read the MIME section selected by the server-issued CID ticket. */
+  async readInlineAttachment(account: string, folder: string, uid: number, attachment: EmailAttachmentMeta, expectedValidity: number | undefined, byteLimit: number, signal?: AbortSignal): Promise<Buffer> {
+    const cap = this.attachmentLimit(byteLimit)
+    const cid = mailContentId(attachment.contentId)
+    if (!cid) throw new MailError('无法定位内嵌图片，请重新打开邮件')
+    return this.withImap(account, folder, async client => {
+      if (expectedValidity && expectedValidity !== this.uidValidityOf(client)) throw new MailError('UIDVALIDITY 已改变，请重新打开邮件')
+      let part = attachment
+      // BODYSTRUCTURE supplies a stable section in the usual read path. Whole
+      // MIME fallbacks have parser indexes instead, so resolve by Content-ID.
+      const hasSection = /^[1-9]\d*(?:\.[1-9]\d*)*$/.test(attachment.part)
+      if (!expectedValidity || !hasSection) {
+        const parts = expectedValidity
+          ? (await this.attachmentIndexOf(client, account, folder, uid, signal)).parts
+          : collectAttachmentParts((await client.fetchOne(uid, { uid: true, bodyStructure: true }, { uid: true }) || undefined)?.bodyStructure)
+        const matches = parts.filter(part => mailContentId(part.contentId) === cid && (!hasSection || part.part === attachment.part))
+        if (matches.length !== 1) throw new MailError('无法定位内嵌图片，请重新打开邮件')
+        part = matches[0]
+      }
+      return (await this.downloadPart(client, uid, part, cap, signal)).bytes
+    }, true, signal)
+  }
+
+  async downloadAttachment(accountName: string | undefined, folder: string, uid: number, index: number, workspaceHint?: string, signal?: AbortSignal, byteLimit?: number, expectedValidity?: number): Promise<EmailAttachmentResult> {
+    const cap = this.attachmentLimit(byteLimit)
     const name = this.resolveName(accountName)
     const cfg = this.account(name)
     const folderName = folder || cfg.inboxFolder
@@ -1343,14 +1408,8 @@ export class EmailPool {
       if (att === undefined) {
         throw new MailError('附件 #' + index + '（' + attachments[index].filename + '）无法在邮件结构中定位（可能是内嵌图片，暂不支持下载）')
       }
-      if (att.size > cap) {
-        throw new MailError('附件 "' + att.filename + '" 大小 ' + att.size + ' 字节，超过上限 maxAttachmentBytes=' + cap)
-      }
-      const dl = await client.download(uid, att.part, { uid: true, maxBytes: cap })
-      signal?.throwIfAborted()
-      if (dl.content === undefined) throw new MailError('附件分段已不存在，请重新读取邮件后再下载')
-      const buf = await collectStream(dl.content, cap, signal)
-      const safeName = sanitizeFilename(dl.meta?.filename ?? att.filename ?? attachments[index].filename)
+      const { bytes: buf, filename } = await this.downloadPart(client, uid, att, cap, signal)
+      const safeName = sanitizeFilename(filename)
       // Default the destination to the session workspace so the model can
       // read the file back; an explicit downloadDir always wins.
       const dir = this.settings.downloadDirExplicit
@@ -1359,10 +1418,7 @@ export class EmailPool {
           ? join(workspaceHint, '.dsh-email-downloads')
           : this.settings.downloadDir)
       await mkdir(dir, { recursive: true })
-      signal?.throwIfAborted()
-      const dest = await uniquePath(join(dir, safeName))
-      signal?.throwIfAborted()
-      await writeFile(dest, buf, signal === undefined ? undefined : { signal })
+      const dest = await writeUniqueAttachment(join(dir, safeName), buf, signal)
       return { account: name, uid, filename: safeName, contentType: att.contentType, size: buf.length, path: dest }
     }, true, signal)
   }
@@ -1436,10 +1492,11 @@ export class EmailPool {
         options,
       )
     }, true, signal)
+    const copy = replyCc(built, cc)
     const info = await this.sendMail(name, cfg, {
       from: senderOf(cfg),
       to: built.to,
-      cc,
+      cc: copy,
       subject: built.subject,
       text: built.text,
       ...(built.html ? { html: built.html } : {}),
@@ -1456,6 +1513,7 @@ export class EmailPool {
       rejected: Array.isArray(info.rejected) ? info.rejected.map(String) : [],
       response: typeof info.response === 'string' ? info.response : String(info.response ?? ''),
       to: built.to.split(',').map(part => part.trim()).filter(part => part !== ''),
+      ...(copy ? { cc: copy } : {}),
       subject: built.subject,
     }
   }
@@ -1535,15 +1593,30 @@ async function collectStream(stream: Readable, maxBytes: number, signal?: AbortS
   }
 }
 
-/** Avoid overwriting: append -1, -2, ... before the extension. */
-async function uniquePath(path: string): Promise<string> {
-  try { await stat(path) } catch { return path }
-  const dot = path.lastIndexOf('.')
-  const base = dot > 0 ? path.slice(0, dot) : path
-  const ext = dot > 0 ? path.slice(dot) : ''
-  for (let i = 1; i < 1000; i++) {
-    const candidate = base + '-' + i + ext
-    try { await stat(candidate) } catch { return candidate }
+/** Reserve the filename atomically, including across accounts and processes. */
+async function writeUniqueAttachment(path: string, bytes: Buffer, signal?: AbortSignal): Promise<string> {
+  const ext = extname(path)
+  const base = path.slice(0, path.length - ext.length)
+  for (let suffix = 0; suffix <= 1000; suffix++) {
+    signal?.throwIfAborted()
+    const tag = suffix === 1000 ? randomUUID() : String(suffix)
+    const candidate = suffix ? base + '-' + tag + ext : path
+    const file = await open(candidate, 'wx', 0o600).catch(error => {
+      if (error.code === 'EEXIST') return undefined
+      throw error
+    })
+    if (file === undefined) continue
+    try {
+      signal?.throwIfAborted()
+      await writeFile(file, bytes, { signal })
+      signal?.throwIfAborted()
+      await file.close()
+      return candidate
+    } catch (error) {
+      await file.close().catch(() => {})
+      await unlink(candidate).catch(() => {})
+      throw error
+    }
   }
-  return base + '-' + Date.now() + ext
+  throw new MailError('无法分配附件文件名，请稍后重试')
 }

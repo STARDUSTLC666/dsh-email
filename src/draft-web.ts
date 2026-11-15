@@ -78,8 +78,7 @@ export class EmailDraftBackend {
       const prepared = await this.runtime.getPool().prepareReply(fields.account || undefined, String(reference.folder || ''), reference.uid as number | string, (reference.mode || 'reply') as 'reply'|'reply-all'|'forward', fields.text, fields.to, fields.cc, signal, {html:fields.html,locale:typeof input.locale==='string'?input.locale:undefined})
       fields = draftFields({...fields,...prepared});reply = prepared.reply
     }
-    const created = await this.store.create(fields, files, signal)
-    return reply ? this.store.change(created.id, created.revision, draft => { draft.reply=reply }, signal) : created
+    return this.store.create(fields, files, signal, reply)
   }
   private async recover(signal?: AbortSignal): Promise<void> {
     for (const draft of await this.store.list()) if (draft.state === 'sending') {

@@ -2,7 +2,7 @@ import { EmailPool } from './mail-client.js';
 import { type MessageRef } from './agentmail.js';
 import type { Pop3WireOptions } from './pop3-wire.js';
 import type { ResolvedEmailSettings } from './config.js';
-import type { EmailFoldersResult, EmailReplyMode, EmailReplyResult, EmailMarkAction, EmailSearchOptions } from './types.js';
+import type { EmailFoldersResult, EmailReplyMode, EmailReplyResult, EmailMarkAction, EmailSearchOptions, InlineAttachmentRef } from './types.js';
 import type { downloadPublicBytes } from './public-download.js';
 import type { ReplyOptions } from './reply-locale.js';
 import type { FolderMutationSnapshot } from './imap-folders.js';
@@ -64,6 +64,7 @@ export declare class EmailService {
     search(account: string | undefined, query: string, folder: string, limit: number, offset: number, since?: Date, until?: Date, signal?: AbortSignal, options?: EmailSearchOptions): Promise<import("./types.js").EmailSearchResult>;
     mark(account: string | undefined, folder: string, uid: MessageRef, action: EmailMarkAction, target?: string, signal?: AbortSignal): Promise<import("./types.js").EmailMarkResult>;
     folders(account: string | undefined, subscribed: boolean, signal?: AbortSignal): Promise<EmailFoldersResult>;
+    readInlineAttachment(ref: InlineAttachmentRef, byteLimit: number, signal?: AbortSignal): Promise<Buffer>;
     downloadAttachment(account: string | undefined, folder: string, uid: MessageRef, index: number, workspace?: string, signal?: AbortSignal, byteLimit?: number, expectedValidity?: number): Promise<import("./types.js").EmailAttachmentResult>;
     send(account: string | undefined, to: string, subject: string, text: string | undefined, cc: string | undefined, paths: string[] | undefined, signal?: AbortSignal, html?: string): Promise<import("./types.js").EmailSendResult>;
     sendPrepared(account: string, to: string, subject: string, text: string, cc: string, attachments: Array<{

@@ -29,6 +29,16 @@ export interface EmailAttachmentMeta {
   contentId?: string
 }
 
+/** Internal attachment identity captured when the mailbox reader opens a message. */
+export interface InlineAttachmentRef {
+  account: string
+  folder: string
+  uid: number | string
+  uidValidity?: number
+  index: number
+  attachment: EmailAttachmentMeta
+}
+
 /** Inert, allowlisted email content. Only the mailbox backend resolves images. */
 export type EmailContentNode = string | { tag: string; children?: EmailContentNode[]; href?: string; image?: number; span?: number; style?: Record<string, string> }
 export interface EmailRichBody {
@@ -276,6 +286,7 @@ export interface EmailReplyResult {
   rejected: string[]
   response: string
   to: string[]
+  cc?: string
   subject: string
 }
 

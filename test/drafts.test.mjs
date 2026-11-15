@@ -44,6 +44,27 @@ test('separate stores serialize writes and stale revisions cannot overwrite user
   await assert.rejects(other.change(created[0].id, 1, draft => { draft.subject = '旧值' }), error => error.code === 'draft-conflict')
   assert.equal((await other.get(created[0].id)).subject, '已修改')
 })
+test('the draft tool persists recipients and the original reference together on creation', async t => {
+  const x = await setup(t)
+  const reply = { uid: 7, folder: 'INBOX', uidValidity: 11, mode: 'reply-all' }
+  const pool = x.runtime.getPool()
+  pool.prepareReply = async (...args) => {
+    assert.equal(args[2], reply.uid)
+    assert.equal(args[3], reply.mode)
+    return { ...x.fields, subject: 'Re: 原邮件', reply }
+  }
+  x.runtime.getPool = () => pool
+  const tool = buildEmailTools(x.runtime, x.backend).find(def => def.name === 'email_draft')
+  const draft = await tool.execute({ account: 'default', text: '回复', reply })
+  const saved = await new DraftStore(x.home).get(draft.id)
+  assert.equal(saved.revision, 1)
+  assert.equal(saved.cc, x.fields.cc)
+  assert.deepEqual(saved.reply, reply)
+
+  await assert.rejects(x.store.create(x.fields, [], undefined, { ...reply, uidValidity: 0 }), /原邮件编号/)
+  assert.equal((await x.store.list()).length, 1, 'a rejected reference does not leave a standalone draft')
+  assert.equal(x.sends.length, 0)
+})
 test('editing, cancellation and unconfirmed sends perform zero SMTP submissions', async t => {
   const x = await setup(t), draft = await x.backend.create(x.fields), edited = await x.backend.action({ ...x.fields, action: 'update', id: draft.id, revision: 1, text: '编辑后的正文' })
   const plan = await x.backend.action({ action: 'preview', id: draft.id, revision: edited.revision })

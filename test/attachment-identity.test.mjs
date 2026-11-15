@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { EmailPool, resolveEmailSettings, selectAttachmentPart } from '../lib/index.js'
 
@@ -23,6 +23,33 @@ test('legacy mailparser indexes consume each matching MIME section only once', (
   assert.equal(selectAttachmentPart(read, parts, 0), undefined)
   assert.equal(selectAttachmentPart(read, parts, 1)?.part, '2')
   assert.equal(selectAttachmentPart(read, parts, 2)?.part, '3')
+})
+
+test('legacy inline image indexes resolve the Content-ID among same-named MIME parts', async () => {
+  const pool = new EmailPool(resolveEmailSettings({ provider: 'qq', user: 'test@example.com', password: 'fixture' }))
+  const calls = []
+  pool.withImap = async (_account, _folder, run) => run({
+    mailbox: { uidValidity: 1 },
+    async fetchOne(uid, query) {
+      assert.equal(query.source, undefined)
+      return { uid, bodyStructure: { childNodes: [
+        { part: '2', type: 'image/png', size: 5, id: '<other@fixture>', parameters: { name: 'chart.png' } },
+        { part: '3', type: 'image/png', size: 6, id: '<chart@fixture>', parameters: { name: 'chart.png' } },
+      ] } }
+    },
+    async download(_uid, part) {
+      calls.push(part)
+      return { content: Readable.from([Buffer.from('image')]) }
+    },
+  })
+  const attachment = { filename: 'chart.png', contentType: 'image/png', size: 6, part: 'attachment-0', contentId: 'chart@fixture' }
+  const bytes = await pool.readInlineAttachment('default', 'INBOX', 7, attachment, 1, 1024)
+  assert.deepEqual(bytes, Buffer.from('image'))
+  await assert.rejects(
+    pool.readInlineAttachment('default', 'INBOX', 7, { ...attachment, contentId: 'missing@fixture' }, undefined, 1024),
+    /无法定位内嵌图片/,
+  )
+  assert.deepEqual(calls, ['3'])
 })
 
 for (const readFirst of [true, false]) {
@@ -58,3 +85,29 @@ for (const readFirst of [true, false]) {
     assert.equal(fetches[0][1].source, undefined, 'do not download the entire message')
   })
 }
+
+test('concurrent IMAP downloads with the same filename keep every file and its bytes', async (t) => {
+  const dir = mkdtempSync(join(import.meta.dirname, '.attachment-parallel-'))
+  t.after(() => { assert.equal(dirname(dir), import.meta.dirname); rmSync(dir, { recursive: true, force: true }) })
+  const pool = new EmailPool(resolveEmailSettings({ provider: 'qq', user: 'test@example.com', password: 'fixture' }))
+  // Exercise concurrent writers sharing a workspace, without an account queue.
+  pool.withImap = async (_account, _folder, run) => run({
+    mailbox: { uidValidity: 1 },
+    async fetchOne(uid) {
+      return { uid, bodyStructure: { part: '2', type: 'application/pdf', size: 8, disposition: 'attachment' } }
+    },
+    async download(uid) {
+      return { meta: { filename: 'report.pdf' }, content: Readable.from([Buffer.from('file-' + uid)]) }
+    },
+  })
+  const destination = join(dir, '.dsh-email-downloads')
+  const existing = await pool.downloadAttachment(undefined, 'INBOX', 1, 0, dir)
+  assert.equal(existing.path, join(destination, 'report.pdf'))
+  writeFileSync(existing.path, 'keep existing')
+
+  const uids = [2, 3, 4, 5, 6, 7]
+  const results = await Promise.all(uids.map(uid => pool.downloadAttachment(undefined, 'INBOX', uid, 0, dir)))
+  assert.equal(new Set(results.map(file => file.path)).size, results.length)
+  assert.deepEqual(results.map(file => readFileSync(file.path, 'utf8')), uids.map(uid => 'file-' + uid))
+  assert.equal(readFileSync(existing.path, 'utf8'), 'keep existing')
+})

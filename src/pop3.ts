@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, open, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { simpleParser } from 'mailparser'
-import { richEmailBody } from './rich-body.js'
+import { mailContentId, richEmailBody } from './rich-body.js'
 import { compile as compileHtmlToText } from 'html-to-text'
 import type { ResolvedEmailSettings } from './config.js'
 import { clampInt } from './config.js'
@@ -156,13 +156,31 @@ export class Pop3Client {
         ...(bodyScanned ? { bodyScan: { scanned: bodyScanned, scanLimit: this.settings.bodySearchLimit } } : {}) }
     }, signal)
   }
+  private async attachmentOf(wire: Pop3Wire, uid: number | string, index: number, byteLimit?: number) {
+    const entry = this.entry(await this.index(wire), uid)
+    const parsed = await this.parsed(await this.raw(wire, entry))
+    wire.signal.throwIfAborted()
+    const attachment = parsed.attachments?.[index]
+    if (!Number.isInteger(index) || index < 0 || !attachment) throw new Pop3WireError('附件序号无效，请重新读取邮件查看附件列表')
+    const cap = Math.min(this.settings.maxAttachmentBytes, 20 * 1024 * 1024, byteLimit ?? this.settings.maxAttachmentBytes)
+    if (!Buffer.isBuffer(attachment.content) || attachment.content.length > cap) throw new Pop3WireError('附件超过下载上限（POP3 最多 20 MiB，整封邮件最多 32 MiB）')
+    return attachment
+  }
+  readInlineAttachment(name: string, folder: string, uid: number | string, index: number, expectedCid: string | undefined, byteLimit: number, signal?: AbortSignal): Promise<Buffer> {
+    this.folder(folder)
+    const cid = mailContentId(expectedCid)
+    if (!cid) throw new Pop3WireError('无法定位内嵌图片，请重新打开邮件')
+    return this.session(name, async wire => {
+      const attachment = await this.attachmentOf(wire, uid, index, byteLimit)
+      if (mailContentId(attachment.contentId) !== cid) throw new Pop3WireError('内嵌图片已改变，请重新打开邮件')
+      return attachment.content
+    }, signal)
+  }
   downloadAttachment(name: string, folder: string, uid: number | string, index: number, workspace?: string, signal?: AbortSignal, byteLimit?: number): Promise<EmailAttachmentResult> {
     this.folder(folder)
     return this.session(name, async wire => {
-      const { parsed } = await this.message(wire, this.entry(await this.index(wire), uid)), attachment = parsed.attachments?.[index]
-      if (!Number.isInteger(index) || index < 0 || !attachment) throw new Pop3WireError('附件序号无效，请重新读取邮件查看附件列表')
+      const attachment = await this.attachmentOf(wire, uid, index, byteLimit)
       const content = attachment.content
-      if (!Buffer.isBuffer(content) || content.length > Math.min(this.settings.maxAttachmentBytes, 20 * 1024 * 1024, byteLimit ?? this.settings.maxAttachmentBytes)) throw new Pop3WireError('附件超过下载上限（POP3 最多 20 MiB，整封邮件最多 32 MiB）')
       const filename = sanitizeFilename(attachment.filename), dir = this.settings.downloadDirExplicit ? this.settings.downloadDir : workspace ? join(workspace, '.dsh-email-downloads') : this.settings.downloadDir
       wire.signal.throwIfAborted(); await mkdir(dir, { recursive: true }); const path = join(dir, randomUUID() + '-' + filename), handle = await open(path, 'wx', 0o600)
       try { wire.signal.throwIfAborted(); await handle.writeFile(content); wire.signal.throwIfAborted() }

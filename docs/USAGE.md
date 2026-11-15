@@ -260,7 +260,7 @@ work:
 ## 已知限制
 
 - **OAuth2 支持 Outlook / Exchange Online 与 Gmail**：Outlook 可使用内置社区应用或自己的公共客户端；Gmail 需创建自己的 Google Desktop app 客户端，详见新增功能说明。既有应用密码账号保持兼容，是否可用取决于账号政策。
-- **搜索的匹配数**：服务器命中会先用信封复核（见上文 `email_search`）；复核通过时「共 N 条匹配」沿用服务器给出的条数，而列出的每一行都保证真的带关键词。正文回退扫描只看了最近 `bodySearchLimit` 封，不知道全文件夹匹配数，因此渲染为「本页 N 条（仅扫描最近 N 封）」而不是「共 N 条」。
+- **搜索的匹配数**：`searchSource: "server"` 时，`count` 表示服务端候选数，显示的每封都经过信封复核。`hasMore` 为 `true` 表示已核实下一页至少有一封，`false` 表示候选已核完。达到核验上限且未找到下一页匹配时省略此字段。正文回退只检查最近 `bodySearchLimit` 封，`bodyScan` 记录实际覆盖范围。
 - **正文搜索**：服务器端只搜 subject / from / to / cc；多数服务器（如 QQ）的 IMAP `TEXT` / `HEADER` 搜索不可靠，无结果时回退到最近 `bodySearchLimit` 封的正文扫描（较慢，可用 `bodySearchFallback` 关闭）。
 - **附件**：内嵌图片暂不支持单独下载；附件定位失败会直接报错而不是下载错误文件（安全默认）。
 - **密码落盘**：设置页保存的授权码以明文写在本机 `settings.yaml`（secret 标记只保证它不进日志 / 导出 / 诊断，不做磁盘加密）。请勿把 `settings.yaml` 交给不信任的人。

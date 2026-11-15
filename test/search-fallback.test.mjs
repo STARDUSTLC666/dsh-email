@@ -80,6 +80,11 @@ test('服务器混着无关 uid 时，列出的每一行都真的带关键词', 
   const result = await pool.search(undefined, '生日', '', 10, 0)
   assert.deepEqual(result.messages.map(m => m.uid), [38])
   assert.equal(result.count, 3, 'count 仍是服务器列表的大小')
+  assert.equal(result.countExact, false)
+  assert.equal(result.hasMore, false, '候选已全部核验，只有本页这一封实际匹配')
+  const beyond = await pool.search(undefined, '生日', '', 1, 1)
+  assert.deepEqual(beyond.messages, [])
+  assert.equal(beyond.hasMore, false)
 })
 
 test('老实服务器（命中确实带着关键词）行为不变', async () => {
@@ -118,7 +123,21 @@ test('offset 跳过最新的若干条命中', async () => {
   assert.deepEqual(first.messages.map(m => m.uid), [7])
   assert.deepEqual(second.messages.map(m => m.uid), [6])
   assert.equal(first.count, 2)
+  assert.equal(first.hasMore, true)
+  assert.equal(second.hasMore, false)
   assert.equal(second.offset, 1)
+})
+
+test('server search can fill a page after missing or unrelated candidates in its initial sample', async () => {
+  const hits = Array.from({ length: 40 }, (_, i) => 40 - i)
+  const messages = [40, 2, 1].map(uid => message(uid, { subject: 'Needle ' + uid }))
+  const { pool } = poolWithServer({ hits, messages, settings: { bodySearchLimit: 5 } })
+  const result = await pool.search(undefined, 'needle', 'INBOX', 2, 0)
+  assert.deepEqual(result.messages.map(row => row.uid), [40, 2])
+  assert.equal(result.hasMore, true)
+  const next = await pool.search(undefined, 'needle', 'INBOX', 2, 2)
+  assert.deepEqual(next.messages.map(row => row.uid), [1])
+  assert.equal(next.hasMore, false)
 })
 
 test('渲染时说明跳过了多少条', async () => {
@@ -186,17 +205,22 @@ test('30 封全命中、limit=10 时，渲染不得把本页条数说成总匹�
   assert.match(text, /最近 30 封/)
 })
 
-test('正文回退扫描只下载 text/* 分段，不再整封拉取（20MiB 附件也不下）', async () => {
+test('正文分页只读 text/* 分段，查到下一封匹配后停止，最后一页不再提示下一页', async () => {
   const messages = [
     partMessage(3, { subject: '会议纪要', body: '合同续签提醒：请本周处理' }),
-    partMessage(2, { subject: '周报', body: '本周进展' }),
+    partMessage(2, { subject: '周报', body: '本周进展：核对合同' }),
     partMessage(1, { subject: '账单', body: '发票已开' }),
   ]
   const { pool, calls } = poolWithPartServer({ hits: [], messages })
   const result = await pool.search(undefined, '合同', '', 1, 0)
   assert.deepEqual(result.messages.map(m => m.uid), [3])
+  assert.equal(result.hasMore, true)
+  assert.equal(result.bodyScan.scanned, 2)
   const fetchAll = calls.find(call => call[0] === 'fetchAll')
   assert.ok(fetchAll, '先取窗口内邮件的信封')
   assert.equal(fetchAll[2].source, undefined, '不再请求 source（否则附件也会被拉下来）')
-  assert.deepEqual(calls.filter(call => call[0] === 'download').map(call => call[1]), [3], '只为要报告的那封下载正文分段')
+  assert.deepEqual(calls.filter(call => call[0] === 'download').map(call => call[1]), [3, 2])
+  const next = await pool.search(undefined, '合同', '', 1, 1)
+  assert.deepEqual(next.messages.map(m => m.uid), [2])
+  assert.equal(next.hasMore, false)
 })

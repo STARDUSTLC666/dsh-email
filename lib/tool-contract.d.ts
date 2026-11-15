@@ -357,6 +357,9 @@ export declare const replySchema: {
                 type: string;
             };
         };
+        cc: {
+            type: string;
+        };
         subject: {
             type: string;
         };

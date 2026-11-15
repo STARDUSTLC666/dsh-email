@@ -22,6 +22,19 @@ test('POP3 direct reply and reviewed draft reply send through SMTP with correct 
  assert.equal(second.accepted[0],'sender@example.invalid');assert.equal(smtp.messages.length,2)
  for(const raw of smtp.messages){assert.match(raw,/In-Reply-To: <original@example\.invalid>/i);assert.match(raw,/References: <original@example\.invalid>/i)}
 })
+test('POP3 reply-all preserves Cc on the SMTP message', async t => {
+  const original = message('reply-all-fixture')
+  original.raw = Buffer.from(original.raw.toString().replace('To: user@example.invalid\r\n',
+    'To: user@example.invalid\r\nCc: reviewer@example.invalid, user@example.invalid\r\n'))
+  const { service, smtp, pop } = await fixture(t)
+  pop.messages.splice(0, pop.messages.length, original)
+  const { messages: [row] } = await service.list(undefined, 'INBOX', 1, 0, false)
+  assert.ok(row)
+  const reply = await service.reply(undefined, 'INBOX', row.uid, 'reply-all', 'Reviewed', '', undefined)
+  assert.equal(reply.cc, 'reviewer@example.invalid')
+  assert.equal(smtp.messages.length, 1)
+  assert.match(smtp.messages[0], /^Cc: reviewer@example\.invalid\r?$/m)
+})
 test('POP3 blocked recipients still stop SMTP and a disappeared original blocks a reply draft',async t=>{
  const{service,smtp,pop,uid}=await fixture(t,{trustedRecipientsYaml:'default:\n  denyAddresses: [sender@example.invalid]\n'})
  await assert.rejects(service.reply(undefined,'INBOX',uid,'reply','blocked','',undefined),/禁止|blocked/i);assert.equal(smtp.messages.length,0)

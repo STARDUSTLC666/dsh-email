@@ -34,7 +34,7 @@ export async function createMailboxPeer({ capabilities=['IMAP4rev1','UIDPLUS','M
         const match=cmd.match(/^(UID )?FETCH ([0-9:,*]+) /i);if(!match){send(tag+' BAD range');continue}
         for(const m of ranges(match[2],!!match[1])){
           const seq=box().messages.indexOf(m)+1,fields=['UID '+m.uid,'FLAGS ('+(m.seen?'\\Seen':'')+')'];
-          if(cmd.includes('ENVELOPE'))fields.push('ENVELOPE ("Thu, 05 Nov 2026 08:00:00 +0000" '+quote(m.subject)+' ((NIL NIL "sender" "example.invalid")) NIL NIL ((NIL NIL "local" "example.invalid")) NIL NIL NIL "<original@fixture.invalid>")');
+          if(cmd.includes('ENVELOPE'))fields.push('ENVELOPE ("Thu, 05 Nov 2026 08:00:00 +0000" '+quote(m.subject)+' ((NIL NIL "sender" "example.invalid")) NIL NIL ((NIL NIL "local" "example.invalid")) (("Chen, Wei" NIL "reviewer" "example.invalid")) NIL NIL "<original@fixture.invalid>")');
           if(cmd.includes('RFC822.SIZE'))fields.push('RFC822.SIZE '+m.source.length);
           if(cmd.includes('BODYSTRUCTURE'))fields.push('BODYSTRUCTURE (("TEXT" "PLAIN" ("CHARSET" "UTF-8") NIL NIL "8BIT" '+Buffer.byteLength(originalText)+' 3)("TEXT" "HTML" ("CHARSET" "UTF-8") NIL NIL "8BIT" '+Buffer.byteLength(originalHtml)+' 1)("IMAGE" "PNG" ("NAME" "chart.png") "<chart@fixture>" NIL "BASE64" '+imageBytes.toString('base64').length+' NIL ("INLINE" ("FILENAME" "chart.png"))) "MIXED")');
           const parts=[...cmd.matchAll(/BODY(?:\.PEEK)?\[([^\]]*)\](?:<(\d+)\.(\d+)>)?/gi)];

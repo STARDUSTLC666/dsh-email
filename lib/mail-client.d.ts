@@ -98,6 +98,8 @@ export interface BuiltReply {
     inReplyTo?: string;
     references?: string;
 }
+/** Explicit Cc recipients are additional to those carried by reply-all. */
+export declare function replyCc(reply: BuiltReply, extra?: string): string;
 /** Pull Message-ID / References out of a raw RFC822 source (header section only). */
 export declare function extractMessageIds(source: Buffer): {
     messageId: string;
@@ -197,13 +199,7 @@ export declare class EmailPool {
     fetchByUids(accountName: string | undefined, folder: string, uids: number[], signal?: AbortSignal): Promise<ListedMessage[]>;
     search(accountName: string | undefined, query: string, folder: string, limit: number, offset: number, since?: Date, until?: Date, signal?: AbortSignal, options?: EmailSearchOptions): Promise<EmailSearchResult>;
     private searchHeaders;
-    /**
-     * Confirm server-side hits against the mailbox itself: fetch the envelopes
-     * of the newest candidates — the same window the body-scan fallback looks at
-     * — and keep only those that really carry the query in subject/from/to/cc,
-     * the four fields the server was asked about. No body is downloaded here,
-     * and uids the server made up simply return nothing.
-     */
+    /** Confirm the page and one lookahead match. Buffer only one candidate batch at a time. */
     private searchHits;
     /** Client-side scan of the tail of the mailbox, newest first. */
     private searchBodies;
@@ -220,6 +216,10 @@ export declare class EmailPool {
     deleteFolder(accountName: string | undefined, path: string, expected: FolderMutationSnapshot, signal?: AbortSignal): Promise<void>;
     renameFolder(accountName: string | undefined, path: string, newPath: string, signal?: AbortSignal): Promise<void>;
     folders(accountName: string | undefined, subscribedOnly: boolean, signal?: AbortSignal): Promise<EmailFoldersResult>;
+    private attachmentLimit;
+    private downloadPart;
+    /** Read the MIME section selected by the server-issued CID ticket. */
+    readInlineAttachment(account: string, folder: string, uid: number, attachment: EmailAttachmentMeta, expectedValidity: number | undefined, byteLimit: number, signal?: AbortSignal): Promise<Buffer>;
     downloadAttachment(accountName: string | undefined, folder: string, uid: number, index: number, workspaceHint?: string, signal?: AbortSignal, byteLimit?: number, expectedValidity?: number): Promise<EmailAttachmentResult>;
     send(accountName: string | undefined, to: string, subject: string, text: string | undefined, cc: string | undefined, attachmentPaths: string[] | undefined, signal?: AbortSignal, html?: string): Promise<EmailSendResult>;
     /** Send the attachment bytes the human reviewed, without re-reading mutable paths. */

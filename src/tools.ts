@@ -210,7 +210,7 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
         const prepared=takeReplyAuthorization(rawArgs,runtime as any)
         if(prepared){
           const sent=await getPool().sendPrepared(prepared.account,prepared.to,prepared.subject,prepared.text,prepared.cc,[],executionSignal(exec),prepared.reply,prepared.html)
-          return {...sent,mode,originalUid:args.uid,to:prepared.to.split(','),subject:prepared.subject}
+          return {...sent,mode,originalUid:args.uid,to:prepared.to.split(','),...(prepared.cc ? { cc: prepared.cc } : {}),subject:prepared.subject}
         }
         return await getPool().reply(args.account, args.folder?.trim() || '', args.uid, mode, args.text || '', args.to?.trim() ?? '', cc, executionSignal(exec), { html: args.html, locale: args.locale, timeZone: args.timeZone })
       }

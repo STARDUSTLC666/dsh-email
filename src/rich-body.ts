@@ -4,7 +4,7 @@ import type { EmailAttachmentMeta, EmailContentNode, EmailRichBody } from './typ
 
 const allowed = new Set('p div span br hr strong b em i u s del blockquote pre code ul ol li h1 h2 h3 h4 h5 h6 table thead tbody tfoot tr td th a'.split(' '))
 const discard = new Set('script style head title iframe frame frameset object embed svg math form input button textarea select option template noscript audio video source link meta base'.split(' '))
-const cid = (value: string) => value.trim().replace(/^<|>$/g, '')
+export const mailContentId = (value?: string): string => value?.trim().replace(/^<|>$/g, '') ?? ''
 export function safeMailLink(value: string): string | undefined {
   try {
     const url = new URL(value)
@@ -33,7 +33,8 @@ export function richEmailBody(html: unknown, attachments: EmailAttachmentMeta[] 
         let image: EmailRichBody['images'][number] | undefined
         if (/^cid:/i.test(src)) {
           let id = src.slice(4); try { id = decodeURIComponent(id) } catch {}
-          const index = attachments.findIndex(a => a.contentId && cid(a.contentId) === cid(id))
+          const contentId = mailContentId(id)
+          const index = contentId ? attachments.findIndex(a => mailContentId(a.contentId) === contentId) : -1
           if (index >= 0) image = { kind: 'inline', alt, source: '', attachment: index }
         } else if (/^data:image\/(png|jpeg|gif|webp);base64,[a-z0-9+/=\r\n]+$/i.test(src)) image = { kind: 'inline', alt, source: src }
         else {
