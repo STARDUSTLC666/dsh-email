@@ -1,148 +1,654 @@
+const { mailbox: mailCss, ui: uiCss, drafts: draftCss, settings: settingsCss, clsx } = emailUi;
+
+// The backend rechecks folder protection against the server on every mutation.
+const systemFolderName = /^(?:inbox|sent(?: messages| items)?|drafts|trash|junk(?: e-mail)?|deleted(?: messages| items)?|all mail|archives?|收件箱|已发送|草稿箱?|垃圾邮件|垃圾箱|废纸篓|已删除)$/i;
+const folderLeaf = row => row.path.split(row.delimiter || '/').at(-1);
+const isSystemFolder = row => !!row.specialUse || systemFolderName.test(folderLeaf(row));
+const isProtectedFolder = (row, folders) => folders.some(system => isSystemFolder(system) &&
+  (system.path === row.path || !!system.delimiter && system.path.startsWith(row.path + system.delimiter)));
+
+function folderLabel(row) {
+  const leaf = folderLeaf(row);
+  if (row.specialUse === '\Inbox' || /^(inbox|收件箱)$/i.test(leaf)) return dt('收件箱', 'Inbox');
+  if (row.specialUse === '\Sent' || /^(sent(?: messages| items)?|已发送)$/i.test(leaf)) return dt('已发送', 'Sent');
+  if (row.specialUse === '\Trash' || /^(trash|deleted(?: messages| items)?|垃圾箱|废纸篓|已删除)$/i.test(leaf)) return dt('废纸篓', 'Trash');
+  if (row.specialUse === '\\Drafts' || /^drafts$/i.test(leaf)) return dt('草稿', 'Drafts');
+  return row.name || row.path;
+}
+
+function MailFolderRail({ accounts, account, folder, folders, busy, loading, onAccount, onFolder, onManage }) {
+  const current = accounts.find(row => row.name === account);
+  const system = folders.filter(isSystemFolder);
+  const custom = folders.filter(row => !isSystemFolder(row));
+  const protocol = row => row.incoming === 'agentmail' ? 'AgentMail' : row.incoming === 'pop3' ? 'POP3' : 'IMAP';
+  const renderFolder = row => h(W.Button, {
+    key: row.path, className: mailCss.folder, variant: 'ghost',
+    icon: row.specialUse === '\Trash' ? 'trash' : row.specialUse === '\Sent' ? 'send' : row.specialUse === '\Inbox' || row.path === 'INBOX' ? 'inbox' : 'folder',
+    disabled: busy, title: row.path, 'aria-current': folder === row.path ? 'location' : undefined,
+    onClick: () => onFolder(row.path),
+  }, h('span', null, folderLabel(row)));
+
+  return h('aside', { className: mailCss.rail, 'aria-label': dt('账号与文件夹','Accounts and folders') },
+    h(W.ChoiceMenu, {
+      label: dt('邮箱账号','Account') + (current ? ' · ' + current.name : ''),
+      value: account, disabled: busy, onChange: onAccount,
+      items: accounts.map(row => ({ id: row.name, label: row.name + ' · ' + row.user })),
+    }, current ? h('span', { className: mailCss.account }, current.user || current.name,
+      h('span', { className: mailCss.accountMeta }, protocol(current) + ' · ' + current.name)) : null),
+    h('nav', { className: mailCss.railGroup, 'aria-label': dt('系统文件夹', 'System folders') },
+      h('div', { className: mailCss.railHeading }, h('h2', null, dt('系统文件夹', 'System folders')), h(W.Icon, { name: 'lock', size: 13 })),
+      system.map(renderFolder)),
+    custom.length > 0 || current?.incoming === 'imap' ?
+      h('nav', { className: mailCss.railGroup, 'aria-label': dt('自建文件夹', 'Custom folders') },
+        h('div', { className: mailCss.railHeading }, h('h2', null, dt('自建文件夹', 'Custom folders')),
+          current?.incoming === 'imap' ? h(W.IconButton, { icon: 'plus', label: dt('管理文件夹', 'Manage folders'), disabled: busy || loading, onClick: onManage }) : null),
+        custom.map(renderFolder)) : null);
+}
+
 function MailFoldersDialog({ account, folders, busy, onClose, onChanged }) {
-  const [newName, setNewName] = React.useState('');
-  const [renameOf, setRenameOf] = React.useState(null), [renameValue, setRenameValue] = React.useState('');
-  const [error, setError] = React.useState(''), [working, setWorking] = React.useState(false);
-  const system = row => !!row.specialUse || /^(INBOX|Sent|Sent Messages|Sent Items|Deleted Messages|Deleted Items|Drafts|Junk|Trash|Archive|All Mail)$/i.test(row.path);
-  async function act(name, payload, confirmText, done) {
-    setError(''); setWorking(true);
+  const [newName, setNewName] = useState('');
+  const [renameOf, setRenameOf] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [error, setError] = useState('');
+  const [working, setWorking] = useState(false);
+  const [confirmation, setConfirmation] = useState(null);
+  const blocked = busy || working;
+
+  async function act(action, payload) {
+    setError('');
+    setWorking(true);
     try {
-      let confirmation = {};
-      if (confirmText) {
-        const preview = await mailboxApi('folderPreview', { account, path: payload.path, operation: name === 'folderDelete' ? 'delete' : 'purge' });
-        if (!window.confirm(account + ' · ' + payload.path + ' · ' + preview.count + dt(' 封邮件\n', ' messages\n') + confirmText)) { setWorking(false); return; }
-        confirmation = { receipt: preview.receipt, confirmed: true };
-      }
-      await mailboxApi(name, { account, ...payload, ...confirmation });
-      setWorking(false); setNewName(''); setRenameOf(null); setRenameValue('');
-      if (done) done();
-      if (onChanged) onChanged();
-    } catch (e) { setWorking(false); setError(emailError(e)); }
+      await mailboxApi(action, { account, ...payload });
+      setNewName('');
+      setRenameOf(null);
+      setRenameValue('');
+      onChanged();
+    } catch (error) {
+      setError(emailError(error));
+    } finally {
+      setConfirmation(null);
+      setWorking(false);
+    }
   }
-  return h(W.Dialog, { title: dt('管理文件夹', 'Manage folders'), closeLabel: dt('关闭', 'Close'), busy: working || busy, onClose },
-    h('p', { className: 'dshe-hint' }, dt('仅管理 IMAP 自建文件夹。清空先预览再确认，只处理已确认邮件；最多 2000 封并要求 UIDPLUS。只能删除空文件夹，永久删除不可恢复。', 'Manage custom IMAP folders. Purge requires preview and confirmation, affects reviewed messages only, and requires UIDPLUS (up to 2000 messages). Only empty folders can be deleted. Permanent deletion cannot be undone.')),
+
+  async function verify(row, operation) {
+    setError('');
+    setWorking(true);
+    try {
+      const preview = await mailboxApi('folderPreview', { account, path: row.path, operation });
+      setConfirmation({ ...preview, operation, path: row.path });
+    } catch (error) {
+      setError(emailError(error));
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  const isDelete = confirmation?.operation === 'delete';
+  const cancel = () => setConfirmation(null);
+  return h(W.Dialog, {
+    title: confirmation ? isDelete ? dt('删除', 'Delete') : dt('清空', 'Empty') : dt('管理文件夹', 'Manage folders'),
+    closeLabel: dt('关闭', 'Close'), busy: blocked, onClose: confirmation ? cancel : onClose,
+    footer: confirmation ? h(React.Fragment, null,
+      h(W.Button, { disabled: blocked, onClick: cancel }, dt('取消', 'Cancel')),
+      h(W.Button, { variant: 'danger', disabled: blocked, onClick: () => act(isDelete ? 'folderDelete' : 'folderPurge', { path: confirmation.path, receipt: confirmation.receipt, confirmed: true }) },
+        isDelete ? dt('确认删除', 'Confirm delete') : dt('确认清空', 'Confirm empty'))) : null,
+  }, h('div', { className: mailCss.modalFlow },
     h(W.Status, { tone: 'error' }, error),
-    h('label', { className: 'dshe-field' }, dt('新建文件夹', 'New folder'), h('div', { style: { display: 'flex', gap: 8 } }, h('input', { value: newName, style: { flex: '1 1 0', minWidth: 0 }, placeholder: dt('例如：招标文件', 'e.g. Tenders'), onChange: e => setNewName(e.target.value) }), h(W.Button, { style: { flex: '0 0 auto', whiteSpace: 'nowrap' }, disabled: !newName.trim() || working || busy, variant: 'primary', onClick: () => act('folderCreate', { path: newName.trim() }) }, dt('创建', 'Create')))),
-    h('ul', { style: { listStyle: 'none', padding: 0, margin: '8px 0 0', display: 'grid', gap: 6 } }, folders.map(f => h('li', { key: f.path, style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', border: '1px solid var(--w-border)', borderRadius: 8, padding: '6px 10px', fontSize: 13 } },
-      renameOf === f.path ? h(React.Fragment, null,
-        h('input', { value: renameValue, onChange: e => setRenameValue(e.target.value), style: { flex: 1, minWidth: 120 } }),
-        h(W.Button, { disabled: !renameValue.trim() || working || busy, variant: 'primary', onClick: () => act('folderRename', { path: f.path, newName: renameValue.trim() }, null, () => setRenameOf(null)) }, dt('保存', 'Save')),
-        h(W.Button, { disabled: working || busy, onClick: () => { setRenameOf(null); setRenameValue(''); } }, dt('取消', 'Cancel')))
-      : h(React.Fragment, null,
-        h('span', { style: { flex: 1, minWidth: 120, overflowWrap: 'anywhere' }, title: f.path }, f.path),
-        system(f) ? h('span', { className: 'dshe-hint' }, dt('（系统文件夹）', '(System folder)'))
-        : h('span', { style: { display: 'flex', gap: 6 } }, h(W.Button, { variant: 'ghost', disabled: working || busy, onClick: () => { setRenameOf(f.path); setRenameValue(f.path); } }, dt('重命名', 'Rename')), h(W.Button, { variant: 'ghost', disabled: working || busy, onClick: () => act('folderPurge', { path: f.path }, dt('清空将永久删除该文件夹内的全部邮件，确定继续？', 'Empty permanently deletes every message in this folder. Continue?')) }, dt('清空', 'Empty')), h(W.Button, { variant: 'ghost', disabled: working || busy, onClick: () => act('folderDelete', { path: f.path }, dt('删除将移除文件夹及其全部邮件，且不可恢复，确定继续？', 'Delete removes the folder and all its messages forever. Continue?')) }, dt('删除', 'Delete'))))))));
+    confirmation ? h(React.Fragment, null,
+      h('p', null, account + ' · ' + confirmation.path + ' · ' + confirmation.count + dt(' 封邮件', ' messages')),
+      h('p', null, isDelete
+        ? dt('删除将移除文件夹及其全部邮件，且不可恢复，确定继续？', 'Delete removes the folder and all its messages forever. Continue?')
+        : dt('清空将永久删除该文件夹内的全部邮件，确定继续？', 'Empty permanently deletes every message in this folder. Continue?'))) :
+      h(React.Fragment, null,
+        h('p', { className: mailCss.listNote }, dt('仅管理 IMAP 自建文件夹。清空先预览再确认，只处理已确认邮件；最多 2000 封并要求 UIDPLUS。只能删除空文件夹，永久删除不可恢复。', 'Manage custom IMAP folders. Purge requires preview and confirmation, affects reviewed messages only, and requires UIDPLUS (up to 2000 messages). Only empty folders can be deleted. Permanent deletion cannot be undone.')),
+        h('form', { className: mailCss.folderForm, onSubmit: event => { event.preventDefault(); if (!blocked && newName.trim()) void act('folderCreate', { path: newName.trim() }); } },
+          h(W.Input, { value: newName, 'aria-label': dt('新建文件夹', 'New folder'), placeholder: dt('新建文件夹', 'New folder'), 'data-modal-autofocus': true, disabled: blocked, onChange: event => setNewName(event.target.value) }),
+          h(W.Button, { type: 'submit', variant: 'primary', disabled: blocked || !newName.trim() }, dt('创建', 'Create'))),
+        h('ul', { className: mailCss.folderList }, folders.map(row => h('li', { key: row.path, className: mailCss.folderRow },
+          renameOf === row.path ? h(React.Fragment, null,
+            h(W.Input, { value: renameValue, 'aria-label': dt('重命名', 'Rename'), disabled: blocked, onChange: event => setRenameValue(event.target.value) }),
+            h(W.Button, { variant: 'primary', disabled: blocked || !renameValue.trim(), onClick: () => act('folderRename', { path: row.path, newName: renameValue.trim() }) }, dt('保存', 'Save')),
+            h(W.Button, { disabled: blocked, onClick: () => setRenameOf(null) }, dt('取消', 'Cancel'))) :
+            h(React.Fragment, null,
+              h('span', { title: row.path }, row.path),
+              isProtectedFolder(row, folders) ? h('span', { className: mailCss.listNote }, dt('受保护', 'Protected')) : h(React.Fragment, null,
+                h(W.Button, { variant: 'ghost', disabled: blocked, onClick: () => { setRenameOf(row.path); setRenameValue(row.path); } }, dt('重命名', 'Rename')),
+                h(W.Button, { variant: 'danger', disabled: blocked, onClick: () => verify(row, 'purge') }, dt('清空', 'Empty')),
+                h(W.Button, { variant: 'danger', disabled: blocked, onClick: () => verify(row, 'delete') }, dt('删除', 'Delete'))))))))));
 }
 
 function MailTrashDialog({ account, folder, uids, uidValidity, folders, busy, onClose, onConfirm }) {
-  const [target, setTarget] = React.useState(''), [preview, setPreview] = React.useState(null), [error, setError] = React.useState(''), [checking, setChecking] = React.useState(true);
-  React.useEffect(() => {
-    const ctrl = new AbortController(); setPreview(null); setError(''); setChecking(true);
-    mailboxApi('trashPreview', { account, folder, uids, uidValidity, ...(target ? { target } : {}) }, ctrl.signal).then(value => { if (!ctrl.signal.aborted) setPreview(value); }).catch(error => { if (!ctrl.signal.aborted) setError(emailError(error)); }).finally(() => { if (!ctrl.signal.aborted) setChecking(false); });
+  const [target, setTarget] = useState('');
+  const [preview, setPreview] = useState(null);
+  const [error, setError] = useState('');
+  const [checking, setChecking] = useState(true);
+  useEffect(() => {
+    const ctrl = new AbortController();
+    mailboxApi('trashPreview', { account, folder, uids, uidValidity, ...(target ? { target } : {}) }, ctrl.signal)
+      .then(value => { if (!ctrl.signal.aborted) setPreview(value); })
+      .catch(error => { if (!ctrl.signal.aborted) setError(emailError(error)); })
+      .finally(() => { if (!ctrl.signal.aborted) setChecking(false); });
     return () => ctrl.abort();
   }, [account, folder, uids, uidValidity, target]);
-  return h(W.Dialog, { title: dt('移入废纸篓', 'Move to Trash'), closeLabel: dt('取消', 'Cancel'), onClose, busy },
+
+  return h(W.Dialog, {
+    title: dt('移入废纸篓', 'Move to Trash'), closeLabel: dt('取消', 'Cancel'), onClose, busy,
+    footer: h(React.Fragment, null,
+      h(W.Button, { onClick: onClose, disabled: busy }, dt('取消', 'Cancel')),
+      h(W.Button, { variant: 'primary', disabled: busy || checking || !preview, onClick: () => onConfirm(preview) },
+        busy ? dt('正在移动…', 'Moving…') : dt('确认移入 ', 'Confirm move: ') + uids.length + dt(' 封', ' messages'))),
+  }, h('div', { className: mailCss.modalFlow },
     h('p', null, account + ' · ' + folder),
     h('p', null, dt('将选中的邮件移动到以下已有文件夹。不会永久删除。', 'Move the selected messages to the existing folder below. This does not permanently delete them.')),
-    h('label', { className: 'dshe-field' }, dt('目标文件夹', 'Destination folder'), h('select', { value: target, disabled: busy || checking, onChange: event => setTarget(event.target.value) }, h('option', { value: '' }, dt('自动识别废纸篓', 'Detect Trash automatically')), folders.filter(row => row.path !== folder).map(row => h('option', { key: row.path, value: row.path }, row.path)))),
+    h(W.ChoiceMenu, {
+      label: dt('目标文件夹', 'Destination folder'), value: target, disabled: busy,
+      items: [{ id: '', label: dt('自动识别废纸篓', 'Detect Trash automatically') }, ...folders.filter(row => row.path !== folder).map(row => ({ id: row.path, label: row.path }))],
+      onChange: value => { setPreview(null); setError(''); setChecking(true); setTarget(value); },
+    }),
     checking ? h('p', { role: 'status' }, dt('正在核对邮件与文件夹…', 'Checking messages and folders…')) : null,
     h(W.Status, { tone: 'error' }, error),
-    preview ? h('div', { className: 'email-trash-preview' }, h('p', null, dt('移动到：', 'Move to: ') + preview.target), h('ul', null, preview.messages.map(row => h('li', { key: row.uid }, row.subject || dt('（无主题）', '(No subject)')))), h('p', { className: 'dshe-hint' }, dt('确认有效期为 90 秒；邮件状态改变后需重新确认。服务器提供新编号时，移动后可在 5 分钟内撤销。', 'Confirmation expires in 90 seconds and must be renewed if the mailbox changes. A 5-minute Undo is offered when the server returns destination UIDs.'))) : null,
-    h('div', { className: 'w-toolbar' }, h(W.Button, { onClick: onClose, disabled: busy }, dt('取消', 'Cancel')), h(W.Button, { variant: 'primary', disabled: busy || checking || !preview, onClick: () => onConfirm(preview) }, busy ? dt('正在移动…', 'Moving…') : dt('确认移入 ', 'Confirm move: ') + uids.length + dt(' 封', ' messages'))));
+    preview ? h(React.Fragment, null, h('p', null, dt('移动到：', 'Move to: ') + preview.target),
+      h('ul', null, preview.messages.map(row => h('li', { key: row.uid }, row.subject || dt('（无主题）', '(No subject)')))),
+      h('p', { className: mailCss.listNote }, dt('确认有效期为 90 秒；邮件状态改变后需重新确认。服务器提供新编号时，移动后可在 5 分钟内撤销。', 'Confirmation expires in 90 seconds and must be renewed if the mailbox changes. A 5-minute Undo is offered when the server returns destination UIDs.'))) : null));
 }
 
-function MailContent({ detail, account, folder, selected }) {
-  const rich = detail.rich, [plain, setPlain] = React.useState(!rich?.nodes?.length), [remote, setRemote] = React.useState(false), [imageState, setImageState] = React.useState(null), [retry, setRetry] = React.useState(0), [loading, setLoading] = React.useState(false);
+// The read RPC and the shared draft parser both produce inert, allowlisted nodes.
+function renderMailNodes(nodes, { styled = false, image } = {}, path = 'mail') {
+  return (nodes || []).map((node, index) => {
+    if (typeof node === 'string') return node;
+    const key = path + '.' + index;
+    if (node.tag === 'img') return image?.(node, key) ?? null;
+
+    const props = { key, ...(styled ? { style: node.style } : {}) };
+    if (node.tag === 'a' && node.href) {
+      Object.assign(props, { href: node.href, target: '_blank', rel: 'noopener noreferrer', referrerPolicy: 'no-referrer' });
+    }
+    if (node.span) props.colSpan = node.span;
+    if (node.tag === 'br' || node.tag === 'hr') return h(node.tag, props);
+    const options = { styled, image };
+    const children = renderMailNodes(node.children, options, key);
+    if (node.tag === 'table' && node.children?.some(child => child?.tag === 'tr')) {
+      // htmlparser2 does not insert the implicit tbody that browsers require.
+      const tableChildren = [];
+      let rows = [];
+      function flushRows() {
+        if (rows.length) tableChildren.push(h('tbody', { key: key + '.body.' + tableChildren.length }, rows));
+        rows = [];
+      }
+      node.children.forEach((child, position) => {
+        if (child?.tag === 'tr') rows.push(children[position]);
+        else if (typeof child !== 'string' || child.trim()) {
+          flushRows();
+          tableChildren.push(children[position]);
+        }
+      });
+      flushRows();
+      return h('table', props, tableChildren);
+    }
+    return h(node.tag, props, children);
+  });
+}
+
+function MailContent({ detail, account, folder, selected, plain }) {
+  const rich = detail.rich;
+  const [remote, setRemote] = useState(false);
+  const [imageState, setImageState] = useState(null);
+  const [retry, setRetry] = useState(0);
+  const [loading, setLoading] = useState(false);
   const imageLoad = React.useMemo(() => ({}), [rich, account, folder, selected, plain, remote, retry]);
   const images = imageState?.load === imageLoad ? imageState.values : {};
-  const updateImage = (id, value) => setImageState(old => ({
-    load: imageLoad, values: { ...(old?.load === imageLoad ? old.values : {}), [id]: value },
-  }));
+
   __stardustUpdatesGuard(React, 'dsh-email.images', { busy: loading });
-  React.useEffect(() => {
+  useEffect(() => {
     if (plain || !rich?.images?.length) { setLoading(false); return; }
-    const ctrl = new AbortController(), urls = [], queue = rich.images.filter(image => image.kind === 'inline' || remote);
+    const ctrl = new AbortController();
+    const urls = [];
+    const queue = rich.images.filter(image => image.kind === 'inline' || remote);
+    const updateImage = (id, value) => setImageState(old => ({
+      load: imageLoad, values: { ...(old?.load === imageLoad ? old.values : {}), [id]: value },
+    }));
     setLoading(queue.length > 0);
+
     async function worker() {
       while (queue.length && !ctrl.signal.aborted) {
         const image = queue.shift();
         try {
           const blob = await mailboxApi('image', { account, folder, uid: selected, image: image.id, allowRemote: remote }, ctrl.signal);
           if (ctrl.signal.aborted) return;
-          const url = URL.createObjectURL(blob); urls.push(url); updateImage(image.id, { url });
-        } catch (error) { if (!ctrl.signal.aborted) updateImage(image.id, { error: true, message: emailError(error) }); }
+          const url = URL.createObjectURL(blob);
+          urls.push(url);
+          updateImage(image.id, { url });
+        } catch (error) {
+          if (!ctrl.signal.aborted) updateImage(image.id, { error: true, message: emailError(error) });
+        }
       }
     }
-    Promise.all(Array.from({ length: Math.min(4, queue.length) }, worker)).finally(() => { if (!ctrl.signal.aborted) setLoading(false); });
+
+    Promise.all(Array.from({ length: Math.min(4, queue.length) }, worker))
+      .finally(() => { if (!ctrl.signal.aborted) setLoading(false); });
     return () => { ctrl.abort(); for (const url of urls) URL.revokeObjectURL(url); };
   }, [imageLoad]);
-  function nodes(values, path = 'r') {
-    return (values || []).map((node, index) => {
-      if (typeof node === 'string') return node;
-      const key = path + '.' + index;
-      if (node.tag === 'img') {
-        const image = rich.images[node.image]; if (!image) return null;
-        const loaded = images[image.id];
-        return loaded?.url && !loaded.error ? h('img', { key, src: loaded.url, alt: image.alt || dt('邮件图片', 'Email image'), className: 'email-rich-image', onError: () => setImageState(old => old?.load === imageLoad
-          ? { ...old, values: { ...old.values, [image.id]: { error: true } } } : old) }) : h('span', { key, className: 'email-image-placeholder', role: 'status' }, image.alt || dt('邮件图片', 'Email image'), ' · ', loaded?.error ? dt('加载失败，可重试', 'Failed to load; retry available') : image.kind === 'remote' && !remote ? dt('外部图片已阻止', 'External image blocked') : dt('正在加载…', 'Loading…'), loaded?.message ? h('span', { className: 'email-image-error' }, loaded.message) : null);
-      }
-      const props = { key };
-      if (node.tag === 'a' && node.href) Object.assign(props, { href: node.href, target: '_blank', rel: 'noopener noreferrer', referrerPolicy: 'no-referrer' });
-      if (node.span) props.colSpan = node.span;
-      return h(node.tag, props, ['br', 'hr'].includes(node.tag) ? undefined : nodes(node.children, key));
-    });
-  }
+
   const external = rich?.images?.filter(image => image.kind === 'remote').length || 0;
-  return h('section', { className: 'w-section email-body' },
-    rich?.nodes?.length ? h('div', { className: 'email-content-toolbar' }, h(W.Button, { variant: 'ghost', onClick: () => setPlain(!plain) }, plain ? dt('查看图文', 'View formatted message') : dt('查看纯文本', 'View plain text')),
-      !plain && external > 0 ? h(W.Button, { disabled: remote, onClick: () => setRemote(true) }, remote ? dt('已允许本封外部图片', 'External images allowed for this message') : dt('加载外部图片（', 'Load external images (') + external + dt('）', ')')) : null,
-      !plain && Object.values(images).some(image => image.error) ? h(W.Button, { onClick: () => setRetry(n => n + 1) }, dt('重试图片', 'Retry images')) : null) : null,
-    !plain && external > 0 && !remote ? h('p', { className: 'dshe-hint' }, dt('外部图片默认不加载，加载后可能向发件人透露阅读时间与网络地址。仅对当前邮件生效。', 'External images are blocked by default. Loading may reveal your reading time and network address to the sender. Consent applies only to this message.')) : null,
-    plain ? h('pre', null, detail.text || dt('（空正文）', '(Empty body)')) : h('div', { className: 'email-rich-body' }, nodes(rich.nodes)),
+  function renderImage(node, key) {
+    const image = rich.images[node.image];
+    if (!image) return null;
+    const loaded = images[image.id];
+    const alt = image.alt || dt('邮件图片', 'Email image');
+    if (loaded?.url && !loaded.error) return h('img', {
+      key, src: loaded.url, alt, className: mailCss.richImage,
+      onError: () => setImageState(old => old?.load === imageLoad
+        ? { ...old, values: { ...old.values, [image.id]: { error: true } } } : old),
+    });
+
+    const state = loaded?.error ? dt('加载失败，可重试', 'Failed to load; retry available')
+      : image.kind === 'remote' && !remote ? dt('外部图片已阻止', 'External image blocked') : dt('正在加载…', 'Loading…');
+    return h('span', { key, className: mailCss.imagePlaceholder, role: 'status' }, alt + ' · ' + state,
+      loaded?.message ? h('span', { className: mailCss.imageError }, loaded.message) : null);
+  }
+
+  return h('section', { className: mailCss.body },
+    !plain && external > 0 && !remote ? h('div', { className: mailCss.privacy },
+      h(W.Icon, { name: 'image' }),
+      h('span', null, dt('外部图片默认不加载，加载后可能向发件人透露阅读时间与网络地址。仅对当前邮件生效。', 'External images are blocked by default. Loading may reveal your reading time and network address to the sender. Consent applies only to this message.')),
+      h(W.Button, { onClick: () => setRemote(true) }, dt('加载外部图片（', 'Load external images (') + external + dt('）', ')'))) : null,
+    !plain && Object.values(images).some(image => image.error) ? h('div', { className: mailCss.bodyTools },
+      h(W.Button, { onClick: () => setRetry(n => n + 1) }, dt('重试图片', 'Retry images'))) : null,
+    plain ? h('pre', { className: mailCss.plain }, detail.text || dt('（空正文）', '(Empty body)'))
+      : h('div', { className: mailCss.rich }, renderMailNodes(rich.nodes, { image: renderImage })),
     detail.truncated || rich?.limited ? h(W.Status, null, dt('正文或图文结构超过显示上限，部分内容已省略。可切换纯文本或用邮箱客户端查看。', 'Body or formatting exceeds the display limit. Some content was omitted; try plain text or your mail client.')) : null);
 }
 
 function MailMessage({ detail, currentRow, account, folder, selected, busy, run, who, date, onDraft, onMark, onTrash, canTrash }) {
-  async function reply(all) {
+  const formatted = !!detail.rich?.nodes?.length;
+  const [plain, setPlain] = useState(!formatted);
+  const [showHeaders, setShowHeaders] = useState(false);
+  const headerId = React.useId();
+  const from = who(detail.from);
+  const to = who(detail.to);
+  const cc = who(detail.cc);
+  const subject = detail.subject || dt('（无主题）', '(No subject)');
+  const dateText = date(detail.date);
+  const initials = Array.from((detail.from?.[0]?.name || detail.from?.[0]?.address || '?').trim()).slice(0, 2).join('').toUpperCase();
+  const rawHeaders = typeof detail.rawHeaders === 'string' ? detail.rawHeaders : '';
+  const headerText = rawHeaders || [
+    ['From', from], ['To', to], ['Cc', cc], ['Subject', detail.subject], ['Date', detail.date],
+  ].filter(([, value]) => value).map(([name, value]) => name + ': ' + value).join('\n');
+  const headerLabel = rawHeaders ? dt('原始邮件头', 'Raw headers') : dt('邮件头字段', 'Header fields');
+
+  function reply(all) {
     return run(async valid => {
       const draft = await mailboxApi('replyDraft', { account, folder, uid: selected, replyAll: all, locale: UI_LANG === 'en' ? 'en' : 'zh' });
       if (valid()) onDraft(draft.id);
     });
   }
-  async function mark(value) {
+
+  function mark(value) {
     return run(async valid => {
       await mailboxApi('mark', { account, folder, uid: selected, mark: value });
       if (valid()) onMark(value);
     });
   }
-  return h('article', { className: 'email-message', 'aria-label': dt('邮件详情', 'Message details') },
-    currentRow?.flagsSupported !== false && h('div', { className: 'email-reader-tools' },
-      h(W.Button, { variant: 'ghost', icon: 'mail', disabled: busy, onClick: () => mark(currentRow?.seen ? 'unread' : 'read') }, currentRow?.seen ? dt('标记未读', 'Mark unread') : dt('标记已读', 'Mark read')),
-      h(W.Button, { variant: 'ghost', icon: 'star', disabled: busy, 'aria-pressed': !!currentRow?.flagged, onClick: () => mark(currentRow?.flagged ? 'unstar' : 'star') }, currentRow?.flagged ? dt('取消星标', 'Unstar') : dt('添加星标', 'Star')),
-      canTrash ? h(W.Button, { variant: 'ghost', disabled: busy, onClick: () => onTrash([selected]) }, dt('移入废纸篓', 'Move to Trash')) : null),
-    h('h2', { className: 'w-detail-title' }, detail.subject || dt('（无主题）', '(No subject)')),
-    h('div', { className: 'email-envelope' }, h('p', null, dt('发件人：', 'From: ') + who(detail.from)), h('p', null, dt('收件人：', 'To: ') + who(detail.to)), detail.cc?.length ? h('p', null, 'Cc: ' + who(detail.cc)) : null, h('p', { className: 'w-muted' }, date(detail.date))),
-    h(MailContent, { detail, account, folder, selected }),
-    detail.attachments?.length ? h('section', { className: 'w-section' }, h('h3', null, dt('附件', 'Attachments')), h('ul', { className: 'email-attachments' }, detail.attachments.map((file, index) => h('li', { key: index },
-      h(W.Icon, { name: 'file', size: 22 }), h('div', null, h('strong', null, file.filename), h('p', { className: 'w-muted' }, Math.ceil(file.size / 1024) + ' KiB')),
-      h(W.Button, { disabled: busy, icon: 'download', onClick: () => run(async valid => {
-        const blob = await mailboxApi('download', { account, folder, uid: selected, index });
-        if (!valid()) return;
-        const url = URL.createObjectURL(blob), link = document.createElement('a');
-        link.href = url; link.download = file.filename; document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 30000);
-      }) }, dt('下载附件', 'Download attachment')))))) : null,
-    h('footer', { className: 'w-detail-footer' }, h(W.Button, { icon: 'reply', variant: 'primary', disabled: busy, onClick: () => reply(false) }, dt('回复到草稿', 'Reply in drafts')), h(W.Button, { disabled: busy, onClick: () => reply(true) }, dt('回复全部到草稿', 'Reply all in drafts')), h('p', { className: 'w-muted' }, dt('点击后进入草稿编辑，发送前需预览并确认。', 'Edit the reply in Drafts. Review and confirm before sending.'))));
+
+  function download(file, index) {
+    return run(async valid => {
+      const blob = await mailboxApi('download', { account, folder, uid: selected, index });
+      if (!valid()) return;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = file.filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    });
+  }
+
+  return h('article', { className: mailCss.message, 'aria-label': dt('邮件详情', 'Message details') },
+    h('div', { className: mailCss.readerTools },
+      h(W.Button, { icon: 'reply', disabled: busy, onClick: () => reply(false) }, dt('回复到草稿', 'Reply in drafts')),
+      h(W.Button, { disabled: busy, onClick: () => reply(true) }, dt('回复全部到草稿', 'Reply all in drafts')),
+      formatted ? h(W.Button, { variant: 'ghost', onClick: () => setPlain(value => !value) }, plain ? dt('查看图文', 'View formatted message') : dt('查看纯文本', 'View plain text')) : null,
+      h(W.Button, { variant: 'ghost', 'aria-expanded': showHeaders, 'aria-controls': headerId, onClick: () => setShowHeaders(value => !value) }, headerLabel),
+      currentRow?.flagsSupported !== false ? h(React.Fragment, null,
+        h(W.IconButton, { icon: 'mail', disabled: busy, onClick: () => mark(currentRow?.seen ? 'unread' : 'read'), label: currentRow?.seen ? dt('标记未读', 'Mark unread') : dt('标记已读', 'Mark read') }),
+        h(W.IconButton, { icon: 'star', disabled: busy, 'aria-pressed': !!currentRow?.flagged, onClick: () => mark(currentRow?.flagged ? 'unstar' : 'star'), label: currentRow?.flagged ? dt('取消星标', 'Unstar') : dt('添加星标', 'Star') })) : null,
+      canTrash ? h(W.IconButton, { icon: 'trash', variant: 'danger', disabled: busy, onClick: () => onTrash([selected]), label: dt('移入废纸篓', 'Move to Trash') }) : null),
+    h('div', { className: mailCss.readerScroll },
+      h('h2', null, subject),
+      h('div', { className: mailCss.envelope },
+        h('span', { className: mailCss.avatar, 'aria-hidden': true }, initials),
+        h('div', { className: mailCss.envelopeAddresses },
+          h('p', null, h('strong', null, from)),
+          h('p', { className: mailCss.recipients }, dt('收件人：', 'To: ') + to, cc ? ' · Cc: ' + cc : null)),
+        dateText ? h('time', { className: mailCss.timestamp, dateTime: detail.date }, dateText) : null,
+        h('div', { id: headerId, className: mailCss.headers, hidden: !showHeaders },
+          !rawHeaders ? h('span', { className: mailCss.listNote }, dt('邮件服务提供的已解析字段', 'Parsed fields from the mail service')) : null,
+          h('pre', null, headerText))),
+      h(MailContent, { detail, account, folder, selected, plain })),
+    detail.attachments?.length ? h('section', { className: mailCss.attachments },
+        h('h3', null, dt('附件', 'Attachments')),
+        h('ul', null, detail.attachments.map((file, index) => h('li', { key: index },
+          h(W.Button, { disabled: busy, icon: 'download', title: dt('下载附件', 'Download attachment'), onClick: () => download(file, index) },
+            h('span', { className: mailCss.attachmentTitle }, h('strong', null, file.filename), h('small', null, Math.ceil(file.size / 1024) + ' KiB'))))))) : null);
 }
 
-const EMAIL_WORKBENCH_CSS = `
-.email-workbench .email-image-error{display:block;margin-top:6px;font-size:12px;line-height:1.6;overflow-wrap:anywhere}
-.email-workbench .email-content-toolbar,.email-workbench .email-batch-tools,.email-workbench .email-move-notice{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 0}.email-workbench .email-batch-tools{padding:10px 14px;border-bottom:1px solid var(--w-border);font-size:12px}.email-workbench .email-batch-tools label{display:flex;gap:6px;align-items:center}.email-workbench .email-batch-tools input,.email-workbench .w-row-select input{width:16px;height:16px}.email-workbench .email-move-notice{background:var(--w-soft);border:1px solid var(--w-border);border-radius:8px;padding:12px;overflow-wrap:anywhere}.email-workbench .email-rich-body{font:14px/1.8 var(--dsh-font-family-content,system-ui,sans-serif);overflow-wrap:anywhere;overflow-x:auto;max-width:100%;padding:8px 0}.email-workbench .email-rich-body p{margin:0 0 14px}.email-workbench .email-rich-body blockquote{margin:16px 0;padding:4px 16px;border-inline-start:3px solid var(--w-border);color:var(--w-muted)}.email-workbench .email-rich-body table{border-collapse:collapse;max-width:100%;margin-block:12px}.email-workbench .email-rich-body td,.email-workbench .email-rich-body th{border:1px solid var(--w-border);padding:8px}.email-workbench .email-rich-body a{color:var(--w-accent);text-decoration:underline}.email-workbench .email-rich-image{display:block;max-width:100%;height:auto;max-height:600px;object-fit:contain;margin:12px 0}.email-workbench .email-image-placeholder{display:block;border:1px dashed var(--w-border);border-radius:8px;background:var(--w-soft);padding:18px;margin:12px 0;color:var(--w-muted);font-size:13px}.email-trash-preview{max-height:260px;overflow:auto;margin-block:16px}.email-trash-preview li{overflow-wrap:anywhere}
+const MAILBOX_ROUTE = "api/dsh-email/mailbox";
+async function mailboxApi(action, payload = {}, signal) {
+  const response = await fetch(MAILBOX_ROUTE, { credentials: "same-origin", method: "POST", headers: { "Content-Type": "application/json", "x-dsh-email-mailbox": "1" }, body: JSON.stringify({ ...payload, action }), signal });
+  if ((action === "download" || action === "image") && response.ok)
+    return response.blob();
+  const result = await response.json();
+  if (!response.ok || !result.ok)
+    throw new Error(result.error?.message || dt("邮箱操作失败", "Mailbox action failed"));
+  return result.value;
+}
 
-.email-workbench>.w-body{display:block}
-.email-workbench .dshe-acc-body .dshe-field{align-content:start}
-@container dsh-workbench (max-width:760px){.email-workbench .dshe-acc-body .dshe-grid{grid-template-columns:minmax(0,1fr)}}
-.email-workbench.dshe-settings{display:flex;gap:0;padding:0;color:var(--w-text)}.email-workbench.dshe-settings[data-main=true]{padding:calc(24px + var(--dsh-frame-top-clearance,0px)) 28px 0 max(28px,var(--dsh-frame-leading-clearance,0px))}.email-workbench .dshe-section-hidden:not([hidden]){display:flex;flex-direction:column;min-height:0;flex:1}.email-workbench .dshe-section-hidden[hidden]{display:none!important}.email-workbench .email-mailbox{display:flex;flex-direction:column;flex:1;min-height:0}.email-workbench .email-mailbox-columns{display:grid;grid-template-columns:180px minmax(0,1fr);flex:1;min-height:480px}.email-workbench .email-folder-rail{border-inline-end:1px solid var(--w-border);padding:24px 14px 24px 0;min-width:0}.email-workbench .email-folder-rail>label{display:grid;gap:6px;font-size:12px;margin-bottom:18px}.email-workbench .email-folder-rail select{width:100%}.email-workbench .email-folder-rail nav{display:flex;flex-direction:column;gap:4px}.email-workbench .email-folder-button{width:100%;justify-content:flex-start;border:0;background:transparent;text-align:start}.email-workbench .email-folder-button[aria-pressed=true]{background:var(--w-selected);color:var(--w-accent)}.email-workbench .email-mailbox .w-split{min-height:480px}.email-workbench .email-search{padding:18px 14px 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}.email-workbench .email-search .w-search{flex-basis:100%;width:100%}.email-workbench .email-search .email-unread-filter{display:flex;align-items:center;gap:6px;font-size:12px;margin-inline-start:auto;white-space:nowrap}.email-workbench .email-unread-filter input{margin:0}.email-workbench .email-list-note{padding:12px 16px;font-size:12px;color:var(--w-muted)}.email-workbench .email-search-coverage{padding:0 16px 12px;font-size:12px;color:var(--w-muted)}.email-workbench .email-search-coverage summary{font-size:12px}.email-workbench .email-search-coverage p{margin-top:8px}.email-workbench .email-unread-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--w-accent);margin-inline-end:6px;vertical-align:middle}.email-workbench .email-message .w-detail-title{font-size:24px;line-height:1.4;margin:18px 0!important}.email-workbench .email-reader-tools{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-bottom:20px}.email-workbench .email-envelope{font-size:13px;color:var(--w-muted);display:grid;gap:5px}.email-workbench .email-body{padding:24px 0;margin-top:20px}.email-workbench .email-body pre{font:14px/1.8 var(--dsh-font-family-content,system-ui,sans-serif);background:transparent;padding:0;border:0;border-radius:0;margin:0;white-space:pre-wrap;overflow-wrap:anywhere;max-height:none}.email-workbench .email-message{display:flex;flex-direction:column;min-height:100%;min-width:0}.email-workbench .email-attachments{list-style:none;padding:0;margin:16px 0 0;display:grid;gap:10px}.email-workbench .email-attachments li{display:flex;align-items:center;gap:12px;border:1px solid var(--w-border);border-radius:8px;padding:14px;min-width:0}.email-workbench .email-attachments li>div{min-width:0;overflow-wrap:anywhere;flex:1;font-size:13px}.email-workbench .email-attachments li>svg{flex-shrink:0;color:var(--w-muted)}.email-workbench .email-attachments p{margin-top:4px}.email-workbench .email-attachments .w-button{font-size:12px;flex-shrink:0}.email-workbench .dshe-mail-footer{padding:14px 16px;border-top:1px solid var(--w-border);display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px}.email-workbench .dshe-mail-footer button{font-size:12px;min-height:32px}.email-workbench .email-drafts{display:flex;flex-direction:column;flex:1;min-height:0}.email-workbench .email-draft-toolbar{padding:16px 0;display:flex;align-items:center;gap:12px;justify-content:space-between}.email-workbench .dshe-panel{display:block;container-type:normal;border:0;border-radius:0;background:transparent;padding:24px 0;box-shadow:none;min-width:0}.email-workbench .dshe-btn{font-size:14px;min-height:36px;padding:8px 12px;background:var(--w-bg);color:var(--w-text);border:1px solid var(--w-border);border-radius:8px;box-shadow:none}.email-workbench .dshe-btn.primary{background:var(--w-primary);color:var(--w-on-primary);border-color:var(--w-primary)}.email-workbench .dshe-field{margin:0 0 16px;display:grid;gap:6px;min-width:0}.email-workbench .dshe-field>label{font-size:13px;color:var(--w-muted)}.email-workbench .dshe-field input,.email-workbench .dshe-field select,.email-workbench .dshe-field textarea{width:100%;font-size:14px}.email-workbench .dshe-hint{font-size:12px;line-height:1.7;color:var(--w-muted)}.email-workbench .dshe-draft-editor{display:grid;gap:16px;min-width:0}.email-workbench .dshe-draft-editor .dshe-field{margin:0}.email-workbench .dshe-alert{border:1px solid var(--w-border);border-radius:8px;padding:12px 14px;background:var(--w-soft);color:var(--w-text);font-size:13px;overflow-wrap:anywhere}.email-workbench .dshe-alert.error{color:var(--dsw-alias-state-error-primary,#ad3636)}.email-workbench .dshe-alert.success{color:var(--dsw-alias-state-success-primary,#24794a)}.email-workbench .dshe-review{background:var(--w-soft);border:1px solid var(--w-border);border-radius:8px;padding:18px}.email-workbench .dshe-rule-panel{max-width:800px}.email-workbench .dshe-rule-panel>.dshe-hint+.dshe-hint{margin-top:12px}.email-workbench .dshe-rule-panel .dshe-field{margin-top:20px}.email-workbench .dshe-global{padding:0 0 24px;border:0;border-bottom:1px solid var(--w-border);border-radius:0;box-shadow:none;background:transparent}.email-workbench .dshe-acc-card{border:0;border-bottom:1px solid var(--w-border);border-radius:0;box-shadow:none;background:transparent;padding:20px 0;margin:0}.email-workbench .dshe-acc-card[open]{background:transparent}.email-workbench .dshe-prst-section{padding:24px 0;border:0;border-bottom:1px solid var(--w-border);border-radius:0}.email-workbench .dshe-auto-status{font-size:12px;color:var(--w-muted)}.email-workbench .w-tab-panel{position:relative}.email-workbench .email-account-status{position:absolute;top:6px;inset-inline-end:8px;z-index:3;display:flex;align-items:center;gap:8px;margin:0;padding:2px 9px;border:1px solid var(--w-border);border-radius:999px;background:var(--w-bg);box-shadow:0 2px 10px #00000026;pointer-events:none;animation:dshe-status-in .18s ease-out}.email-workbench .email-account-status button{pointer-events:auto}@keyframes dshe-status-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}@keyframes dshe-status-out{to{opacity:0;visibility:hidden}}.email-workbench .email-account-status[data-kind=saved]{animation:dshe-status-in .18s ease-out,dshe-status-out .4s ease-in 2.6s forwards}.email-workbench .w-detail .dshe-local-actions{border-top:1px solid var(--w-border);padding-top:20px;margin-top:10px}.email-workbench .dshe-match-list{font-size:13px;line-height:1.8}
-@container dsh-workbench (max-width:1050px){.email-workbench .email-mailbox-columns{grid-template-columns:minmax(0,1fr)}.email-workbench .email-folder-rail{border-inline-end:0;border-bottom:1px solid var(--w-border);padding:14px 0;display:flex;gap:14px;align-items:center;flex-wrap:wrap}.email-workbench .email-folder-rail>label{margin:0;max-width:260px;flex:1 1 200px}.email-workbench .email-folder-rail nav{flex-direction:row;flex-wrap:wrap;gap:4px}.email-workbench .email-folder-button{width:auto}.email-workbench .email-folder-rail .email-custom-folder{max-width:180px;flex:1 1 140px}}
-@container dsh-workbench (max-width:760px){.email-workbench .email-search{padding-inline:0}.email-workbench .email-reader-tools{justify-content:flex-start;gap:4px}.email-workbench .email-attachments li{flex-wrap:wrap}.email-workbench .email-attachments li>div{min-width:150px}.email-workbench .email-draft-toolbar{flex-wrap:wrap}.email-workbench .dshe-review{padding:14px}.email-workbench .email-mailbox-columns{min-height:320px}.email-workbench .email-folder-rail .email-custom-folder{max-width:100%}}
-@media(max-width:700px){.email-workbench.dshe-settings[data-main=true]{padding:calc(16px + var(--dsh-frame-top-clearance,0px)) 16px 0 max(16px,var(--dsh-frame-leading-clearance,0px))}}
-`;
+function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
+  const [accountsLoading, setAccountsLoading] = useState(true);
+  const [accountReload, setAccountReload] = useState(0);
+  const [accounts, setAccounts] = useState([]);
+  const [account, setAccount] = useState("");
+  const [folders, setFolders] = useState([]);
+  const [folder, setFolder] = useState("");
+  const [foldersLoading, setFoldersLoading] = useState(false);
+  const [foldersOpen, setFoldersOpen] = useState(false);
+  const [folderReload, setFolderReload] = useState(0);
+  const [checked, setChecked] = useState([]);
+  const [trash, setTrash] = useState(null);
+  const [moved, setMoved] = useState(null);
+  const [input, setInput] = useState("");
+  const [query, setQuery] = useState("");
+  const [offset, setOffset] = useState(0);
+  const [scanOffset, setScanOffset] = useState(0);
+  const [unread, setUnread] = useState(false);
+  const [withAttachments, setWithAttachments] = useState(false);
+  const [refresh, setRefresh] = useState(0);
+  const [result, setResult] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [detail, setDetail] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [reading, setReading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [readError, setReadError] = useState("");
+  const [readToken, setReadToken] = useState(0);
+  const busyRef = useRef(false);
+  const context = useRef(0);
+  const readerBack = useRef(null);
+  const openedRow = useRef(null);
+  const activeAccount = accounts.find(row => row.name === account);
+  const isPop3 = activeAccount?.incoming === 'pop3';
+  const canTrash = activeAccount?.trashSupported === true;
 
+  __stardustUpdatesGuard(React, 'dsh-email.mailbox', { busy: !!trash || foldersOpen });
+  __stardustUpdatesGuard(React, 'dsh-email.mailbox-operation', { busy });
+  useEffect(() => { setFoldersOpen(false); setMoved(null); }, [active, account]);
+  useEffect(() => { onAccountChange?.(account); }, [account, onAccountChange]);
+  useEffect(() => { setChecked([]); setTrash(null); }, [active, account, folder, query, offset, scanOffset, unread, refresh]);
+  useEffect(() => {
+    if (selected === null || !readerBack.current?.getClientRects().length) return;
+    readerBack.current.querySelector('button')?.focus({ preventScroll: true });
+  }, [selected]);
+  useEffect(() => {
+    if (!moved?.undo) return;
+    const timer = setTimeout(() => setMoved(old => old === moved ? { ...old, undo: null } : old), Math.max(0, moved.undoExpires - Date.now()));
+    return () => clearTimeout(timer);
+  }, [moved]);
+
+  useEffect(() => {
+    if (!active) return;
+    const ctrl = new AbortController();
+    setAccountsLoading(true);
+    setError("");
+    mailboxApi("accounts", {}, ctrl.signal).then(value => {
+      if (ctrl.signal.aborted) return;
+      setAccounts(value.accounts);
+      setAccount(old => value.accounts.some(row => row.name === old) ? old : value.defaultAccount);
+    }).catch(error => {
+      if (!ctrl.signal.aborted) setError(emailError(error));
+    }).finally(() => {
+      if (!ctrl.signal.aborted) setAccountsLoading(false);
+    });
+    return () => ctrl.abort();
+  }, [active, accountReload]);
+
+  useEffect(() => {
+    context.current++;
+    setSelected(null);
+    setDetail(null);
+    setResult(null);
+    setFolder("");
+    setFolders([]);
+    setOffset(0);
+    setScanOffset(0);
+    if (!active || !account) { setFoldersLoading(false); return; }
+    const ctrl = new AbortController();
+    setFoldersLoading(true);
+    mailboxApi("folders", { account }, ctrl.signal).then(value => {
+      if (ctrl.signal.aborted) return;
+      setFolders(value.folders);
+      setFolder(value.folders.find(row => row.specialUse === '\Inbox')?.path ||
+        value.folders.find(row => row.path === 'INBOX')?.path || value.folders[0]?.path || "");
+    }).catch(error => {
+      if (!ctrl.signal.aborted) setError(emailError(error));
+    }).finally(() => {
+      if (!ctrl.signal.aborted) setFoldersLoading(false);
+    });
+    return () => ctrl.abort();
+  }, [active, account, folderReload, accountReload]);
+
+  useEffect(() => {
+    context.current++;
+    setSelected(null);
+    setDetail(null);
+    setResult(null);
+    if (!active || !account || !folder) { setLoading(false); return; }
+    const ctrl = new AbortController();
+    setLoading(true);
+    setError("");
+    mailboxApi("list", { account, folder, query, offset, unreadOnly: unread, headerScanOffset: scanOffset }, ctrl.signal)
+      .then(value => { if (!ctrl.signal.aborted) setResult(value); })
+      .catch(error => { if (!ctrl.signal.aborted) setError(emailError(error)); })
+      .finally(() => { if (!ctrl.signal.aborted) setLoading(false); });
+    return () => ctrl.abort();
+  }, [active, account, folder, query, offset, scanOffset, unread, refresh]);
+
+  useEffect(() => {
+    setDetail(null);
+    setReadError("");
+    if (!active || selected === null) { setReading(false); return; }
+    const ctrl = new AbortController();
+    setReading(true);
+    mailboxApi("read", { account, folder, uid: selected }, ctrl.signal)
+      .then(value => { if (!ctrl.signal.aborted) setDetail(value); })
+      .catch(error => { if (!ctrl.signal.aborted) setReadError(emailError(error)); })
+      .finally(() => { if (!ctrl.signal.aborted) setReading(false); });
+    return () => ctrl.abort();
+        }, [active, account, folder, selected, readToken]);
+
+  async function run(task) {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setError("");
+    const generation = context.current;
+    const valid = () => generation === context.current;
+    try {
+      await task(valid);
+    } catch (error) {
+      if (valid()) setError(emailError(error));
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }
+
+  const retry = () => { setAccountReload(n => n + 1); setRefresh(n => n + 1); setReadToken(n => n + 1); };
+  function reset() {
+    setChecked([]);
+    setOffset(0);
+    setScanOffset(0);
+    setSelected(null);
+    setDetail(null);
+    setReadError("");
+  }
+  function changeAccount(value) {
+    reset();
+    setFolder("");
+    setFolders([]);
+    setResult(null);
+    setInput("");
+    setQuery("");
+    setUnread(false);
+    setAccount(value);
+  }
+  function changeFolder(value) {
+    if (folder === value) return;
+    reset();
+    setResult(null);
+    setFolder(value);
+  }
+  function openMessage(uid, button) {
+    if (selected === uid) return;
+    openedRow.current = button;
+    setDetail(null);
+    setReadError("");
+    setReading(true);
+    setSelected(uid);
+  }
+  function backToList() {
+    setSelected(null);
+    setDetail(null);
+    requestAnimationFrame(() => openedRow.current?.focus({ preventScroll: true }));
+  }
+
+  const requestTrash = uids => { setMoved(null); setTrash(uids); };
+  const confirmTrash = preview => run(async valid => {
+    try {
+      const value = await mailboxApi('trashConfirm', { account, folder, receipt: preview.id, confirmed: true });
+      if (valid()) setMoved({ ...value, account });
+    } finally {
+      if (valid()) {
+        setTrash(null);
+        setChecked([]);
+        setOffset(0);
+        setRefresh(n => n + 1);
+      }
+    }
+  });
+  const undoTrash = () => run(async valid => {
+    const operation = moved;
+    setMoved(null);
+    try {
+      await mailboxApi('undoTrash', { account: operation.account, folder: operation.target, receipt: operation.undo, confirmed: true });
+    } finally {
+      if (valid()) { setOffset(0); setRefresh(n => n + 1); }
+    }
+  });
+
+  const who = list => (list || []).map(a => a.name && a.address ? a.name + " <" + a.address + ">" : a.address || a.name).filter(Boolean).join(", ");
+  const rows = result?.messages || [];
+  const visibleRows = withAttachments ? rows.filter(row => row.hasAttachments) : rows;
+  const currentRow = rows.find(row => row.uid === selected);
+  const hasMore = result?.hasMore ?? (result?.bodyScan ? rows.length === 20 : offset + rows.length < (result?.count || 0));
+  const listLoading = loading || foldersLoading;
+  const pageLimit = 20;
+
+  const errorBanner = h(W.Status,{tone:'error'},error ? h(React.Fragment, null, error,
+    h('div', { className: uiCss.actions },
+      h(W.Button, { icon: 'refresh', variant: 'primary', disabled: busy || accountsLoading, onClick:retry }, dt('重试','Retry')),
+      h(W.Button, { variant: 'ghost', onClick: onConfigure }, dt('检查账号设置','Check account settings')))) : null);
+
+  if (accountsLoading || !accounts.length) {
+    return h('section', { className: mailCss.mailbox, 'aria-label': dt('邮箱工作台','Mailbox workbench') },
+      h('div', { className: mailCss.alert, hidden: !error }, errorBanner),
+      accountsLoading ? h(W.Empty, { title: dt('正在读取邮箱账号…','Loading accounts…') }) :
+        h(W.Empty, { title: error ? dt('暂时无法读取邮箱','Mailbox unavailable') : dt('连接你的邮箱','Connect your mailbox'),
+          action: h(W.Button, { variant: 'primary', onClick: onConfigure }, dt('邮箱设置','Account settings')),
+        }, dt('添加并测试邮箱账号后，即可在这里阅读和回复邮件。','Add and test an email account to read and reply here.')));
+  }
+
+  return h('section', { className: mailCss.mailbox, 'aria-label': dt('邮箱工作台','Mailbox workbench') },
+    error ? h('div', { className: mailCss.alert }, errorBanner) : null,
+    moved ? h('div', { className: mailCss.moveNotice, role: 'status' },
+      h('span', null, dt('已移动 ', 'Moved ') + moved.count + dt(' 封至 ', ' messages to ') + moved.target,
+        !moved.undo ? h('p', { className: mailCss.listNote }, dt('如需恢复，请在邮箱客户端移回原文件夹。', 'To restore, move the messages back in your mail client.')) : null),
+      moved.undo ? h(W.Button, { disabled: busy, onClick: undoTrash }, dt('撤销移动', 'Undo move')) : null,
+      h(W.IconButton, { icon: 'close', onClick: () => setMoved(null), label: dt('关闭提示', 'Dismiss') })) : null,
+    h('div', { className: mailCss.columns, 'data-reading': selected !== null },
+      h(MailFolderRail, { accounts, account, folder, folders, busy, loading: foldersLoading,
+        onAccount: changeAccount, onFolder: changeFolder, onManage: () => setFoldersOpen(true) }),
+      h('section', { className: mailCss.list, 'aria-label': dt('邮件列表', 'Message list'), 'aria-busy': listLoading || undefined },
+        h('div', { className: mailCss.listHeader },
+          h('form', { className: mailCss.search, onSubmit: event => { event.preventDefault(); if (!folder || busy || listLoading) return; reset(); setUnread(false); setQuery(input.trim()); setRefresh(n => n + 1); } },
+            h(W.Input, { icon: 'search', type: 'search', 'aria-label': dt('搜索当前文件夹','Search current folder'), placeholder: dt('搜索当前文件夹','Search current folder'), value: input, maxLength: 500, disabled: busy, onChange: event => setInput(event.target.value) }),
+            h(W.IconButton, { icon: 'search', label: dt('搜索','Search'), type: 'submit', disabled: listLoading || busy || !folder }),
+            h(W.IconButton, { icon: 'refresh', label: dt('刷新邮件','Refresh mail'), disabled: listLoading || busy || !folder, onClick: () => setRefresh(n => n + 1) })),
+          h('div', { className: mailCss.filters },
+            !isPop3 ? h(W.Button, { variant: unread ? 'primary' : 'outline', disabled: busy || !!query, 'aria-pressed': unread,
+              onClick: () => { reset(); setUnread(value => !value); } }, dt('只看未读','Unread only')) : null,
+            h(W.Button, { variant: withAttachments ? 'primary' : 'outline', disabled: busy, 'aria-pressed': withAttachments,
+              onClick: () => { setChecked([]); setWithAttachments(value => !value); } }, dt('本页有附件', 'With attachments on this page')),
+            query ? h(W.Button, { variant: 'ghost', disabled: busy, onClick: () => { reset(); setInput(''); setQuery(''); } }, dt('清除搜索','Clear search')) : null)),
+        canTrash && visibleRows.length ? h('div', { className: mailCss.batch },
+          h(W.Checkbox, { label: dt('选择本页', 'Select page'), disabled: busy || listLoading,
+            checked: checked.length === visibleRows.length, onChange: value => setChecked(value ? visibleRows.map(row => row.uid) : []) }),
+          checked.length ? h(W.Button, { variant: 'danger', icon: 'trash', disabled: busy || listLoading, onClick: () => requestTrash(checked) },
+            dt('移入废纸篓（', 'Move to Trash (') + checked.length + dt('）', ')')) : null) : null,
+        h('div', { className: mailCss.listScroll },
+          visibleRows.length ? visibleRows.map(row => {
+            const unseen = row.flagsSupported !== false && !row.seen;
+            const subject = row.subject || dt('（无主题）','(No subject)');
+            const from = who(row.from);
+            return h('div', { key: row.uid, className: mailCss.messageRow, 'data-selected': selected === row.uid, 'data-unread': unseen },
+              canTrash ? h(W.Checkbox, { hiddenLabel: true, label: dt('选择邮件：', 'Select message: ') + subject,
+                checked: checked.includes(row.uid), disabled: busy || listLoading,
+                onChange: value => setChecked(old => value ? [...old, row.uid] : old.filter(uid => uid !== row.uid)) }) : null,
+              h(W.Button, { variant: 'ghost', className: mailCss.messageButton, disabled: busy, 'aria-pressed': selected === row.uid,
+                onClick: event => openMessage(row.uid, event.currentTarget) },
+                h('span', { className: mailCss.messageLine },
+                  unseen ? h('span', { className: mailCss.unreadDot, role: 'img', 'aria-label': dt('未读','Unread') }) : null,
+                  h('strong', { className: mailCss.sender, title: from }, row.from?.[0]?.name || from),
+                  row.flagged ? h(W.Icon, { name: 'star', size: 13 }) : null,
+                  h('time', { className: mailCss.timestamp, dateTime: row.date }, formatDate(row.date))),
+                h('span', { className: mailCss.messageLine }, h('span', { className: mailCss.subject, title: subject }, subject),
+                  row.hasAttachments ? h(W.Icon, { name: 'clip', size: 13, role: 'img', 'aria-hidden': undefined, 'aria-label': dt('附件', 'Attachments') }) : null)));
+          }) : h(W.Empty, {
+            title:error && !result?dt('邮件列表没有读出来','Messages could not be loaded')
+              : listLoading ? dt('正在读取邮件…','Loading messages…') : rows.length && withAttachments ? dt('本页没有附件邮件', 'No messages with attachments on this page')
+              : query ? dt('当前检索范围内没有结果。','No results in the current search window.') : dt('当前页没有邮件。','No messages on this page.'),
+            action: error && !result ? h(W.Button, { icon: 'refresh', disabled: busy || listLoading, onClick: retry }, dt('重试','Retry')) : undefined,
+          })),
+        h('footer', { className: mailCss.listFooter },
+          h('p', { className: mailCss.listNote, role: 'status' }, result ? dt("本页 ", "This page: ") + rows.length + dt(" 封", " messages") +
+            (result.order === 'relevance' ? dt(' · 按相关性排序', ' · Ranked by relevance') : dt(' · 按邮箱到达序排列', ' · Mailbox arrival order')) : null),
+          result?.headerScan ? h('p', { className: mailCss.listNote }, dt('信封实际扫描：', 'Headers scanned: ') + result.headerScan.scanned + ' / ' + result.headerScan.mailboxTotal +
+            (result.headerScan.complete ? dt('，信封覆盖完整；正文另有限制。', '; headers fully covered; body search has a separate limit.') : dt('，尚未覆盖全文件夹。', '; folder coverage is partial.'))) : null,
+          result?.bodyScan ? h('p', { className: mailCss.listNote }, dt('正文实际扫描：','Bodies scanned: ') + result.bodyScan.scanned + dt(' 封；最多 ',' messages; limit ') + result.bodyScan.scanLimit + dt(' 封，受正文显示上限限制。','; bounded by the body display limit.')) : null,
+          result?.searchSource === 'api' ? h('p', { className: mailCss.listNote }, dt('AgentMail 搜索由服务按相关性返回，垃圾箱等特殊邮件不在其搜索范围。','AgentMail ranks results by relevance and excludes spam, trash and other protected mail.')) : null,
+          isPop3 ? h('p', { className: mailCss.listNote }, dt('POP3 收件箱 · 不提供服务器已读、星标或已发送文件夹。回复会进入本地草稿，确认后通过 SMTP 发送。','POP3 inbox · Server read/star flags and a Sent folder are unavailable. Replies open in local Drafts and use SMTP after confirmation.'))
+            : !canTrash ? h('p', { className: mailCss.listNote }, dt('此协议暂不支持移入废纸篓，请使用邮箱原生客户端删除。','Trash is unavailable for this protocol; delete in your mail client.')) : null,
+          h('div', { className: mailCss.pages },
+            h(W.Button, { icon: 'left', disabled: loading || busy || offset === 0, onClick: () => setOffset(n => Math.max(0, n - pageLimit)) }, dt('上一页', 'Previous page')),
+            h('span', { className: mailCss.listNote }, dt('第 ', 'Page ') + (Math.floor(offset / pageLimit) + 1) + dt(' 页', '')),
+            h(W.Button, { icon: 'right', disabled: loading || busy || !hasMore, onClick: () => setOffset(n => n + pageLimit) }, dt('下一页', 'Next page'))),
+          result?.headerScan?.nextScanOffset !== undefined ? h(W.Button, { icon: 'search', disabled: loading || busy, onClick: () => { setOffset(0); setScanOffset(result.headerScan.nextScanOffset); } }, dt('继续搜索更早邮件', 'Search older headers')) : null)),
+      h('section', { className: mailCss.reader, 'aria-label': dt('邮件详情', 'Message details'), 'aria-busy': reading || undefined },
+        selected !== null ? h('div', { className: mailCss.readerBack, ref: readerBack },
+          h(W.Button, { variant: 'ghost', icon: 'left', disabled: busy, onClick: backToList }, dt('返回邮件列表','Back to messages'))) : null,
+        reading && selected !== null ? h(W.Empty, { title: dt('正在读取正文…','Loading message…') }) :
+          readError && selected !== null ? h(W.Empty, { title:dt('这封邮件没有读出来','This message could not be loaded'),
+            action: h(W.Button, { icon: 'refresh', disabled: busy, onClick: () => setReadToken(n => n + 1) }, dt('重试','Retry')),
+          }, readError) : detail ? h(MailMessage, {
+            key: JSON.stringify([account, folder, selected, detail.rich?.images?.[0]?.id]),
+            detail, currentRow, account, folder, selected, busy, run, who, date: formatDate, onDraft, canTrash, onTrash: requestTrash,
+            onMark: value => setResult(old => old && { ...old, messages: old.messages.map(row => row.uid === selected ? {
+              ...row, ...(value === 'read' || value === 'unread' ? { seen: value === 'read' } : { flagged: value === 'star' }),
+            } : row) }),
+          }) : h(W.Empty, { title: dt('选择一封邮件','Select a message') }, dt('打开正文后，可以回复到草稿、标记状态或下载附件。','Open a message to reply in drafts, mark its state or download attachments.')))),
+    trash ? h(MailTrashDialog, { account, folder, uids: trash, uidValidity: result?.uidValidity, folders, busy, onClose: () => setTrash(null), onConfirm: confirmTrash }) : null,
+    foldersOpen ? h(MailFoldersDialog, { account, folders, busy, onClose: () => setFoldersOpen(false), onChanged: () => setFolderReload(n => n + 1) }) : null);
+}

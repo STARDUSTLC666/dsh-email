@@ -1,0 +1,355 @@
+.content {
+  width: min(100%, 900px);
+  margin-inline: auto;
+  padding: 16px 20px;
+}
+
+/* Existing account, rule and task forms share these scoped field styles. */
+.root :global(.dshe-panel),
+.root :global(.dshe-global),
+.root :global(.dshe-review),
+.root :global(.dshe-acc-card),
+.root :global(.dshe-prst-card),
+.root :global(.dshe-oauth) {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  padding: 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md, 12px);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.root :global(.dshe-acc-card),
+.root :global(.dshe-prst-card) {
+  background: var(--dsw-alias-bg-base);
+}
+
+.root :global(.dshe-field),
+.root :global(.dshe-acc-list),
+.root :global(.dshe-prst-list),
+.root :global(.dshe-acc-body),
+.root :global(.dshe-prst-body) {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.root :global(.dshe-field) > label {
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.root :global(.dshe-field) :is(input:not([type="checkbox"]), textarea) {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm, 8px);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+}
+
+.root :global(.dshe-field) textarea {
+  resize: vertical;
+}
+
+.root :global(.dshe-field) :is(input, textarea):disabled {
+  opacity: 0.55;
+}
+
+.root :global(.dshe-grid) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.root :global(.dshe-endpoint-row) > input {
+  flex: 1 1 120px;
+}
+
+.root :global(.dshe-check),
+.root :global(.dshe-actions),
+.root :global(.dshe-acc-head),
+.root :global(.dshe-acc-actions),
+.root :global(.dshe-prst-head),
+.root :global(.dshe-prst-actions),
+.root :global(.dshe-oauth-actions),
+.root :global(.dshe-endpoint-row),
+.root :global(.dshe-acc-confirm),
+.root :global(.dshe-prst-confirm) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  min-width: 0;
+}
+
+.root :global(.dshe-check) > input {
+  accent-color: var(--dsw-alias-state-business-primary);
+}
+
+.root :global(.dshe-acc-actions),
+.root :global(.dshe-prst-actions) {
+  margin-inline-start: auto;
+}
+
+.root :global(.dshe-btn) {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm, 8px);
+  color: var(--dsw-alias-label-primary);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.root :global(.dshe-btn.primary) {
+  border-color: transparent;
+  background: var(--dsw-alias-button-primary-fill);
+  color: var(--dsw-alias-button-primary-ink, var(--dsw-alias-bg-base));
+}
+
+.root :global(.dshe-btn):disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.root :global(.dshe-alert),
+.root :global(.dshe-acc-confirm),
+.root :global(.dshe-prst-confirm),
+.root :global(.dshe-acc-empty),
+.root :global(.dshe-prst-empty) {
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: var(--dsw-radius-sm, 8px);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.root :global(.dshe-alert.error),
+.root :global(.dshe-acc-confirm),
+.root :global(.dshe-prst-confirm) {
+  background: var(--dsw-alias-interactive-bg-hover-danger);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.root :global(.dshe-alert.warn),
+.root :global(.dshe-auto-status.is-draft),
+.root :global(.dshe-prst-warn) {
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.root :global(.dshe-alert.warn) {
+  background: var(--dsw-alias-state-warn-tertiary);
+}
+
+.root :global(.dshe-alert.success),
+.root :global(.dshe-auto-status.is-saved),
+.root :global(.dshe-oauth-ok) {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.root :global(.dshe-auto-status.is-error),
+.root :global(.dshe-acc-warn),
+.root :global(.dshe-acc-danger),
+.root :global(.dshe-prst-danger) {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.root :global(.dshe-acc-name),
+.root :global(.dshe-prst-name),
+.root :global(.dshe-oauth-head) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.root :global(.dshe-hint),
+.root :global(.dshe-acc-meta),
+.root :global(.dshe-prst-meta),
+.root :global(.dshe-oauth-wait) {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.root :global(.dshe-acc-badge),
+.root :global(.dshe-prst-badge) {
+  padding: 0 6px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm, 8px);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.root :global(.dshe-acc-badge.is-default),
+.root :global(.dshe-acc-badge.is-oauth),
+.root :global(.dshe-prst-badge.done) {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.root :global(.dshe-oauth-code) {
+  padding: 8px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm, 8px);
+  font: 650 18px/24px var(--ds-font-family-code, ui-monospace);
+  text-align: center;
+  letter-spacing: 0.12em;
+  user-select: all;
+}
+
+.root a {
+  color: var(--dsw-alias-link);
+  overflow-wrap: anywhere;
+  font-weight: 500;
+}
+
+.root :global(.dshe-details) > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.root :global(.dshe-details[open]) > summary {
+  margin-block-end: 8px;
+}
+
+.root :global(.dshe-match-list) {
+  margin: 0;
+  padding-inline-start: 20px;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.accountStatus {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block-end: 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.tasks {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.tasks h3,
+.tasks h4,
+.tasks p {
+  margin: 0;
+}
+
+.whaleRoot {
+  position: fixed;
+  inset-inline-end: 16px;
+  inset-block-end: 16px;
+  z-index: 2147483000;
+  pointer-events: none;
+}
+
+.whaleCard {
+  position: relative;
+  pointer-events: auto;
+  width: min(300px, calc(100vw - 32px));
+  border: 0;
+  border-radius: var(--dsw-radius-md, 12px);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  overflow: clip;
+  box-shadow: var(--dsw-elevation-prominent);
+}
+
+.whaleImg {
+  display: block;
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  object-position: center top;
+}
+
+.whaleBody {
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+}
+
+.whaleTitle {
+  font-weight: 650;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.whaleItem,
+.whaleCredit {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.whaleCredit {
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.whaleClose {
+  position: absolute;
+  inset-block-start: 6px;
+  inset-inline-end: 6px;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 50%;
+  corner-shape: round;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .root :global(.dshe-btn):hover:not(:disabled),
+  .whaleClose:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+
+  .root :global(.dshe-btn.primary):hover:not(:disabled) {
+    background: var(--dsw-alias-button-primary-hover);
+  }
+}
+
+@container (max-width: 600px) {
+  .content {
+    padding-inline: 12px;
+  }
+
+  .root :global(.dshe-grid) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .root :global(.dshe-acc-actions),
+  .root :global(.dshe-prst-actions) {
+    margin-inline-start: 0;
+  }
+}

@@ -1,6 +1,6 @@
 {
   "name": "dsh-email",
-  "version": "0.26.1",
+  "version": "0.27.0",
   "description": "DSH 邮件工作台：图文回复与草稿、确认定时发送、Google/Outlook 授权、多邮箱及可选邮件任务。欢迎提交 issues 和 PR。",
   "type": "module",
   "main": "lib/index.js",
@@ -84,6 +84,8 @@
   "devDependencies": {
     "@types/node": "^26.2.0",
     "@types/proper-lockfile": "4.1.4",
+    "clsx": "2.1.1",
+    "esbuild": "0.25.12",
     "typescript": "^5.7.3"
   },
   "icon": "./assets/plugin-icon.webp"

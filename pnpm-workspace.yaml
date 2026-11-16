@@ -1,3 +1,5 @@
+allowBuilds:
+  esbuild: true
 minimumReleaseAgeExclude:
   - imapflow@2.2.1
   - mailparser@3.9.33

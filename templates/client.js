@@ -5,7 +5,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
         "use strict";
         Object.defineProperty(exports, "__esModule", { value: true });
         const React = require("react");
-        const W = createWorkbenchUI(React);
+        const W = createWorkbenchUI(React, require);
         const { useState, useEffect, useCallback, useRef } = React;
         const h = React.createElement;
         // Harness supplies document.baseURI for reverse-proxy mounts and in-page navigation.
@@ -206,92 +206,6 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
         const OAUTH_POLL_FALLBACK_MS = 5000;
         /** 后端返回的 expires_in 缺省是秒；缺省值取 15 分钟（和设备的码同寿）。 */
         const OAUTH_EXPIRES_FALLBACK_S = 900;
-        const CSS = [
-            ".dshe-settings{display:grid;gap:14px;padding:8px 2px 32px;color:var(--dsw-alias-label-primary,#26231f);color-scheme:light dark}",
-            ".dshe-header{display:grid;gap:4px;padding:8px 2px}",
-            ".dshe-header h2{font-size:22px;letter-spacing:-.02em;margin:0}",
-            ".dshe-header p{max-width:640px;margin:4px 0 0;color:var(--dsw-alias-label-tertiary,#77736d);font-size:13px;line-height:1.55}",
-            ".dshe-kicker{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--dsw-alias-state-business-primary,#0b6c9f);font-weight:700}",
-            ".dshe-panel{display:grid;gap:12px;padding:15px;border:1px solid var(--dsw-alias-border-l2,#dedbd5);border-radius:14px;background:var(--dsw-alias-bg-layer-1,#fff);box-shadow:0 1px 1px rgba(0,0,0,.02)}",
-            ".dshe-panel{container-type:inline-size}@container(max-width:650px){.dshe-panel .dshe-workbench{grid-template-columns:minmax(0,1fr)}.dshe-panel .dshe-draft-list{max-height:160px;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr))}}",
-            "@media(max-width:700px){[role=dialog]:has(.dshe-settings){width:100%!important;max-width:100%!important;flex-direction:column!important}[role=dialog]:has(.dshe-settings)>nav+div{min-width:0;width:100%}[role=dialog]:has(.dshe-settings)>nav+div>div:has(.dshe-settings){padding:12px!important;min-width:0}[role=dialog]:has(.dshe-settings) nav{width:100%!important;flex-basis:auto!important;border-right:0;max-height:170px;overflow:auto}[role=dialog]:has(.dshe-settings) nav>div:has(>button){display:flex;flex-direction:row!important;flex-wrap:wrap;flex-shrink:0;gap:4px}}",
-            ".dshe-tabs{display:flex;gap:6px;flex-wrap:wrap}.dshe-tabs [aria-selected=true]{background:var(--dsw-alias-button-primary-fill,#0b6c9f);color:var(--dsw-alias-label-primary-foreground,#fff)}",
-            ".dshe-workbench{display:grid;grid-template-columns:minmax(150px,210px) minmax(0,1fr);gap:14px}.dshe-workbench>*{min-width:0}.dshe-draft-list{display:grid;gap:6px;max-height:340px;overflow:auto;align-content:start}.dshe-draft-row{display:grid;gap:4px;text-align:left;padding:10px;border:1px solid var(--dsw-alias-border-l2,#dedbd5);border-radius:9px;background:transparent;color:inherit;cursor:pointer;overflow-wrap:anywhere}.dshe-draft-row[aria-pressed=true]{border-color:var(--dsw-alias-state-business-primary,#0b6c9f)}.dshe-draft-row small{font-size:11px;opacity:.75}.dshe-draft-editor{display:grid;gap:12px;min-width:0}.dshe-review{display:grid;gap:10px;padding:12px;border:1px solid var(--dsw-alias-state-business-primary,#0b6c9f);border-radius:12px}.dshe-review h3{margin:0;font-size:16px}.dshe-review p{margin:0;overflow-wrap:anywhere;font-size:13px}.dshe-review pre{margin:0;padding:10px;background:var(--dsw-specific-input-major,#fafafa);border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto;font:inherit;font-size:13px}.dshe-files{display:grid;gap:7px;margin:0;padding:0;list-style:none}.dshe-files li{display:flex;align-items:center;justify-content:space-between;gap:8px;overflow-wrap:anywhere;font-size:13px}.dshe-files li span{min-width:0}.dshe-match-list{margin:0;padding-left:18px;font-size:12px;line-height:1.8;overflow-wrap:anywhere}.dshe-review .dshe-check{align-items:flex-start}.dshe-draft-editor textarea{resize:vertical;min-height:160px}.dshe-rule-panel textarea{resize:vertical;min-height:100px}.dshe-section-hidden[hidden]{display:none}.dshe-upload{display:grid;gap:6px;font-size:12px;min-width:0}.dshe-upload input{max-width:100%;font:inherit}.dshe-local-actions{display:flex;gap:6px;flex-wrap:wrap}.dshe-workbench h3{font-size:15px;margin:0}.dshe-workbench .dshe-grid{grid-template-columns:1fr}.dshe-editor-empty{padding:20px 0;color:var(--dsw-alias-label-tertiary,#77736d)}@media(max-width:600px){.dshe-workbench{grid-template-columns:minmax(0,1fr)}.dshe-draft-list{max-height:180px}.dshe-review{padding:10px}.dshe-files li{align-items:flex-start}}",
-            ".dshe-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}",
-            ".dshe-field{display:grid;gap:6px}",
-            ".dshe-field label{font-size:12px;font-weight:600;color:var(--dsw-alias-label-primary,#26231f)}",
-            ".dshe-field input[type=text],.dshe-field input[type=password],.dshe-field input[type=number],.dshe-field select,.dshe-field textarea{width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--dsw-alias-border-l2,#dedbd5);border-radius:9px;background:var(--dsw-specific-input-major,#fff);color:var(--dsw-alias-label-primary,#26231f);font:inherit;font-size:13px}",
-            ".dshe-field select option{background:var(--dsw-alias-bg-layer-1,#fff);color:var(--dsw-alias-label-primary,#26231f)}",
-            ".dshe-check{display:flex;gap:8px;align-items:center;font-size:13px}",
-            ".dshe-endpoint-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}",
-            ".dshe-endpoint-row input[type=text]{flex:1 1 180px;min-width:150px;width:auto}",
-            ".dshe-endpoint-row input[type=number]{width:110px}",
-            ".dshe-global{display:grid;gap:10px;padding:11px 12px;border:1px dashed var(--dsw-alias-border-l2,#dedbd5);border-radius:11px}",
-            ".dshe-actions{display:flex;gap:8px;flex-wrap:wrap}",
-            ".dshe-btn{display:inline-flex;align-items:center;height:32px;padding:0 14px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2,#dedbd5);background:var(--dsw-alias-button-elevated-fill,transparent);color:inherit;font-size:13px;font-weight:600;cursor:pointer}",
-            ".dshe-btn.primary{background:var(--dsw-alias-button-primary-fill,#0b6c9f);border-color:var(--dsw-alias-button-primary-fill,#0b6c9f);color:var(--dsw-alias-label-primary-foreground,#fff)}",
-            ".dshe-btn.primary:hover{background:var(--dsw-alias-button-primary-hover,#0b6c9f);border-color:var(--dsw-alias-button-primary-hover,#0b6c9f)}",
-            ".dshe-btn:disabled{opacity:.55;cursor:default}",
-            ".dshe-alert{padding:10px 12px;border-radius:10px;font-size:12px;line-height:1.5;border:1px solid transparent}",
-            ".dshe-alert.error{background:color-mix(in srgb,var(--dsw-alias-state-error-primary,#aa3939) 10%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary,#aa3939) 22%,transparent);color:var(--dsw-alias-state-error-primary,#aa3939)}",
-            ".dshe-alert.success{background:color-mix(in srgb,var(--dsw-alias-state-success-primary,#267d52) 10%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-state-success-primary,#267d52) 22%,transparent);color:var(--dsw-alias-state-success-primary,#267d52)}",
-            ".dshe-alert.info{background:color-mix(in srgb,var(--dsw-alias-state-business-primary,#0b5c86) 8%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-state-business-primary,#0b5c86) 20%,transparent);color:var(--dsw-alias-state-business-primary,#0b5c86)}",
-            ".dshe-alert.warn{background:color-mix(in srgb,var(--dsw-alias-state-warn-primary,#9a6700) 10%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-state-warn-primary,#9a6700) 22%,transparent);color:var(--dsw-alias-state-warn-primary,#9a6700)}",
-            ".dshe-details summary{font-size:12px;font-weight:600;cursor:pointer;color:var(--dsw-alias-label-tertiary,#77736d)}",
-            ".dshe-hint{font-size:12px;color:var(--dsw-alias-label-tertiary,#77736d);line-height:1.5}",
-            ".dshe-whale-root{position:fixed;right:20px;bottom:20px;z-index:2147483000;pointer-events:none}",
-            ".dshe-whale-card{pointer-events:auto;position:relative;width:300px;border:1px solid var(--dsw-alias-border-l2,#e5e2db);border-radius:14px;background:var(--dsw-alias-bg-layer-1,#fff);box-shadow:var(--dsw-elevation-prominent,0 8px 24px rgba(0,0,0,.18));overflow:hidden;animation:dshe-whale-in .35s ease-out;font-size:13px;color:var(--dsw-alias-label-primary,#26231f);color-scheme:light dark}",
-            "@keyframes dshe-whale-in{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}",
-            ".dshe-whale-img{display:block;width:100%;height:120px;object-fit:cover;object-position:center top;background:var(--dsw-alias-bg-layer-2,#eaf3f8)}",
-            ".dshe-whale-body{padding:10px 12px 12px;display:grid;gap:6px}",
-            ".dshe-whale-title{font-weight:700;font-size:13px}",
-            ".dshe-whale-item{color:var(--dsw-alias-label-tertiary,#77736d);font-size:12px;line-height:1.45;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
-            ".dshe-whale-credit{font-size:10px;color:var(--dsw-alias-label-tertiary,#77736d);opacity:.8;line-height:1.4}",
-            ".dshe-whale-close{position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:50%;border:none;background:var(--dsw-alias-bg-mask-3,rgba(0,0,0,.35));color:var(--dsw-alias-label-primary-inverted,#fff);cursor:pointer;font-size:12px;line-height:1}",
-            ".dshe-acc-list{display:grid;gap:10px}",
-            ".dshe-acc-card{display:grid;gap:9px;padding:11px 12px;border:1px solid var(--dsw-alias-border-l2,#dedbd5);border-radius:11px;background:var(--dsw-alias-bg-layer-2,#f7f6f2)}",
-            ".dshe-acc-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center}",
-            ".dshe-acc-name{font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
-            ".dshe-acc-badge{display:inline-flex;align-items:center;height:18px;padding:0 8px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2,#dedbd5);font-size:10px;font-weight:700;color:var(--dsw-alias-state-business-primary,#0b5c86)}",
-            ".dshe-acc-badge.todo{border-style:dashed;color:inherit;opacity:.75}",
-            ".dshe-acc-badge.is-default{border-color:transparent;background:color-mix(in srgb,var(--dsw-alias-state-success-primary,#267d52) 12%,transparent);color:var(--dsw-alias-state-success-primary,#267d52)}",
-            ".dshe-acc-meta{font-size:12px;opacity:.72;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
-            ".dshe-acc-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-left:auto}",
-            ".dshe-acc-danger{border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary,#aa3939) 38%,transparent);color:var(--dsw-alias-state-error-primary,#aa3939)}",
-            ".dshe-acc-body{display:grid;gap:12px;padding-top:2px}",
-            ".dshe-acc-confirm{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-radius:10px;font-size:12px;line-height:1.5;border:1px solid color-mix(in srgb,var(--dsw-alias-state-error-primary,#aa3939) 22%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-error-primary,#aa3939) 10%,transparent);color:var(--dsw-alias-state-error-primary,#aa3939)}",
-            ".dshe-acc-empty{padding:12px;border:1px dashed var(--dsw-alias-border-l2,#dedbd5);border-radius:11px;font-size:12px;text-align:center;opacity:.72}",
-            ".dshe-acc-warn{color:var(--dsw-alias-state-error-primary,#aa3939)}",
-            ".dshe-prst-list{display:grid;gap:10px}",
-            ".dshe-prst-card{display:grid;gap:9px;padding:11px 12px;border:1px solid var(--dsw-alias-border-l2,#dedbd5);border-radius:11px;background:var(--dsw-alias-bg-layer-2,#f7f6f2)}",
-            ".dshe-prst-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center}",
-            ".dshe-prst-name{font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
-            ".dshe-prst-badge{display:inline-flex;align-items:center;height:18px;padding:0 8px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2,#dedbd5);font-size:10px;font-weight:700;color:var(--dsw-alias-state-business-primary,#0b5c86)}",
-            ".dshe-prst-badge.todo{border-style:dashed;color:inherit;opacity:.75}",
-            ".dshe-prst-badge.done{border-color:transparent;background:color-mix(in srgb,var(--dsw-alias-state-success-primary,#267d52) 12%,transparent);color:var(--dsw-alias-state-success-primary,#267d52)}",
-            ".dshe-prst-meta{font-size:12px;opacity:.72;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
-            ".dshe-prst-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-left:auto}",
-            ".dshe-prst-danger{border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary,#aa3939) 38%,transparent);color:var(--dsw-alias-state-error-primary,#aa3939)}",
-            ".dshe-prst-body{display:grid;gap:12px;padding-top:2px}",
-            ".dshe-prst-confirm{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 10px;border-radius:10px;font-size:12px;line-height:1.5;border:1px solid color-mix(in srgb,var(--dsw-alias-state-error-primary,#aa3939) 22%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-error-primary,#aa3939) 10%,transparent);color:var(--dsw-alias-state-error-primary,#aa3939)}",
-            ".dshe-prst-empty{padding:12px;border:1px dashed var(--dsw-alias-border-l2,#dedbd5);border-radius:11px;font-size:12px;text-align:center;opacity:.72}",
-            ".dshe-prst-warn{color:var(--dsw-alias-state-error-primary,#aa3939)}",
-            ".dshe-prst-section{margin-top:4px}",
-            ".dshe-auto-status{font-size:12px;font-weight:600;align-self:center;color:var(--dsw-alias-label-tertiary,#77736d)}",
-            ".dshe-auto-status.is-saved{color:var(--dsw-alias-state-success-primary,#267d52)}",
-            ".dshe-auto-status.is-error{color:var(--dsw-alias-state-error-primary,#aa3939)}",
-            ".dshe-auto-status.is-draft{color:var(--dsw-alias-state-warning-primary,#986000)}",
-            ".dshe-acc-badge.is-oauth{border-color:transparent;background:color-mix(in srgb,var(--dsw-alias-state-success-primary,#267d52) 12%,transparent);color:var(--dsw-alias-state-success-primary,#267d52)}",
-            ".dshe-oauth{display:grid;gap:8px;padding:10px 11px;border:1px dashed var(--dsw-alias-border-l2,#dedbd5);border-radius:10px;background:var(--dsw-alias-bg-layer-1,#fff)}",
-            ".dshe-oauth.is-logged-in{border-style:solid;border-color:color-mix(in srgb,var(--dsw-alias-state-success-primary,#267d52) 34%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-success-primary,#267d52) 8%,transparent)}",
-            ".dshe-oauth-head{font-size:12px;font-weight:600;line-height:1.5}",
-            ".dshe-oauth-ok{color:var(--dsw-alias-state-success-primary,#267d52)}",
-            ".dshe-oauth-wait{font-size:12px;color:var(--dsw-alias-label-tertiary,#77736d)}",
-            ".dshe-oauth-code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:20px;font-weight:700;letter-spacing:.14em;padding:8px 10px;border-radius:9px;border:1px solid var(--dsw-alias-border-l2,#dedbd5);background:var(--dsw-alias-bg-layer-2,#f7f6f2);text-align:center;user-select:all;overflow-wrap:anywhere}",
-            ".dshe-oauth-url{font-size:12px;line-height:1.5;overflow-wrap:anywhere}",
-            ".dshe-oauth-url a{color:var(--dsw-alias-state-business-primary,#0b5c86)}",
-            ".dshe-oauth-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}",
-        ].join("\n");
         // ---------------------------------------------------------------------------
         // 界面文案字典。zh 是原文，en 是对照译文；两张表的 key 集必须逐键相同。
         //
@@ -1492,6 +1406,25 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
         // leading/trailing spaces join concatenated fragments and must not move.
         const INLINE_LOCALE_COMPLETION = {
             es: {
+                "System folders": "Carpetas del sistema",
+                "Custom folders": "Carpetas personalizadas",
+                "Confirm empty": "Confirmar vaciado",
+                "Protected": "Protegida",
+                "Raw headers": "Cabeceras originales",
+                "Header fields": "Campos de cabecera",
+                "Parsed fields from the mail service": "Campos interpretados por el servicio de correo",
+                "Message list": "Lista de mensajes",
+                "With attachments on this page": "Adjuntos en esta página",
+                "No messages with attachments on this page": "No hay mensajes con adjuntos en esta página",
+                "Safe preview": "Vista previa segura",
+                "HTML body": "Cuerpo HTML",
+                "Plain-text alternative (optional)": "Versión en texto plano (opcional)",
+                "Message": "Mensaje",
+                "Subject": "Asunto",
+                "Recipients To": "Destinatarios (Para)",
+                "Copy Cc": "Copia (Cc)",
+                "Discard edits and close": "Descartar cambios y cerrar",
+                "Save and close": "Guardar y cerrar",
                 "Enter the custom proxy URL.": "Escribe la dirección del proxy personalizado.",
                 "Create a Desktop app OAuth client in Google Cloud, enable Gmail mail consent and add your account as a test user. Complete sign-in in your browser; no mailbox password is needed.": "Crea un cliente OAuth de tipo «Desktop app» en Google Cloud, habilita el consentimiento de Gmail y añade tu cuenta como usuario de prueba. El inicio de sesión se completa en el navegador; no hace falta la contraseña del buzón.",
                 "Google client secret (if issued)": "Secreto de cliente de Google (si se emitió)",
@@ -1735,6 +1668,25 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "Edit the reply in Drafts. Review and confirm before sending.": "Edita la respuesta en Borradores. Revísala y confírmala antes de enviar.",
             },
             fr: {
+                "System folders": "Dossiers système",
+                "Custom folders": "Dossiers personnalisés",
+                "Confirm empty": "Confirmer le vidage",
+                "Protected": "Protégé",
+                "Raw headers": "En-têtes bruts",
+                "Header fields": "Champs d’en-tête",
+                "Parsed fields from the mail service": "Champs analysés par le service de messagerie",
+                "Message list": "Liste des messages",
+                "With attachments on this page": "Avec pièces jointes sur cette page",
+                "No messages with attachments on this page": "Aucun message avec pièce jointe sur cette page",
+                "Safe preview": "Aperçu sécurisé",
+                "HTML body": "Corps HTML",
+                "Plain-text alternative (optional)": "Version en texte brut (facultative)",
+                "Message": "Message",
+                "Subject": "Objet",
+                "Recipients To": "Destinataires (À)",
+                "Copy Cc": "Copie (Cc)",
+                "Discard edits and close": "Ignorer les modifications et fermer",
+                "Save and close": "Enregistrer et fermer",
                 "Enter the custom proxy URL.": "Saisissez l’adresse du proxy personnalisé.",
                 "Create a Desktop app OAuth client in Google Cloud, enable Gmail mail consent and add your account as a test user. Complete sign-in in your browser; no mailbox password is needed.": "Créez un client OAuth « Desktop app » dans Google Cloud, activez le consentement Gmail et ajoutez votre compte comme utilisateur de test. La connexion se termine dans le navigateur ; aucun mot de passe de boîte aux lettres n’est nécessaire.",
                 "Google client secret (if issued)": "Secret client Google (si fourni)",
@@ -1978,6 +1930,25 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "Edit the reply in Drafts. Review and confirm before sending.": "Modifiez la réponse dans Brouillons. Vérifiez et confirmez avant l’envoi.",
             },
             de: {
+                "System folders": "Systemordner",
+                "Custom folders": "Eigene Ordner",
+                "Confirm empty": "Leeren bestätigen",
+                "Protected": "Geschützt",
+                "Raw headers": "Rohheader",
+                "Header fields": "Kopfzeilenfelder",
+                "Parsed fields from the mail service": "Vom Maildienst ausgewertete Felder",
+                "Message list": "Nachrichtenliste",
+                "With attachments on this page": "Mit Anhang auf dieser Seite",
+                "No messages with attachments on this page": "Keine Nachrichten mit Anhang auf dieser Seite",
+                "Safe preview": "Sichere Vorschau",
+                "HTML body": "HTML-Text",
+                "Plain-text alternative (optional)": "Nur-Text-Alternative (optional)",
+                "Message": "Nachricht",
+                "Subject": "Betreff",
+                "Recipients To": "Empfänger (An)",
+                "Copy Cc": "Kopie (Cc)",
+                "Discard edits and close": "Änderungen verwerfen und schließen",
+                "Save and close": "Speichern und schließen",
                 "Enter the custom proxy URL.": "Gib die Adresse des benutzerdefinierten Proxys ein.",
                 "Create a Desktop app OAuth client in Google Cloud, enable Gmail mail consent and add your account as a test user. Complete sign-in in your browser; no mailbox password is needed.": "Erstelle in Google Cloud einen OAuth-Client vom Typ „Desktop-App“, aktiviere die Gmail-Berechtigung und füge dein Konto als Testnutzer hinzu. Die Anmeldung erfolgt im Browser; ein Postfachpasswort ist nicht nötig.",
                 "Google client secret (if issued)": "Google-Client-Secret (falls ausgestellt)",
@@ -2221,6 +2192,25 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "Edit the reply in Drafts. Review and confirm before sending.": "Bearbeite die Antwort in den Entwürfen. Prüfe und bestätige vor dem Senden.",
             },
             ja: {
+                "System folders": "システムフォルダー",
+                "Custom folders": "カスタムフォルダー",
+                "Confirm empty": "空にする",
+                "Protected": "保護済み",
+                "Raw headers": "元のヘッダー",
+                "Header fields": "ヘッダーフィールド",
+                "Parsed fields from the mail service": "メールサービスが解析したフィールド",
+                "Message list": "メール一覧",
+                "With attachments on this page": "このページの添付あり",
+                "No messages with attachments on this page": "このページに添付付きメールはありません",
+                "Safe preview": "安全なプレビュー",
+                "HTML body": "HTML 本文",
+                "Plain-text alternative (optional)": "代替のプレーンテキスト（任意）",
+                "Message": "本文",
+                "Subject": "件名",
+                "Recipients To": "宛先 (To)",
+                "Copy Cc": "Cc",
+                "Discard edits and close": "変更を破棄して閉じる",
+                "Save and close": "保存して閉じる",
                 "Enter the custom proxy URL.": "カスタムプロキシのアドレスを入力してください。",
                 "Create a Desktop app OAuth client in Google Cloud, enable Gmail mail consent and add your account as a test user. Complete sign-in in your browser; no mailbox password is needed.": "Google Cloud で「デスクトップアプリ」の OAuth クライアントを作成し、Gmail のメール許可を有効にして、自分のアカウントをテストユーザーに追加します。ログインはブラウザーで完了するため、メールボックスのパスワードは不要です。",
                 "Google client secret (if issued)": "Google クライアントシークレット（発行された場合）",
@@ -2464,6 +2454,25 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "Edit the reply in Drafts. Review and confirm before sending.": "返信は下書きで編集します。送信前に確認してください。",
             },
             pt: {
+                "System folders": "Pastas do sistema",
+                "Custom folders": "Pastas personalizadas",
+                "Confirm empty": "Confirmar esvaziamento",
+                "Protected": "Protegida",
+                "Raw headers": "Cabeçalhos originais",
+                "Header fields": "Campos do cabeçalho",
+                "Parsed fields from the mail service": "Campos analisados pelo serviço de e-mail",
+                "Message list": "Lista de mensagens",
+                "With attachments on this page": "Com anexos nesta página",
+                "No messages with attachments on this page": "Nenhuma mensagem com anexo nesta página",
+                "Safe preview": "Prévia segura",
+                "HTML body": "Corpo HTML",
+                "Plain-text alternative (optional)": "Versão em texto simples (opcional)",
+                "Message": "Mensagem",
+                "Subject": "Assunto",
+                "Recipients To": "Destinatários (Para)",
+                "Copy Cc": "Cópia (Cc)",
+                "Discard edits and close": "Descartar alterações e fechar",
+                "Save and close": "Salvar e fechar",
                 "Enter the custom proxy URL.": "Informe o endereço do proxy personalizado.",
                 "Create a Desktop app OAuth client in Google Cloud, enable Gmail mail consent and add your account as a test user. Complete sign-in in your browser; no mailbox password is needed.": "Crie um cliente OAuth do tipo “Desktop app” no Google Cloud, ative o consentimento do Gmail e adicione sua conta como usuário de teste. O login é concluído no navegador; não é necessário informar a senha da caixa de correio.",
                 "Google client secret (if issued)": "Segredo do cliente Google (se emitido)",
@@ -2707,6 +2716,25 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "Edit the reply in Drafts. Review and confirm before sending.": "Edite a resposta em Rascunhos. Revise e confirme antes de enviar.",
             },
             ru: {
+                "System folders": "Системные папки",
+                "Custom folders": "Пользовательские папки",
+                "Confirm empty": "Подтвердить очистку",
+                "Protected": "Защищённая",
+                "Raw headers": "Исходные заголовки",
+                "Header fields": "Поля заголовка",
+                "Parsed fields from the mail service": "Поля, разобранные почтовой службой",
+                "Message list": "Список писем",
+                "With attachments on this page": "С вложениями на этой странице",
+                "No messages with attachments on this page": "На этой странице нет писем с вложениями",
+                "Safe preview": "Безопасный предпросмотр",
+                "HTML body": "Текст HTML",
+                "Plain-text alternative (optional)": "Текстовая версия (необязательно)",
+                "Message": "Текст письма",
+                "Subject": "Тема",
+                "Recipients To": "Получатели (Кому)",
+                "Copy Cc": "Копия (Cc)",
+                "Discard edits and close": "Отменить изменения и закрыть",
+                "Save and close": "Сохранить и закрыть",
                 "Enter the custom proxy URL.": "Введите адрес собственного прокси.",
                 "Create a Desktop app OAuth client in Google Cloud, enable Gmail mail consent and add your account as a test user. Complete sign-in in your browser; no mailbox password is needed.": "Создайте в Google Cloud OAuth-клиент типа «Desktop app», включите согласие для Gmail и добавьте свой аккаунт в тестовые пользователи. Вход завершается в браузере; пароль от почтового ящика не требуется.",
                 "Google client secret (if issued)": "Секрет клиента Google (если выдан)",
@@ -4367,10 +4395,11 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                                     ]),
                                     h("div", { className: "dshe-field" }, [
                                         h("label", null, t("card.providerLabel")),
-                                        h("select", {
+                                        h(W.SettingsChoice, null, h("select", {
+                                            "aria-label": t("card.providerLabel"),
                                             value: draft.provider || "",
                                             onChange: (e) => changeProvider(name, e.target.value),
-                                        }, providerOptionsFor(presets, draft.provider).map((option) => h("option", { key: option.value, value: option.value }, option.label))),
+                                        }, providerOptionsFor(presets, draft.provider).map((option) => h("option", { key: option.value, value: option.value }, option.label)))),
                                     ]),
                                     h("div", { className: "dshe-field" }, [
                                         h("label", null, t("card.addressLabel")),
@@ -4378,8 +4407,8 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                                     ]),
                                     !draft.provider?.startsWith('agentmail') && h('div', {className:'dshe-field'}, [
                                         h('label', null, dt('收信协议','Incoming protocol')),
-                                        h('select', {'aria-label':dt('收信协议','Incoming protocol'),value:draft.receiveProtocol || 'imap',disabled:busy !== '',onChange:e=>patchDraft(name,{receiveProtocol:e.target.value,inboxFolder:'INBOX',pop3:draft.pop3 || {host:'',port:995,secure:true}})},[
-                                            h('option',{value:'imap'},'IMAP'),h('option',{value:'pop3',disabled:oauthCard},'POP3')]),
+                                        h(W.SettingsChoice, null, h('select', {'aria-label':dt('收信协议','Incoming protocol'),value:draft.receiveProtocol || 'imap',disabled:busy !== '',onChange:e=>patchDraft(name,{receiveProtocol:e.target.value,inboxFolder:'INBOX',pop3:draft.pop3 || {host:'',port:995,secure:true}})},[
+                                            h('option',{value:'imap'},'IMAP'),h('option',{value:'pop3',disabled:oauthCard},'POP3')])),
                                         draft.receiveProtocol === 'pop3' && h('p',{className:'dshe-hint',role:'note'},dt('POP3 只读取收件箱，发送使用 SMTP。无服务器已读、星标或已发送文件夹；搜索会说明扫描范围。','POP3 reads the inbox and uses SMTP for sending. Server read/star flags and a Sent folder are unavailable; search shows its scan coverage.')),
                                     ]),
                                     // 自定义服务器账号的端点：没有预设可展开，直接写在卡片里。
@@ -4410,7 +4439,8 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                                     (oauthCard || authKindOf(draft.provider) === "oauth2" || draft.provider === 'gmail')
                                         ? h("div", { className: "dshe-field" }, [
                                             h("label", null, t("card.authKindLabel")),
-                                            h("select", {
+                                            h(W.SettingsChoice, null, h("select", {
+                                                "aria-label": t("card.authKindLabel"),
                                                 value: draft.authKindSetting || "",
                                                 disabled: busy !== "",
                                                 onChange: (e) => patchDraft(name, {
@@ -4423,16 +4453,16 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                                                 h("option", { key: "auto", value: "" }, t("card.authKindAuto")),
                                                 h("option", { key: "oauth2", value: "oauth2" }, t("card.authKindOAuth2")),
                                                 h("option", { key: "password", value: "password" }, t("card.authKindPassword")),
-                                            ]),
+                                            ])),
                                             h("div", { className: "dshe-hint" }, draft.provider==='gmail'?dt('Google OAuth 需要自己的桌面应用客户端；应用密码是否可用取决于账号策略。','Google OAuth requires your own Desktop app client; app-password availability depends on account policy.'):t("card.authKindHint")),
                                         ])
                                         : null,
                                     !draft.provider?.startsWith('agentmail') && h('div', { className: 'dshe-field' },
                                       h('label', null, dt('连接方式', 'Connection routing')),
-                                      h('select', { value: draft.proxyMode || 'inherit', 'aria-label': dt('连接方式', 'Connection routing'), disabled: busy !== '', onChange: e => patchDraft(name, { proxyMode: e.target.value, proxyDirty: true }) },
+                                      h(W.SettingsChoice, null, h('select', { value: draft.proxyMode || 'inherit', 'aria-label': dt('连接方式', 'Connection routing'), disabled: busy !== '', onChange: e => patchDraft(name, { proxyMode: e.target.value, proxyDirty: true }) },
                                         h('option', { value: 'inherit' }, dt('跟随全局或环境设置', 'Follow global or environment settings')),
                                         h('option', { value: 'direct' }, dt('直接连接（不使用代理）', 'Connect directly (ignore proxies)')),
-                                        h('option', { value: 'custom' }, dt('自定义代理', 'Custom proxy'))),
+                                        h('option', { value: 'custom' }, dt('自定义代理', 'Custom proxy')))),
                                       draft.proxyMode === 'custom' && h('input', { type: 'password', autoComplete: 'new-password', value: draft.proxy || '', 'aria-label': dt('自定义代理地址', 'Custom proxy URL'), placeholder: draft.hasProxy ? dt('已保存，留空保持不变', 'Saved; leave blank to retain') : 'http://127.0.0.1:7897', disabled: busy !== '', onChange: e => patchDraft(name, { proxy: e.target.value, proxyDirty: true }) }),
                                       h('div', { className: 'dshe-hint' }, dt('用于 IMAP 和 SMTP，支持 HTTP CONNECT / HTTPS / SOCKS。代理地址可能含密码，保存后不会回显。POP3 收信仍直接连接。', 'Applies to IMAP and SMTP. Supports HTTP CONNECT, HTTPS and SOCKS. Saved URLs may contain passwords and are not displayed. POP3 receiving still connects directly.'))),
                                     // OAuth2 的服务商没有密码可填：这一格的凭证就是下面那块登录区。
@@ -4751,332 +4781,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 notice ? h("div", { className: "dshe-alert " + notice.kind }, notice.text) : null,
             ]);
         }
-        const MAILBOX_ROUTE = "api/dsh-email/mailbox";
-        async function mailboxApi(action, payload = {}, signal) {
-            const response = await fetch(MAILBOX_ROUTE, { credentials: "same-origin", method: "POST", headers: { "Content-Type": "application/json", "x-dsh-email-mailbox": "1" }, body: JSON.stringify({ ...payload, action }), signal });
-            if ((action === "download" || action === "image") && response.ok)
-                return response.blob();
-            const result = await response.json();
-            if (!response.ok || !result.ok)
-                throw new Error(result.error?.message || dt("邮箱操作失败", "Mailbox action failed"));
-            return result.value;
-        }
-        function MailboxWorkbench({active,onConfigure,onDraft,onAccountChange}) {
-const [accountsLoading,setAccountsLoading]=useState(true),[accountReload,setAccountReload]=useState(0);
-
-            const [accounts, setAccounts] = useState([]), [account, setAccount] = useState(""), [folders, setFolders] = useState([]), [folder, setFolder] = useState("");
-            const isPop3 = accounts.find(a=>a.name===account)?.incoming === 'pop3';
-            const canTrash = accounts.find(a=>a.name===account)?.trashSupported === true;
-            const [checked, setChecked] = useState([]), [trash, setTrash] = useState(null), [moved, setMoved] = useState(null), [foldersOpen, setFoldersOpen] = useState(false), [folderReload, setFolderReload] = useState(0);
-            __stardustUpdatesGuard(React, 'dsh-email.mailbox', { busy: !!trash || foldersOpen });
-            useEffect(() => setFoldersOpen(false), [account]);
-useEffect(()=>{onAccountChange?.(account);},[account,onAccountChange]);
-            const [input, setInput] = useState(""), [query, setQuery] = useState(""), [offset, setOffset] = useState(0), [scanOffset, setScanOffset] = useState(0), [unread, setUnread] = useState(false), [refresh, setRefresh] = useState(0);
-            const [result, setResult] = useState(null), [selected, setSelected] = useState(null), [detail, setDetail] = useState(null), [loading, setLoading] = useState(false), [reading, setReading] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(""), [readToken, setReadToken] = useState(0);
-            const busyRef = useRef(false), context = useRef(0);
-            __stardustUpdatesGuard(React, 'dsh-email.mailbox-operation', { busy });
-            useEffect(() => { setChecked([]); setTrash(null); }, [active, account, folder, query, offset, scanOffset, refresh]);
-            useEffect(() => { setMoved(null); }, [active, account]);
-
-            useEffect(() => {
-                if (!active)
-                    return;
-                const ctrl = new AbortController();
-setAccountsLoading(true);
-                setError("");
-                mailboxApi("accounts", {}, ctrl.signal).then(value => { if (ctrl.signal.aborted)
-                    return; setAccounts(value.accounts); setAccount(old => value.accounts.some(a => a.name === old) ? old : value.defaultAccount); }).catch(e => { if (!ctrl.signal.aborted)
-                    setError(emailError(e)); }).finally(()=>{if(!ctrl.signal.aborted)setAccountsLoading(false);});
-                return () => ctrl.abort();
-            }, [active,accountReload]);
-            useEffect(() => {
-                context.current++;
-                setSelected(null);
-                setDetail(null);
-                setResult(null);
-                setFolder("");
-                setFolders([]);
-                setOffset(0);
-                setScanOffset(0);
-                if (!active || !account)
-                    return;
-                const ctrl = new AbortController();
-                mailboxApi("folders", { account }, ctrl.signal).then(value => { if (ctrl.signal.aborted)
-                    return; setFolders(value.folders); setFolder(value.folders.find(f => f.specialUse === "\\Inbox")?.path || value.folders.find(f => f.path === "INBOX")?.path || value.folders[0]?.path || ""); }).catch(e => { if (!ctrl.signal.aborted)
-                    setError(emailError(e)); });
-                return () => ctrl.abort();
-            }, [active, account, folderReload]);
-            useEffect(() => {
-                context.current++;
-                setSelected(null);
-                setDetail(null);
-                setResult(null);
-                if (!active || !account || !folder)
-                    return;
-                const ctrl = new AbortController();
-                setLoading(true);
-                setError("");
-                mailboxApi("list", { account, folder, query, offset, unreadOnly: unread, headerScanOffset: scanOffset }, ctrl.signal).then(value => { if (!ctrl.signal.aborted)
-                    setResult(value); }).catch(e => { if (!ctrl.signal.aborted)
-                    setError(emailError(e)); }).finally(() => { if (!ctrl.signal.aborted)
-                    setLoading(false); });
-                return () => ctrl.abort();
-            }, [active, account, folder, query, offset, scanOffset, unread, refresh]);
-            useEffect(() => {
-                setDetail(null);
-                if (!active || selected === null)
-                    return;
-                const ctrl = new AbortController();
-                setReading(true);
-                setError("");
-                mailboxApi("read", { account, folder, uid: selected }, ctrl.signal).then(value => { if (!ctrl.signal.aborted)
-                    setDetail(value); }).catch(e => { if (!ctrl.signal.aborted)
-                    setError(emailError(e)); }).finally(() => { if (!ctrl.signal.aborted)
-                    setReading(false); });
-                return () => ctrl.abort();
-            }, [active, account, folder, selected, readToken]);
-            const run = async (task) => { if (busyRef.current)
-                return; busyRef.current = true; setBusy(true); setError(""); const generation = context.current; try {
-                await task(() => generation === context.current);
-            }
-            catch (e) {
-                if (generation === context.current)
-                    setError(emailError(e));
-            }
-            finally {
-                busyRef.current = false;
-                setBusy(false);
-            } };
-            /** 失败后的一键重试：账号、文件夹、列表、正文按各自依赖重取，不靠用户到处找刷新按钮。 */
-            const retry = () => { setAccountReload(n => n + 1); setRefresh(n => n + 1); setReadToken(n => n + 1); };
-            const reset = () => { setOffset(0); setScanOffset(0); setSelected(null); setDetail(null); };
-            const changeFolder = value => { reset(); setFolder(value); };
-            const requestTrash = uids => { setMoved(null); setTrash(uids); };
-            const confirmTrash = preview => run(async valid => {
-              try {
-                const value = await mailboxApi('trashConfirm', { account, folder, receipt: preview.id, confirmed: true });
-                if (valid()) setMoved({ ...value, account });
-              } finally { if (valid()) { setTrash(null); setChecked([]); setOffset(0); setRefresh(n => n + 1); } }
-            });
-            const undoTrash = () => run(async valid => {
-              const operation = moved; setMoved(null);
-              try { await mailboxApi('undoTrash', { account: operation.account, folder: operation.target, receipt: operation.undo, confirmed: true }); }
-              finally { if (valid()) { setOffset(0); setRefresh(n => n + 1); } }
-            });
-            const who = list => (list || []).map(a => a.name && a.address ? a.name + " <" + a.address + ">" : a.address || a.name).filter(Boolean).join(", ");
-            const date = value => formatDate(value);
-            const rows = result?.messages || [], currentRow = rows.find(m => m.uid === selected), hasMore = result?.hasMore ?? (result?.headerScan && result?.searchSource === "local-headers" ? offset + rows.length < result.count : result?.bodyScan ? rows.length === 20 : offset + rows.length < (result?.count || 0));
-            const folderButton = (special, zh, en) => { const target = folders.find(f => f.specialUse === special) || folders.find(f => special === "\\Sent" ? /^(sent|sent messages|已发送)$/i.test(f.path) : f.path === "INBOX"); return target ? h("button", { type: "button", className: "dshe-btn", disabled: busy || loading, "aria-pressed": folder === target.path, onClick: () => changeFolder(target.path) }, dt(zh, en)) : null; };
-            return h('section',{className:'email-mailbox','aria-label':dt('邮箱工作台','Mailbox workbench')},
- trash ? h(MailTrashDialog, { account, folder, uids: trash, uidValidity: result?.uidValidity, folders, busy, onClose: () => setTrash(null), onConfirm: confirmTrash }) : null,
- moved ? h('div', { className: 'email-move-notice', role: 'status' }, dt('已移动 ', 'Moved ') + moved.count + dt(' 封至 ', ' messages to ') + moved.target, moved.undo && moved.undoExpires > Date.now() ? h(W.Button, { disabled: busy, onClick: undoTrash }, dt('撤销移动', 'Undo move')) : h('p', { className: 'dshe-hint' }, dt('如需恢复，请在邮箱客户端移回原文件夹。', 'To restore, move the messages back in your mail client.')), h(W.Button, { variant: 'ghost', onClick: () => setMoved(null) }, dt('关闭提示', 'Dismiss'))) : null,
- h(W.Status,{tone:'error'},error ? h(React.Fragment,null,[error,h('div',{key:'actions',className:'w-toolbar'},[h(W.Button,{key:'retry',icon:'refresh',variant:'primary',disabled:busy || accountsLoading,onClick:retry},dt('重试','Retry')),h(W.Button,{key:'configure',variant:'ghost',onClick:onConfigure},dt('检查账号设置','Check account settings'))])]) : null),
- accountsLoading ? h(W.Empty,{title:dt('正在读取邮箱账号…','Loading accounts…'),icon:'mail'}) : !accounts.length ? h(W.Empty,{title:error?dt('暂时无法读取邮箱','Mailbox unavailable'):dt('连接你的邮箱','Connect your mailbox'),icon:'mail',action:h(React.Fragment,null,h(W.Button,{variant:'primary',onClick:onConfigure},dt('邮箱设置','Account settings')),h(W.Button,{onClick:()=>setAccountReload(n=>n+1)},dt('重试','Retry')))},dt('添加并测试邮箱账号后，即可在这里阅读和回复邮件。','Add and test an email account to read and reply here.')) :
- h('div',{className:'email-mailbox-columns'},
- h('aside',{className:'email-folder-rail','aria-label':dt('账号与文件夹','Accounts and folders')},
- h('label',null,dt('邮箱账号','Account'),h('select',{value:account,disabled:busy,onChange:event=>{reset();setInput('');setQuery('');setUnread(false);setAccount(event.target.value);}},accounts.map(a=>h('option',{key:a.name,value:a.name},a.name+' · '+a.user)))),
- h('nav',{'aria-label':dt('邮件文件夹','Mail folders')},folders.filter(f=>f.specialUse === '\\Trash' || f.specialUse === '\\Inbox' || f.specialUse === '\\Sent' || /^(INBOX|sent|sent messages|已发送)$/i.test(f.path)).map(f=>h(W.Button,{key:f.path,className:'email-folder-button',variant:'ghost',icon:f.specialUse === '\\Sent' || /sent|已发送/i.test(f.path)?'reply':'mail',disabled:busy || loading,'aria-pressed':folder === f.path,onClick:()=>changeFolder(f.path)},f.specialUse === '\\Trash'?dt('废纸篓','Trash'):f.specialUse === '\\Inbox' || f.path === 'INBOX'?dt('收件箱','Inbox'):dt('已发送','Sent')))),
- folders.length>2 || !folders.some(f=>(f.specialUse === '\\Inbox' || f.specialUse === '\\Sent' || /^(INBOX|sent|sent messages|已发送)$/i.test(f.path)) && f.path===folder) ? h('label',{className:'email-custom-folder'},dt('所有文件夹','All folders'),h('div',{style:{display:'flex',gap:6,alignItems:'center'}},h('select',{value:folder,disabled:busy || !folders.length,onChange:event=>changeFolder(event.target.value)},folders.map(f=>h('option',{key:f.path,value:f.path},f.name))),h(W.IconButton,{icon:'plus',label:dt('管理文件夹','Manage folders'),disabled:busy || !folders.length || accounts.find(a=>a.name===account)?.incoming !== 'imap',onClick:()=>setFoldersOpen(true)}))) : h('div',{style:{marginTop:4}},h(W.Button,{variant:'ghost',icon:'plus',disabled:busy || !folders.length || accounts.find(a=>a.name===account)?.incoming !== 'imap',onClick:()=>setFoldersOpen(true)},dt('管理文件夹','Manage folders')))),
- !foldersOpen ? null : h(MailFoldersDialog,{account,folders,busy,onClose:()=>setFoldersOpen(false),onChanged:()=>setFolderReload(n=>n+1)}),
- h(W.Split,{className:'email-message-split',listWidth:330,selected:selected===null?null:String(selected),onBack:()=>setSelected(null),backLabel:dt('返回邮件列表','Back to messages'),
- list:h('div',null,
- h('form',{className:'email-search',onSubmit:event=>{event.preventDefault();reset();setUnread(false);setQuery(input.trim());setRefresh(n=>n+1);}},
- h(W.Search,{label:dt('搜索当前文件夹','Search current folder'),value:input,maxLength:500,disabled:busy,onChange:event=>setInput(event.target.value)}),
- h(W.Button,{type:'submit',disabled:loading || busy || !folder},dt('搜索','Search')),h(W.IconButton,{icon:'refresh',label:dt('刷新邮件','Refresh mail'),disabled:loading || busy || !account,onClick:()=>setRefresh(n=>n+1)}),
- query ? h(W.Button,{variant:'ghost',disabled:busy,onClick:()=>{reset();setInput('');setQuery('');}},dt('清除搜索','Clear search')) : null,
- !isPop3 && h('label',{className:'email-unread-filter'},h('input',{type:'checkbox',checked:unread,disabled:busy || !!query,onChange:event=>{reset();setUnread(event.target.checked);}}),dt('只看未读','Unread only'))),
- !canTrash ? h('p', { className: 'email-list-note' }, dt('此协议暂不支持移入废纸篓，请使用邮箱原生客户端删除。', 'Trash is unavailable for this protocol; delete in your mail client.')) : null,
- isPop3 ? h('p',{className:'email-list-note',role:'note'},dt('POP3 收件箱 · 不提供服务器已读、星标或已发送文件夹。回复会进入本地草稿，确认后通过 SMTP 发送。','POP3 inbox · Server read/star flags and a Sent folder are unavailable. Replies open in local Drafts and use SMTP after confirmation.')) : null,
- canTrash && rows.length ? h('div', { className: 'email-batch-tools' }, h('label', null, h('input', { type: 'checkbox', checked: checked.length === rows.length && rows.length > 0, disabled: busy || loading, onChange: event => setChecked(event.target.checked ? rows.map(m => m.uid) : []) }), dt('选择本页', 'Select page')), h(W.Button, { disabled: busy || loading || !checked.length, onClick: () => requestTrash(checked) }, dt('移入废纸篓（', 'Move to Trash (') + checked.length + dt('）', ')'))) : null,
- rows.length ? rows.map(m=>h(W.Row,{key:String(m.uid),disabled:busy,children:canTrash ? h('input', { type: 'checkbox', 'aria-label': dt('选择邮件：', 'Select message: ') + (m.subject || String(m.uid)), checked: checked.includes(m.uid), disabled: busy || loading, onChange: event => setChecked(old => event.target.checked ? [...old, m.uid] : old.filter(uid => uid !== m.uid)) }) : null,title:h(React.Fragment,null,m.flagsSupported !== false && !m.seen?h('span',{className:'email-unread-dot',role:'img','aria-label':dt('未读','Unread')}):null,m.flagged?h(W.Icon,{name:'star',size:14}):null,m.subject || dt('（无主题）','(No subject)')),meta:who(m.from),description:date(m.date),active:selected===m.uid,onClick:()=>setSelected(m.uid)})) : h(W.Empty,{icon:'mail',title:error && !result?dt('邮件列表没有读出来','Messages could not be loaded'):loading?dt('正在读取邮件…','Loading messages…'):query?dt('当前检索范围内没有结果。','No results in the current search window.'):dt('当前页没有邮件。','No messages on this page.'),action:error && !result?h(W.Button,{icon:'refresh',disabled:busy || loading,onClick:retry},dt('重试','Retry')):undefined}),
- h('div',{className:'email-list-note'},h("div", { role: "status", "aria-live": "polite", className: "dshe-hint" }, loading ? dt("正在读取邮件…", "Loading messages…") : result ? dt("本页 ", "This page: ") + rows.length + dt(" 封", " messages") + (result.order === "relevance" ? dt(" · 按相关性排序", " · Ranked by relevance") : dt(" · 按邮箱到达序排列", " · Mailbox arrival order")) : dt("在账号设置中添加并测试邮箱后，即可浏览邮件。", "Add and test an account in settings to browse mail.")),
-result?.headerScan ? h("p", { className: "dshe-hint" }, dt("信封实际扫描：", "Headers scanned: ") + result.headerScan.scanned + " / " + result.headerScan.mailboxTotal + (result.headerScan.complete ? dt("，信封覆盖完整；正文另有限制。", "; headers fully covered; body search has a separate limit.") : dt("，尚未覆盖全文件夹。", "; folder coverage is partial."))) : null,
-result?.bodyScan ? h('p',{className:'dshe-hint'},dt('正文实际扫描：','Bodies scanned: ')+result.bodyScan.scanned+dt(' 封；最多 ',' messages; limit ')+result.bodyScan.scanLimit+dt(' 封，受正文显示上限限制。','; bounded by the body display limit.')) : null,
-result?.searchSource === "api" ? h("p", { className: "dshe-hint" }, dt("AgentMail 搜索由服务按相关性返回，垃圾箱等特殊邮件不在其搜索范围。", "AgentMail ranks results by relevance and excludes spam, trash and other protected mail.")) : null),h("div", { className: "dshe-mail-footer" }, [
-                    h(W.Button, { icon: 'left', disabled: loading || busy || offset === 0, onClick: () => setOffset(n => Math.max(0, n - 20)) }, dt("上一页", "Previous page")), h("span", { className: 'w-muted' }, dt("第 ", "Page ") + (Math.floor(offset / 20) + 1) + dt(" 页", "")), h(W.Button, { icon: 'right', disabled: loading || busy || !hasMore, onClick: () => setOffset(n => n + 20) }, dt("下一页", "Next page")),
-                    result?.headerScan?.nextScanOffset !== undefined ? h(W.Button, { icon: 'search', disabled: loading || busy, onClick: () => { setOffset(0); setScanOffset(result.headerScan.nextScanOffset); } }, dt("继续搜索更早邮件", "Search older headers")) : null,
-                ])),
- detail:reading && selected!==null ? h(W.Empty,{title:dt('正在读取正文…','Loading message…'),icon:'mail'}) : error && selected!==null && !detail ? h(W.Empty,{icon:'mail',title:dt('这封邮件没有读出来','This message could not be loaded'),action:h(W.Button,{icon:'refresh',disabled:busy,onClick:retry},dt('重试','Retry'))}) : detail ? h(MailMessage,{key:JSON.stringify([account,folder,selected,detail.rich?.images?.[0]?.id]),detail,currentRow,account,folder,selected,busy,run,who,date,onDraft,canTrash,onTrash:requestTrash,onMark:value=>setResult(old=>({...old,messages:old.messages.map(m=>m.uid===selected?{...m,...(value==='read'||value==='unread'?{seen:value==='read'}:{flagged:value==='star'})}:m)}))}) : h(W.Empty,{title:dt('选择一封邮件','Select a message'),icon:'mail'},dt('打开正文后，可以回复到草稿、标记状态或下载附件。','Open a message to reply in drafts, mark its state or download attachments.'))})));
-        }
-        const DRAFT_ROUTE = "api/dsh-email/drafts";
-        // Session memory survives closing the host settings dialog. A page reload
-        // still uses the unsaved-edits guard, and only an explicit Save writes content.
-        let draftUiCache = null, rulesUiCache = null, emailActiveTab = "mailbox", emailSettingsActiveTab = "accounts";
-        async function draftApi(action, payload, upload) {
-            const init = { credentials: "same-origin", method: "POST", headers: { "x-dsh-email-draft": "1", "Content-Type": upload ? "application/octet-stream" : "application/json" } };
-            if (upload) {
-                Object.assign(init.headers, { "x-dsh-draft-id": payload.id, "x-dsh-draft-revision": String(payload.revision), "x-dsh-draft-filename": encodeURIComponent(upload.name) });
-                init.body = upload;
-            }
-            else
-                init.body = JSON.stringify({ ...payload, action });
-            const response = await fetch(upload ? DRAFT_ROUTE + "/upload" : DRAFT_ROUTE, init), result = await response.json();
-            if (!response.ok || !result.ok) {
-                const error = new Error(result.error && result.error.message || dt("邮件操作失败", "Email action failed"));
-                error.code = result.error && result.error.code;
-                error.status = response.status;
-                error.message = emailError(error);
-                throw error;
-            }
-            return result.value;
-        }
-        function OutgoingMailPreview({body}) {
-          const render=(nodes,prefix='')=>(nodes||[]).map((node,index)=>{if(typeof node==='string')return node;const props={key:prefix+index,style:node.style,...(node.href?{href:node.href,target:'_blank',rel:'noopener noreferrer'}:{}),...(node.span?{colSpan:node.span}:{})};return ['br','hr'].includes(node.tag)?h(node.tag,props):h(node.tag,props,render(node.children,prefix+index+'-'));});
-          return h('div',null,h('div',{className:'email-draft-rich',style:{maxHeight:320,overflow:'auto',overflowWrap:'anywhere'}},render(body.rich.nodes)),h('details',null,h('summary',null,dt('查看纯文本备选','View plain-text alternative')),h('pre',null,body.text)));
-        }
-        const draftForm = (draft) => ({ account: draft.account || "", to: draft.to || "", cc: draft.cc || "", subject: draft.subject || "", text: draft.text || "", html: draft.html || "", sendAt:draft.sendAt||'', attachments: draft.attachments.map(file => file.id) });
-        const draftState = (state) => ({ draft: dt("未发送", "Not sent"), scheduled:dt('等待定时发送','Scheduled'), sending: dt("正在提交 / 待核对", "Submitting / check mailbox"), sent: dt("已保存服务端回执", "Server receipt saved"), uncertain: dt("结果未确定，请核对邮箱", "Outcome uncertain, check mailbox") })[state] || state;
-        const localSendTime = iso => {if(!iso)return'';const d=new Date(iso);return Number.isFinite(d.getTime())?new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16):'';};
-        function DraftWorkbench({active,requestedDraft,composeRequest,onComposeFinished}) {
-const [bodyFormat,setBodyFormat]=useState(() => draftUiCache?.form?.html ? 'html' : 'text');
-const [showEditor,setShowEditor]=useState(false);const handledCompose=useRef(null),composeStage=useRef(null);const controlId=React.useId();
-            const [data, setData] = useState({ drafts: [], accounts: [] }), [selected, setSelected] = useState(() => draftUiCache && draftUiCache.selected), [form, setForm] = useState(() => draftUiCache && draftUiCache.form);
-            const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState(""), [preview, setPreview] = useState(null), [acknowledged, setAcknowledged] = useState(false), [pending, setPending] = useState(null), [remove, setRemove] = useState(false), [copy, setCopy] = useState(false);
-            const operation = useRef(false), handledRequested = useRef("");
-            const dirty = selected && form && JSON.stringify(form) !== JSON.stringify(draftForm(selected));
-// Update protection: dsh-email.draft
-__stardustUpdatesGuard(React, "dsh-email.draft", { dirty: !!dirty, busy, retainOnClose: true });
-
-            useEffect(() => { draftUiCache = { selected, form }; }, [selected, form]);
-            const locked = !selected || selected.state !== "draft";
-            const attachmentCap = data.attachmentLimits?.[form?.account] ?? 20 * 1024 * 1024;
-            const capLabel = attachmentCap >= 1024 * 1024 ? (attachmentCap / 1024 / 1024) + " MiB" : Math.ceil(attachmentCap / 1024) + " KiB";
-            const reload = async () => { const next = await draftApi("list"); setData(next); return next; };
-            const run = async (fn) => {
-                if (operation.current)
-                    return;
-                operation.current = true;
-                setBusy(true);
-                setError("");
-                try {
-                    return await fn();
-                }
-                catch (e) {
-                    setError(e.message || String(e));
-                    return undefined;
-                }
-                finally {
-                    operation.current = false;
-                    setBusy(false);
-                }
-            };
-            const adopt = (draft) => { setShowEditor(true); setSelected(draft); setForm(draftForm(draft)); setBodyFormat(draft.html ? 'html' : 'text'); setPreview(null); setAcknowledged(false); setRemove(false); setCopy(false); setError(""); setNotice(""); };
-            useEffect(() => { if (active) {
-                setPreview(null);
-                setAcknowledged(false);
-                run(reload);
-            } }, [active]);
-            useEffect(() => {
-                const guard = (event) => { if (dirty) {
-                    event.preventDefault();
-                    event.returnValue = "";
-                } };
-                window.addEventListener("beforeunload", guard);
-                return () => window.removeEventListener("beforeunload", guard);
-            }, [dirty]);
-            const save = async () => { const value = await draftApi("update", { ...form, id: selected.id, revision: selected.revision }); adopt(value); await reload(); setNotice(dt("草稿已保存，邮件未发送。", "Draft saved. No email was sent.")); return value; };
-            const switchTo = async (target) => {
-                if (target.kind === "new")
-                    adopt(await draftApi("create", { account: target.account || "", to: "", cc: "", subject: "", text: "" }));
-                else
-                    adopt(await draftApi("get", { id: target.id }));
-                await reload();
-                setPending(null);
-            };
-            const requestSwitch = (target) => { if (dirty)
-                setPending(target);
-            else
-                run(() => switchTo(target)); };
-            useEffect(() => { if (active && requestedDraft && handledRequested.current !== requestedDraft && !operation.current && !busy) {
-                handledRequested.current = requestedDraft;
-                requestSwitch({ kind: "open", id: requestedDraft });
-            } }, [active, requestedDraft, busy]);
-            useEffect(()=>{if(active && composeRequest && handledCompose.current!==composeRequest.id && !operation.current && !busy){handledCompose.current=composeRequest.id;composeStage.current=dirty?'waiting':'running';requestSwitch({kind:'new',account:composeRequest.account});}},[active,composeRequest,busy]);
-useEffect(()=>{if(composeRequest && handledCompose.current===composeRequest.id){if(pending)composeStage.current='waiting-observed';if(!operation.current && !busy && !pending && composeStage.current!=='waiting'){composeStage.current=null;onComposeFinished?.();}}},[composeRequest,busy,pending,onComposeFinished]);
-const field = (key, zh, en, multiline) => h("div", { className: "dshe-field", key }, [
-                h("label", { htmlFor: controlId + "-" + key }, dt(zh, en)),
-                h(multiline ? "textarea" : "input", { id: controlId + "-" + key, type: multiline ? undefined : "text", value: form[key], disabled: busy || locked || !!selected?.reply && key === "subject", rows: multiline ? 8 : undefined, maxLength: multiline ? 102400 : key === "subject" ? 500 : 4096, onChange: (event) => { const value = event.target.value; setForm(current => ({ ...current, [key]: value })); setPreview(null); setAcknowledged(false); setNotice(""); } }),
-            ]);
-            const review = preview && h("section", { className: "dshe-review", "aria-label": dt("发送前预览", "Review before sending") }, [
-                h("h3", null, dt("发送前预览", "Review before sending")),
-                h("p", null, dt("发件人：", "From: ") + (preview.from.name ? preview.from.name + " <" + preview.from.address + ">" : preview.from.address)),
-                h("p", null, dt("主题：", "Subject: ") + preview.draft.subject),
-                preview.draft.sendAt?h('p',null,dt('定时发送：','Scheduled for: ')+formatDate(preview.draft.sendAt)):null,
-                preview.matching.blocked ? h("div", { className: "dshe-alert error", role: "alert" }, dt("有收件人命中禁止规则，无法发送。请修改草稿或收件人规则。", "A recipient is blocked. Change the draft or recipient rules before sending.")) : null,
-                h("ul", { className: "dshe-match-list" }, preview.matching.rows.map((row, index) => h("li", { key: index }, (row.field === "cc" ? "Cc: " : "To: ") + row.address + " · " + (row.blocked ? dt("禁止发送：", "Blocked: ") + row.value : row.matched ? dt("匹配可信规则", "Matches a trusted rule") : dt("需要确认", "Needs confirmation"))))),
-                preview.body?.rich?.nodes?.length ? h(OutgoingMailPreview,{body:preview.body}) : h("pre", null, preview.body?.text || preview.draft.text || dt("（空正文）", "(Empty body)")),
-                preview.attachments.length ? h("ul", { className: "dshe-files" }, preview.attachments.map(file => h("li", { key: file.id }, [
-                    h("span", null, file.filename + " · " + Math.ceil(file.size / 1024) + " KiB"),
-                    h("a", { href: DRAFT_ROUTE + "?preview=" + encodeURIComponent(preview.id) + "&attachment=" + encodeURIComponent(file.id), download: file.filename }, dt("下载检查", "Download to check")),
-                ]))) : h("p", null, dt("没有附件", "No attachments")),
-                h("div", { className: "dshe-hint" }, dt("附件已固定为本次预览快照。10 分钟后需重新预览；修改草稿、账号或规则也会使预览失效。", "Attachments are fixed to this preview. Review again after 10 minutes or when the draft, account or rules change.")),
-                h("label", { className: "dshe-check" }, [h("input", { type: "checkbox", checked: acknowledged, disabled: busy, onChange: event => setAcknowledged(event.target.checked) }), dt("我已核对发件人、所有收件人、正文和附件", "I checked the sender, all recipients, content and attachments")]),
-                h("div", { className: "dshe-actions" }, [
-                    h("button", { type: "button", className: "dshe-btn", disabled: busy, onClick: () => run(async () => { await draftApi("cancelPreview", { id: selected.id }); setPreview(null); setAcknowledged(false); setNotice(dt("预览已取消，邮件未发送。", "Review cancelled. No email was sent.")); }) }, dt("取消预览", "Cancel review")),
-                    h("button", { type: "button", className: "dshe-btn primary", disabled: busy || !acknowledged || dirty || preview.matching.blocked, onClick: () => run(async () => {
-                            try {
-                                const result = await draftApi(preview.draft.sendAt?'schedule':'send', { id: selected.id, preview: preview.id, confirmed: true, ...(preview.draft.sendAt?{sendAt:preview.draft.sendAt}:{}) });
-                                adopt(result.draft);
-                            }
-                            finally {
-                                setPreview(null);
-                                setAcknowledged(false);
-                                const fresh = await reload();
-                                const current = fresh.drafts.find(draft => draft.id === selected.id);
-                                if (current && current.state !== "draft")
-                                    adopt(current);
-                            }
-                        }) }, busy ? dt("正在提交…", "Submitting…") : preview.draft.sendAt?dt('确认定时发送','Confirm scheduled send'):dt("确认发送", "Confirm send")),
-                ]),
-            ]);
-            return h('section',{className:'email-drafts','aria-label':dt('邮件草稿','Email drafts')},
- h('div',{className:'email-draft-toolbar'},h('h3',null,dt('本地草稿','Local drafts')+' · '+data.drafts.length),h("button", { type: "button", className: "dshe-btn", disabled: busy, onClick: () => run(async () => { const next = await reload(); if (selected && !dirty) {
-                            const saved = next.drafts.find(draft => draft.id === selected.id);
-                            if (saved)
-                                adopt(saved);
-                        } }) }, dt("刷新列表", "Refresh list"))),h("p", { className: "dshe-hint" }, dt("草稿只保存在本机。模型可用 email_draft 准备内容，你在这里编辑、保存和确认发送。", "Drafts stay on this device. Ask the model to prepare one with email_draft, then edit, save and confirm here.")),
-pending ? h("div", { className: "dshe-alert info", role: "alert" }, [dt("当前草稿有未保存的编辑。", "The current draft has unsaved edits."), h("div", { className: "dshe-actions" }, [
-                        h("button", { type: "button", className: "dshe-btn", disabled: busy || locked, onClick: () => run(async () => { await save(); await switchTo(pending); }) }, dt("保存并切换", "Save and switch")),
-                        h("button", { type: "button", className: "dshe-btn", disabled: busy, onClick: () => run(() => switchTo(pending)) }, dt("放弃编辑并切换", "Discard edits and switch")),
-                        h("button", { type: "button", className: "dshe-btn", onClick: () => setPending(null) }, dt("保留编辑", "Keep editing")),
-                    ])]) : null,
-error ? h("div", { className: "dshe-alert error", role: "alert" }, [error, selected ? h("button", { type: "button", className: "dshe-btn", disabled: busy, onClick: () => requestSwitch({ kind: "open", id: selected.id }) }, dt("重新打开服务器版本", "Reopen saved version")) : null]) : null,
-notice ? h("div", { className: "dshe-alert info", role: "status" }, notice) : null,
- h(W.Split,{listWidth:330,selected:showEditor && selected?selected.id:null,onBack:()=>setShowEditor(false),backLabel:dt('返回草稿列表','Back to drafts'),
- list:h('div',null,data.drafts.length?data.drafts.map(draft=>h(W.Row,{key:draft.id,disabled:busy,title:draft.subject || dt('未命名草稿','Untitled draft'),meta:draft.account || dt('尚未选择账号','No account selected'),status:selected?.id===draft.id && dirty?dt('未保存','Unsaved'):draftState(draft.state),active:selected?.id===draft.id,onClick:()=>{setShowEditor(true);requestSwitch({kind:'open',id:draft.id});}})):h(W.Empty,{title:dt('还没有草稿','No drafts yet'),icon:'mail'},dt('点击上方“写邮件”开始。','Choose Compose above to begin.'))),detail:selected && form ? h("div", { className: "dshe-draft-editor" }, [
- selected.reply ? h('p', { className: 'dshe-alert', role: 'note' }, dt('此草稿回复原邮件，保留会话关联与原文引用。请在引用上方填写回复，预览后再确认发送。', 'This draft replies in the original thread and includes a quoted copy. Write above the quote, then review and confirm before sending.')) : null,
-                        h("div", { role: "status", className: "dshe-hint" }, dirty ? dt("有未保存的编辑", "Unsaved edits") : draftState(selected.state)),
-                        selected.sendAt?h('p',{className:'dshe-hint'},dt('发送时间：','Send time: ')+formatDate(selected.sendAt)):null,
-                        selected.error?h('p',{className:'dshe-alert warn',role:'status'},selected.error):null,
-                        selected.state==='scheduled'?h('button',{className:'dshe-btn',disabled:busy,onClick:()=>run(async()=>{adopt(await draftApi('cancelSchedule',{id:selected.id,revision:selected.revision}));await reload();})},dt('取消定时并返回草稿','Cancel schedule and return to draft')):null,
-                        h("div", { className: "dshe-field" }, [h("label", { htmlFor: controlId + "-account" }, dt("发件账号", "Sending account")), h("select", { id: controlId + "-account", value: form.account, disabled: busy || locked || !!selected?.reply, onChange: event => { const value = event.target.value; setForm(current => ({ ...current, account: value })); setPreview(null); setAcknowledged(false); } }, [h("option", { value: "" }, dt("请选择账号", "Choose an account")), ...[...new Set([...data.accounts, ...(form.account ? [form.account] : [])])].map(name => h("option", { key: name, value: name }, name))])]),
-                        field("to", "收件人 To", "Recipients To"), field("cc", "抄送 Cc", "Copy Cc"), field("subject", "主题", "Subject"),
-                        h('label',{className:'dshe-field'},dt('定时发送（可选，当前设备时区）','Schedule (optional, this device’s timezone)'),h('input',{type:'datetime-local','aria-label':dt('定时发送时间','Scheduled send time'),value:localSendTime(form.sendAt),disabled:busy||locked,onChange:e=>{const value=e.target.value;setForm(current=>({...current,sendAt:value?new Date(value).toISOString():''}));setPreview(null);setAcknowledged(false);}})),
-                        h('p',{className:'dshe-hint'},dt('需保持 DSH 运行。关闭期间错过的时间不会自动补发；提交结果不确定时也不会自动重试。','Keep DSH running. Missed times while closed are not sent on restart; uncertain submissions are never retried automatically.')),
-                        h('label',{className:'dshe-field'},dt('正文格式','Body format'),h('select',{'aria-label':dt('正文格式','Body format'),value:bodyFormat,disabled:busy||locked,onChange:e=>{const next=e.target.value;setBodyFormat(next);setForm(current=>({...current,html:next==='html'?(current.html||'<p>'+String(current.text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')+'</p>'):'',text:next==='html'?'':current.text||current.html.replace(/<[^>]*>/g,' ')}));setPreview(null);setAcknowledged(false);}},h('option',{value:'text'},dt('纯文本','Plain text')),h('option',{value:'html'},dt('HTML 排版','Formatted HTML')))),
-                        bodyFormat==='html'?h(React.Fragment,null,field('html','HTML 正文','HTML body',true),field('text','纯文本备选（可选）','Plain-text alternative (optional)',true),h('p',{className:'dshe-hint'},dt('预览并发送安全排版；未填写纯文本时自动生成。脚本和外部图片会移除。','Preview and send safe formatting. Plain text is generated when omitted. Scripts and external images are removed.'))):field("text", "正文", "Message", true),
-                        h("ul", { className: "dshe-files" }, selected.attachments.filter(file => form.attachments.includes(file.id)).map(file => h("li", { key: file.id }, [h("span", null, file.filename), !locked ? h("button", { type: "button", className: "dshe-btn", disabled: busy, "aria-label": dt("移除附件 ", "Remove attachment ") + file.filename, onClick: () => { setForm(current => ({ ...current, attachments: current.attachments.filter(id => id !== file.id) })); setPreview(null); setAcknowledged(false); } }, dt("移除", "Remove")) : null]))),
-                        !locked ? h("label", { className: "dshe-upload" }, [dt("添加附件（先保存编辑，最多 10 个 / 合计 ", "Add attachments (save edits first; up to 10 files / ") + capLabel + dt("）", " total)"), h("input", { type: "file", multiple: true, disabled: busy || dirty, "aria-label": dt("添加附件", "Add attachments"), onChange: event => { const files = Array.from(event.target.files || []); event.target.value = ""; run(async () => { let current = selected; for (const file of files) {
-                                    if (file.size > attachmentCap)
-                                        throw new Error(dt("单个附件超过 ", "Attachment exceeds ") + capLabel);
-                                    current = await draftApi("upload", { id: current.id, revision: current.revision }, file);
-                                    adopt(current);
-                                } await reload(); setNotice(dt("附件已添加，尚未发送。请检查预览。", "Attachments added. Review before sending.")); }); } })]) : null,
-                        !locked ? h("div", { className: "dshe-actions" }, [
-                            h("button", { type: "button", className: "dshe-btn", disabled: busy || !dirty, onClick: () => run(save) }, dt("保存草稿", "Save draft")),
-                            h("button", { type: "button", className: "dshe-btn primary", disabled: busy || dirty, onClick: () => run(async () => { setPreview(await draftApi("preview", { id: selected.id, revision: selected.revision })); setAcknowledged(false); setNotice(""); }) }, dt("检查发送预览", "Review before sending")),
-                        ]) : null,
-                        review,
-                        selected.receipt ? h("div", { className: "dshe-alert " + (selected.receipt.rejected.length ? "info" : "success"), role: "status" }, [(selected.receipt.rejected.length ? dt("部分地址被服务器拒绝，邮件不会自动重发。服务器接受：", "Some addresses were rejected. This email will not retry automatically. Server accepted: ") : dt("服务器已返回回执，邮件不会再次发送。服务器接受：", "Server receipt saved. This draft will not send again. Server accepted: ")) + (selected.receipt.accepted.join(", ") || dt("无", "none")), h("p", null, dt("服务器拒绝：", "Server rejected: ") + (selected.receipt.rejected.join(", ") || dt("无", "none"))), h("p", null, dt("这是服务器提交结果，不代表已送达收件人的收件箱。", "This confirms the server response, not delivery to the recipient inbox."))]) : null,
-                        selected.state === "uncertain" || selected.state === "sending" ? h("div", { className: "dshe-alert info", role: "status" }, selected.error || dt("提交尚未留下回执。先核对邮箱，再刷新列表；不要重复发送。", "No receipt yet. Check your mailbox, then refresh the list. Do not send again.")) : null,
-                        h("div", { className: "dshe-local-actions" }, [
-                            h("button", { type: "button", className: "dshe-btn", disabled: busy || selected.state === "sending" || dirty, onClick: () => setCopy(true) }, dt("复制为新草稿", "Copy to a new draft")),
-                            h("button", { type: "button", className: "dshe-btn", disabled: busy || selected.state === "sending", onClick: () => setRemove(true) }, dt("删除本地草稿", "Delete local draft")),
-                        ]),
-                        copy ? h("div", { className: "dshe-alert info" }, [dt("会复制内容及附件为一份新的未发送草稿。若上次已提交或结果不明，请先核对邮箱，避免重复投递。", "Copies content and attachments to a new unsent draft. Check the mailbox first if the original was submitted or its result is uncertain."), h("div", { className: "dshe-actions" }, [h("button", { type: "button", className: "dshe-btn", disabled: busy, onClick: () => run(async () => { adopt(await draftApi("copy", { id: selected.id, revision: selected.revision, confirmed: true })); await reload(); }) }, dt("确认复制", "Confirm copy")), h("button", { type: "button", className: "dshe-btn", onClick: () => setCopy(false) }, dt("取消", "Cancel"))])]) : null,
-                        remove ? h("div", { className: "dshe-alert info" }, [dt("只删除本地草稿与插件上传的附件副本；引用的原文件和邮箱中的邮件不会删除。", "Deletes this local draft and plugin-uploaded copies. Original files and mailbox messages stay intact."), h("div", { className: "dshe-actions" }, [h("button", { type: "button", className: "dshe-btn", disabled: busy, onClick: () => run(async () => { await draftApi("delete", { id: selected.id, revision: selected.revision, confirmed: true }); setSelected(null); setForm(null); setRemove(false); await reload(); }) }, dt("确认删除", "Confirm delete")), h("button", { type: "button", className: "dshe-btn", onClick: () => setRemove(false) }, dt("取消", "Cancel"))])]) : null,
-                    ]) : h("div", { className: "dshe-editor-empty" }, dt("选择一份草稿，或新建草稿开始编辑。", "Select a draft or create one to start editing."))}));
-        }
+        let rulesUiCache = null, emailActiveTab = "mailbox", emailSettingsActiveTab = "accounts";
         function RecipientRules({ active, onSaved }) {
 const fieldId=React.useId();
             const [data, setData] = useState(() => rulesUiCache && rulesUiCache.data), [account, setAccount] = useState(() => rulesUiCache && rulesUiCache.account || ""), [form, setForm] = useState(() => rulesUiCache && rulesUiCache.form || { addresses: "", domains: "", denyAddresses: "", denyDomains: "", skipApproval: false });
@@ -5121,7 +4826,7 @@ __stardustUpdatesGuard(React, "dsh-email.rules", { dirty: !!dirty, busy, retainO
                 error ? h("div", { className: "dshe-alert error", role: "alert" }, error) : null,
                 notice ? h("div", { className: "dshe-alert success", role: "status" }, notice) : null,
                 data && data.sendApproval === false ? h("div", { className: "dshe-alert info" }, dt("全局发信确认目前已关闭；禁止规则仍然生效。", "Global send approval is off; blocked-recipient rules still apply.")) : null,
-                h("div", { className: "dshe-field" }, [h("label", { htmlFor: fieldId + '-dshe-rule-account' }, dt("规则所属账号", "Account for these rules")), h("select", { id: fieldId + '-dshe-rule-account', value: account, disabled: busy, onChange: event => request({ kind: "account", name: event.target.value }) }, [h("option", { value: "", disabled: true }, dt("请选择已配置账号", "Choose a configured account")), ...(data ? data.accounts : []).map(name => h("option", { key: name, value: name }, name))])]),
+                h("div", { className: "dshe-field" }, [h("label", { htmlFor: fieldId + '-dshe-rule-account' }, dt("规则所属账号", "Account for these rules")), h(W.SettingsChoice, null, h("select", { id: fieldId + '-dshe-rule-account', "aria-label": dt("规则所属账号", "Account for these rules"), value: account, disabled: busy, onChange: event => request({ kind: "account", name: event.target.value }) }, [h("option", { value: "", disabled: true }, dt("请选择已配置账号", "Choose a configured account")), ...(data ? data.accounts : []).map(name => h("option", { key: name, value: name }, name))]))]),
                 pending ? h("div", { className: "dshe-alert info" }, [dt("规则还未保存。", "Rules have unsaved edits."), h("div", { className: "dshe-actions" }, [h("button", { type: "button", className: "dshe-btn", disabled: busy, onClick: () => run(async () => { const next = await save(); if (pending.kind === "reload")
                                 await load();
                             else
@@ -5157,13 +4862,13 @@ __stardustUpdatesGuard(React, "dsh-email.rules", { dirty: !!dirty, busy, retainO
             const field=(label,node)=>h('label',{className:'dshe-field'},h('span',null,label),node);
             const save=async()=>{const workspaces={};for(const line of aliases.split('\n').filter(x=>x.trim())){const at=line.indexOf('=');if(at<1)throw new Error(dt('每行填写：别名 = 现有文件夹绝对路径','Each line: alias = absolute path to an existing folder'));const name=line.slice(0,at).trim();if(Object.hasOwn(workspaces,name))throw new Error(dt('工作区别名重复','Duplicate workspace alias'));workspaces[name]=line.slice(at+1).trim();}adopt(await mailTaskApi('save',{revision:data.revision,config:{...config,senders:senders.split('\n').map(x=>x.trim()).filter(Boolean),workspaces,rules:JSON.parse(rules)}}));setNotice(dt('已保存。首次检查只建立起点，之后的新邮件才会触发任务。','Saved. The first check establishes a baseline; only later mail can trigger tasks.'));};
             const states={dispatching:dt('正在创建任务','Starting'),running:dt('执行中','Running'),waiting:dt('等待你在 DSH 中确认','Waiting for your input in DSH'),completed:dt('已完成','Completed'),attention:dt('需要查看','Needs attention'),replying:dt('正在提交回复','Submitting reply'),replied:dt('已回复','Replied'),uncertain:dt('发送结果不确定，请核对','Mail outcome uncertain; check sent mail')};
-            return h('section',{'aria-label':dt('邮件触发任务','Mail-triggered tasks'),className:'dshe-global'},
+            return h('section',{'aria-label':dt('邮件触发任务','Mail-triggered tasks'),className:clsx('dshe-global', settingsCss.tasks)},
                 h('h3',null,dt('把邮件变成 DSH 任务','Turn email into a DSH task')),
                 h('p',{className:'dshe-hint'},dt('从自己的邮箱发出任务，在指定工作区执行；可回复同一会话继续。默认关闭。任务使用你的模型，可能产生用量；权限请求仍需在 DSH 中确认。','Send a task from an authorized mailbox to an approved workspace, then continue the same session by email. Off by default. Tasks use your model and may incur usage; DSH permissions still require your input.')),
                 !data.available?h('p',{className:'dshe-alert warn'},dt('当前 DSH 未提供原生任务服务，请升级 DSH 后使用。','Native task services are unavailable; update DSH to use this feature.')):null,
                 error||data.error?h('p',{role:'alert',className:'dshe-alert error'},error||emailError(data.error)):null,
                 notice?h('p',{role:'status'},notice):null,
-                field(dt('接收任务的邮箱','Receiving account'),h('select',{value:config.account,disabled:busy,onChange:e=>change({account:e.target.value})},h('option',{value:''},dt('选择邮箱','Choose an account')),accounts.map(name=>h('option',{key:name,value:name},name)))),
+                field(dt('接收任务的邮箱','Receiving account'),h(W.SettingsChoice, null, h('select',{'aria-label':dt('接收任务的邮箱','Receiving account'),value:config.account,disabled:busy,onChange:e=>change({account:e.target.value})},h('option',{value:''},dt('选择邮箱','Choose an account')),accounts.map(name=>h('option',{key:name,value:name},name))))),
                 field(dt('接收文件夹','Receiving folder'),h('input',{value:config.folder,disabled:busy,onChange:e=>change({folder:e.target.value})})),
                 field(dt('任务主题前缀','Task subject prefix'),h('input',{value:config.prefix||'dsh',disabled:busy,maxLength:32,onChange:e=>change({prefix:e.target.value})})),
                 field(dt('允许的发件人（每行一个；留空仅允许邮箱本人）','Allowed senders (one per line; empty means the mailbox itself)'),h('textarea',{rows:3,value:senders,disabled:busy,placeholder:'you@example.com',onChange:e=>setSenders(e.target.value)})),
@@ -5183,11 +4888,15 @@ __stardustUpdatesGuard(React, "dsh-email.rules", { dirty: !!dirty, busy, retainO
             );
         }
         function EmailSettingsSection({workbench=false}={}) {
-const [composeAccount,setComposeAccount]=useState(''),[composeRequest,setComposeRequest]=useState(null);
-const [,redrawLocale]=useState(0);useEffect(()=>activeLocaleService?.subscribe?.(()=>redrawLocale(n=>n+1)),[]);
+            const [composeAccount, setComposeAccount] = useState("");
+            const [composeRequest, setComposeRequest] = useState(null);
+            const requestId = useRef(0);
+            const tabId = React.useId();
+            const [, redrawLocale] = useState(0);
+            useEffect(() => activeLocaleService?.subscribe?.(() => redrawLocale(n => n + 1)), []);
             const [tab, setTab] = useState(workbench ? emailActiveTab : emailSettingsActiveTab);
-            const [requestedDraft, setRequestedDraft] = useState("");
-            const openMailboxDraft = id => { setRequestedDraft(id); setTab("drafts"); };
+            const openMailboxDraft = draftId => setComposeRequest({ id: ++requestId.current, draftId });
+            const finishCompose = useCallback(() => setComposeRequest(null), []);
             useEffect(() => { if(workbench) emailActiveTab=tab;else emailSettingsActiveTab=tab; }, [tab]);
             const [draft, setDraft] = useState(null);
             useEffect(() => {
@@ -5459,7 +5168,7 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                 return api("test", { value, account: accountName });
             };
             if (draft === null) {
-                return h(W.Page,{workbench,title:dt('邮件','Email'),subtitle:dt('阅读、回复和管理草稿。','Read, reply and manage drafts.'),className:'dshe-settings email-workbench'},h('style',null,EMAIL_WORKBENCH_CSS),h(W.Status,{tone:error?'error':'info'},error || t('common.loading')),error?h(W.Button,{disabled:busy,onClick:load},dt('重试','Retry')):null);
+                return h(W.Page, { workbench, title: dt('邮件','Email'), className: settingsCss.root },h(W.Status,{tone:error?'error':'info'},error || t('common.loading')),error?h(W.Button,{disabled:busy,onClick:load},dt('重试','Retry')):null);
             }
             const accounts = snapshot && snapshot.accounts ? snapshot.accounts : [];
             const presetsMerged = presetsWithNames((snapshot && snapshot.presets) || undefined, customNames);
@@ -5475,16 +5184,31 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                 "aria-live": "polite",
                 className: "dshe-auto-status" + (hasIncompleteDraft ? " is-draft" : saveState === null ? "" : " is-" + saveState.kind),
             }, statusText);
-            return h(W.Page,{workbench,title:dt('邮件','Email'),subtitle:dt('阅读、回复和管理草稿。','Read, reply and manage drafts.'),className:'dshe-settings email-workbench',actions:h(React.Fragment,null,
- h(W.Button,{variant:'primary',icon:'edit',disabled:!!composeRequest,onClick:()=>{setComposeRequest({id:crypto.randomUUID(),account:composeAccount || accounts[0] || ''});setTab('drafts');}},dt('写邮件','Compose')),
- h(W.Button,{icon:'settings',onClick:()=>setTab('accounts')},dt('邮箱设置','Account settings')))},h('style',null,EMAIL_WORKBENCH_CSS),
- h(W.Tabs,{label:dt('邮件功能','Email features'),value:tab,onChange:setTab,items:[{id:'mailbox',label:dt('收发邮件','Mailbox')},{id:'drafts',label:dt('草稿','Drafts')},{id:'accounts',label:dt('邮箱账号','Accounts')},{id:'rules',label:dt('收件人规则','Recipient rules')},{id:'tasks',label:dt('邮件任务','Mail tasks')}]},
- tab === 'accounts' && (saveState !== null || hasIncompleteDraft) ? h('div',{key:hasIncompleteDraft?'draft':saveState?.kind||'idle','data-kind':hasIncompleteDraft?'draft':saveState?.kind||'idle',className:'email-account-status'},status,!hasIncompleteDraft && saveState?.kind==='error'?h(W.Button,{onClick:()=>flushSave()},dt('重试保存','Retry save')):null) : null,
- h("div", { hidden: tab !== "mailbox", className: "dshe-section-hidden" }, h(MailboxWorkbench, { active: tab === "mailbox", onConfigure: () => setTab("accounts"), onDraft: openMailboxDraft, onAccountChange:setComposeAccount })),
-h("div", { hidden: tab !== "drafts", className: "dshe-section-hidden" }, h(DraftWorkbench, { active: tab === "drafts", requestedDraft,composeRequest,onComposeFinished:()=>setComposeRequest(null) })),
-h("div", { hidden: tab !== "rules", className: "dshe-section-hidden" }, h(RecipientRules, { active: tab === "rules", onSaved: revision => { setSnapshot(old => ({ ...old, settings: { ...old.settings, revision } })); } })),
-h('div',{hidden:tab!=='tasks',className:'dshe-section-hidden'},h(MailTaskWorkbench,{active:tab==='tasks',accounts})),
-h("section", { hidden: tab !== "accounts", className: "dshe-panel dshe-section-hidden" }, [
+            const defaultAccount = snapshot?.accountsDetail?.defaultAccount || (accounts.length === 1 ? accounts[0] : "");
+            const tabs = [
+                { id: "mailbox", label: dt("收发邮件", "Mailbox") },
+                { id: "drafts", label: dt("草稿", "Drafts") },
+                { id: "accounts", label: dt("邮箱账号", "Accounts") },
+                { id: "rules", label: dt("收件人规则", "Recipient rules") },
+                { id: "tasks", label: dt("邮件任务", "Mail tasks") },
+            ];
+            const panel = value => ({
+                role: "tabpanel", id: tabId + "-panel-" + value, "aria-labelledby": tabId + "-tab-" + value,
+                hidden: tab !== value, className: uiCss.panel,
+            });
+            return h(W.Page, { workbench, title: dt("邮件", "Email"), className: settingsCss.root, showUpdates: tab === "accounts",
+                navigation: h(W.Tabs, { id: tabId, label: dt("邮件功能", "Email features"), value: tab, onChange: setTab, items: tabs }),
+                actions: h(W.Button, { variant: "primary", icon: "edit", disabled: !!composeRequest,
+                    onClick: () => setComposeRequest({ id: ++requestId.current, account: accounts.includes(composeAccount) ? composeAccount : defaultAccount }) }, dt("写邮件", "Compose")),
+            },
+                h("div", panel("mailbox"), h(MailboxWorkbench, { active: tab === "mailbox", onConfigure: () => setTab("accounts"), onDraft: openMailboxDraft, onAccountChange: setComposeAccount })),
+                h("div", panel("drafts"), h(DraftWorkbench, { active: tab === "drafts", defaultAccount, composeRequest, onComposeFinished: finishCompose })),
+                h("div", panel("rules"), h("div", { className: settingsCss.content }, h(RecipientRules, { active: tab === "rules", onSaved: revision => { setSnapshot(old => ({ ...old, settings: { ...old.settings, revision } })); } }))),
+                h("div", panel("tasks"), h("div", { className: settingsCss.content }, h(MailTaskWorkbench, { active: tab === "tasks", accounts }))),
+                h("div", panel("accounts"), h("div", { className: settingsCss.content },
+                    saveState !== null || hasIncompleteDraft ? h("div", { className: settingsCss.accountStatus }, status,
+                        !hasIncompleteDraft && saveState?.kind === "error" ? h(W.Button, { onClick: () => flushSave() }, dt("重试保存", "Retry save")) : null) : null,
+                    h("section", { className: "dshe-panel" },
                     // 全局设置：发信确认和下载目录对所有账号一视同仁，不属于任何一张卡片，
                     // 所以摆在卡片列表上方，而不是塞进某一张卡里。
                     h("div", { className: "dshe-global" }, [
@@ -5511,7 +5235,7 @@ h("section", { hidden: tab !== "accounts", className: "dshe-panel dshe-section-h
                         draft.sendApproval === false
                             ? h("div", { id: "dshe-send-approval-risk", className: "dshe-alert info", role: "status" }, t("global.sendApprovalRisk"))
                             : null,
-                        h('label',{className:'dshe-field'},dt('回复引用语言','Reply quote language'),h('select',{'aria-label':dt('回复引用语言','Reply quote language'),value:draft.replyLocale||'auto',disabled:snapshot?.writable===false,onChange:e=>update({replyLocale:e.target.value})},h('option',{value:'auto'},dt('跟随界面，未知时用英语','Follow interface; English if unknown')),h('option',{value:'zh'},'中文'),h('option',{value:'en'},'English'),h('option',{value:'fr'},'Français'))),
+                        h('label',{className:'dshe-field'},dt('回复引用语言','Reply quote language'),h(W.SettingsChoice, null, h('select',{'aria-label':dt('回复引用语言','Reply quote language'),value:draft.replyLocale||'auto',disabled:snapshot?.writable===false,onChange:e=>update({replyLocale:e.target.value})},h('option',{value:'auto'},dt('跟随界面，未知时用英语','Follow interface; English if unknown')),h('option',{value:'zh'},'中文'),h('option',{value:'en'},'English'),h('option',{value:'fr'},'Français')))),
                         h('label',{className:'dshe-check'},h('input',{type:'checkbox',checked:draft.allowTrustedReply===true,disabled:snapshot?.writable===false,onChange:e=>update({allowTrustedReply:e.target.checked})}),dt('允许可信回复免审（默认关闭）','Allow trusted replies without confirmation (off by default)')),
                         h('p',{className:'dshe-hint'},dt('开启后，仅当回复、回复全部或转发的所有实际 To/Cc 都匹配该账号可信规则时免审；禁止规则和宿主权限继续生效。','When enabled, every actual To/Cc in a reply, reply-all or forward must match that account’s trusted rules. Block rules and host permissions still apply.')),
                         h('label',{className:'dshe-field'},dt('引用日期时区（可选）','Quote date timezone (optional)'),h('input',{value:draft.replyTimeZone||'',placeholder:'Asia/Shanghai · Europe/Paris',disabled:snapshot?.writable===false,onChange:e=>update({replyTimeZone:e.target.value})})),
@@ -5546,10 +5270,9 @@ h("section", { hidden: tab !== "accounts", className: "dshe-panel dshe-section-h
                     snapshot && snapshot.writable === false
                         ? h("div", { className: "dshe-alert info" }, t("section.readonly"))
                         : null,
-                ]),error ? h("div", { className: "dshe-alert error" }, error) : null,
-accounts.length > 0
-                    ? h("div", { className: "dshe-hint" }, t("section.activeAccounts", { accounts: accounts.join(t("common.listSeparator")) }))
-                    : null));
+                    ),
+                    error ? h(W.Status, { tone: "error" }, error) : null,
+                    accounts.length > 0 ? h("div", { className: "dshe-hint" }, t("section.activeAccounts", { accounts: accounts.join(t("common.listSeparator")) })) : null)));
         }
         // Whale-girl courier popup: polls the same-origin watch route every 30s.
         // The first poll seeds the baseline silently; later polls pop a card only
@@ -5562,7 +5285,7 @@ accounts.length > 0
                 return () => { };
             const root = document.createElement("div");
             root.id = "dsh-email-whale-root";
-            root.className = "dshe-whale-root";
+            root.className = settingsCss.whaleRoot;
             document.body.appendChild(root);
             let pollTimer = 0;
             let hideTimer = 0;
@@ -5591,43 +5314,43 @@ accounts.length > 0
                     return;
                 current = value;
                 const card = document.createElement("div");
-                card.className = "dshe-whale-card";
+                card.className = settingsCss.whaleCard;
                 if (whaleUrl) {
                     const img = document.createElement("img");
-                    img.className = "dshe-whale-img";
+                    img.className = settingsCss.whaleImg;
                     img.src = whaleUrl;
                     img.alt = "";
                     img.onerror = () => { img.remove(); };
                     card.appendChild(img);
                 }
                 const body = document.createElement("div");
-                body.className = "dshe-whale-body";
+                body.className = settingsCss.whaleBody;
                 const title = document.createElement("div");
-                title.className = "dshe-whale-title";
+                title.className = settingsCss.whaleTitle;
                 title.textContent = t("whale.title", { count: value.newCount });
                 body.appendChild(title);
                 (value.messages || []).slice(0, 3).forEach((m) => {
                     const row = document.createElement("div");
-                    row.className = "dshe-whale-item";
+                    row.className = settingsCss.whaleItem;
                     const who = (m.from || []).map((a) => a.name || a.address).filter(Boolean).join(", ") || t("whale.unknownSender");
                     row.textContent = t("whale.row", { who, subject: m.subject || t("whale.noSubject") });
                     body.appendChild(row);
                 });
                 if (value.newCount > 3) {
                     const more = document.createElement("div");
-                    more.className = "dshe-whale-item";
+                    more.className = settingsCss.whaleItem;
                     more.textContent = t("whale.more", { count: value.newCount - 3 });
                     body.appendChild(more);
                 }
                 if (whaleCredit) {
                     const credit = document.createElement("div");
-                    credit.className = "dshe-whale-credit";
+                    credit.className = settingsCss.whaleCredit;
                     credit.textContent = whaleCredit;
                     body.appendChild(credit);
                 }
                 card.appendChild(body);
                 const closeBtn = document.createElement("button");
-                closeBtn.className = "dshe-whale-close";
+                closeBtn.className = settingsCss.whaleClose;
                 closeBtn.textContent = "\u2715";
                 closeBtn.setAttribute("aria-label", t("whale.close"));
                 closeBtn.onclick = closePopup;
@@ -5750,7 +5473,7 @@ W.register(ctx,{id:'dsh-email.workbench',label:()=>dt('邮件','Email'),icon:'ma
                 const style = document.createElement("style");
                 style.dataset.plugin = "dsh-email";
                 style.dataset.pluginCss = id;
-                style.textContent = CSS;
+                style.textContent = EMAIL_CSS;
                 document.head.appendChild(style);
                 return () => { style.remove(); };
             }, "dsh-email: styles");
