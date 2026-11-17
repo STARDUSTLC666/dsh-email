@@ -1,5 +1,10 @@
 # 更新记录
 
+## 0.27.4 (2026-11-18)
+
+- 修复「鲸鱼娘递信」新邮件弹窗竖图被裁切的问题：图片区域按原图比例自适应显示，兼容内置竖图与横版皮肤素材，并为弹窗节点提供稳定的 `data-whale` / `data-whale-skin` 属性（#55）。
+- Fit new-mail popup artwork to its natural aspect ratio without cropping portrait fallback or landscape skin images, and expose stable `data-whale` / `data-whale-skin` hooks (#55).
+
 ## 0.27.3 (2026-11-17)
 
 - 更新区显示的版本号与邮件插件安装包一致。
