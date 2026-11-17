@@ -1,5 +1,10 @@
 # 更新记录
 
+## 0.28.2 (2026-11-18)
+
+- 更新区底部新增克制、无打扰的 GitHub 点赞与问题反馈快捷链接，并完善中英文检索关键词。
+- Add subtle, non-intrusive GitHub Star and issue feedback links in the update footer, and expand search keywords.
+
 ## 0.28.1 (2026-11-18)
 
 - 同步 `@stardustlc/dsh-updates` 0.2.1：恢复 Suite 整包统一更新（移除独立拆包迁移），保留整包与独立插件的原地热更新与失败自动回滚。

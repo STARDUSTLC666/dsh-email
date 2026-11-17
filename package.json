@@ -1,6 +1,6 @@
 {
   "name": "dsh-email",
-  "version": "0.28.1",
+  "version": "0.28.2",
   "description": "DeepSeek Harness 邮件工作台：多账号收发、图文回复草稿、确认定时发送、Google/Outlook OAuth、可选邮件任务与五种界面主题切换。欢迎提交 issues 和 PR。",
   "type": "module",
   "main": "lib/index.js",
@@ -37,7 +37,14 @@
     "imap",
     "smtp",
     "agentmail",
-    "pop3"
+    "pop3",
+    "deepseek",
+    "ai-agent",
+    "oauth2",
+    "gmail",
+    "outlook",
+    "邮件",
+    "邮箱"
   ],
   "author": "stardustlc",
   "repository": {
@@ -69,7 +76,7 @@
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.3",
-    "@stardustlc/dsh-updates": "0.2.1",
+    "@stardustlc/dsh-updates": "0.2.2",
     "html-to-text": "10.0.1",
     "imapflow": "^2.2.1",
     "mailparser": "^3.9.33",
