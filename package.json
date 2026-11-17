@@ -1,6 +1,6 @@
 {
   "name": "dsh-email",
-  "version": "0.27.1",
+  "version": "0.27.2",
   "description": "DSH 邮件工作台：图文回复与草稿、确认定时发送、Google/Outlook 授权、多邮箱及可选邮件任务。欢迎提交 issues 和 PR。",
   "type": "module",
   "main": "lib/index.js",
@@ -69,7 +69,7 @@
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.3",
-    "@stardustlc/dsh-updates": "0.1.4",
+    "@stardustlc/dsh-updates": "0.2.0",
     "html-to-text": "10.0.1",
     "imapflow": "^2.2.1",
     "mailparser": "^3.9.33",

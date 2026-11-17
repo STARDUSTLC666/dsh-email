@@ -1,5 +1,10 @@
 # 更新记录
 
+## 0.27.2 (2026-11-17)
+
+- 在工作台单独检查和安装兼容版本。自动安装默认关闭，可为该插件开启空闲时的稳定补丁更新。
+- Check and install compatible versions separately from the workbench. Automatic installation is off by default. Enable it for this plugin to apply stable patches while idle.
+
 ## 0.27.1 (2026-11-17)
 
 - 在「邮件 → 邮箱账号 → 附件大小上限」可选 20、25、30、35、40 MiB 或自定义值。默认 20 MiB，SMTP 草稿最多 40 MiB，AgentMail 草稿最多 4 MiB（#54）。
