@@ -2,7 +2,7 @@
 
 # Email
 
-**Handle mail in DSH and review replies before sending.**
+**DeepSeek Harness email workbench: read mail, draft rich replies, review before immediate or scheduled delivery, and switch across five workbench themes.**
 
 [![npm](https://img.shields.io/npm/v/dsh-email)](https://www.npmjs.com/package/dsh-email) [![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-downloads.svg)](https://www.npmjs.com/package/dsh-email) [![total downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-total-downloads.svg)](https://www.npmjs.com/package/dsh-email)
 
@@ -17,7 +17,7 @@
 
 ## Features
 
-Version 0.23 adds safe HTML send/reply/draft previews, reviewed scheduled sends, explicit Google OAuth, Tencent enterprise mail presets, localized reply quotations and optional mail-triggered DSH tasks. See the [workflow and operating boundaries](docs/OUTGOING-AUTOMATION.en.md). Existing Gmail app-password accounts continue to work. Scheduling requires a running DSH; task execution and automatic result replies are opt-in.
+Supports safe HTML send/reply/draft previews, reviewed scheduled sends, Google & Outlook OAuth, Tencent enterprise mail presets, localized reply quotations, optional mail-triggered DSH tasks, and five switchable UI themes (Native Airy, Warm Cream, Claude Warmth, Bright 8-Bit, and Airy Mint) adapted for DeepSeek Harness `>=0.2.2-rc.3`. See the [workflow and operating boundaries](docs/OUTGOING-AUTOMATION.en.md). Existing Gmail app-password accounts continue to work. Scheduling requires a running DSH; task execution and automatic result replies are opt-in.
 
 - Use IMAP/POP3/SMTP, Outlook OAuth or AgentMail accounts.
 - Besides built-in providers and server presets, the provider dropdown offers **Custom server (enter details)**: enter IMAP/SMTP endpoints directly for intranet or self-hosted mail servers. A blank outgoing host reuses the incoming host, and blank ports default to 993/465.

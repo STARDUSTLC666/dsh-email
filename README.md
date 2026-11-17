@@ -2,7 +2,7 @@
 
 # Email
 
-**在 DSH 里处理邮件，确认后再发出回复。**
+**DeepSeek Harness 邮件工作台：收发邮件、编辑图文草稿、核对后再定时或立即发送，支持五种界面主题实时切换。**
 
 [![npm](https://img.shields.io/npm/v/dsh-email)](https://www.npmjs.com/package/dsh-email) [![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-downloads.svg)](https://www.npmjs.com/package/dsh-email) [![total downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-total-downloads.svg)](https://www.npmjs.com/package/dsh-email)
 
@@ -19,7 +19,7 @@
 
 - 使用 IMAP / POP3 / SMTP、Google / Outlook OAuth 或 AgentMail 账号，提供腾讯企业邮预设。
 - 内置服务商与「服务器预设」之外，服务商下拉还提供「自定义服务器（手动填写）」：内网 / 自建邮件服务器可直接填 IMAP/SMTP 端点，发信主机留空沿用收信主机，端口留空按 993/465 处理。
-- 在工作台浏览邮件、搜索并下载附件。
+- 在工作台浏览邮件、搜索并下载附件，并支持五种界面风格切换（原生清透 / 米白纸感 / Claude 暖书卷 / 8-Bit 像素 / 晴空薄荷）与全套微动效反馈。
 - 管理 IMAP 自建文件夹：创建、重命名，预览并单独确认清空，只删除空文件夹；系统目录受保护。
 - 界面跟随 DSH 语言：简体中文、英语、西班牙语、法语、德语、日语、巴西葡萄牙语和俄语。
 - 其他插件可在进程内用 `emailTasks` 订阅新邮件到达，不读取正文、不创建会话。
