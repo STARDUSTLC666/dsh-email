@@ -1,5 +1,10 @@
 # 更新记录
 
+## 0.27.3 (2026-11-17)
+
+- 更新区显示的版本号与邮件插件安装包一致。
+- Match the version displayed by the update area to the installed email package.
+
 ## 0.27.2 (2026-11-17)
 
 - 在工作台单独检查和安装兼容版本。自动安装默认关闭，可为该插件开启空闲时的稳定补丁更新。
