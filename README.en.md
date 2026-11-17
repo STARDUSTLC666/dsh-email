@@ -75,9 +75,9 @@ Check updates at the bottom of the workbench or native plugin details. Automatic
 - [Release notes](https://github.com/STARDUSTLC666/dsh-email/blob/main/CHANGELOG.md)
 - [Validation scope and history](https://github.com/STARDUSTLC666/dsh-email/blob/main/docs/VALIDATION.md)
 
-## Feedback
+## Feedback and contributions
 
-If the plugin helps, a Star makes it easier for others to discover. Report problems or suggest improvements in [Issues](https://github.com/STARDUSTLC666/dsh-email/issues). Include versions and reproduction steps, and remove credentials from reports.
+If the plugin helps, a Star makes it easier for others to discover. Report problems or suggest improvements in [Issues](https://github.com/STARDUSTLC666/dsh-email/issues); code and documentation [PRs](https://github.com/STARDUSTLC666/dsh-email/pulls) are welcome. Include versions and reproduction steps, and remove credentials from reports.
 
 ## License
 
