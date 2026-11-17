@@ -1,5 +1,4 @@
 .drafts {
-  box-sizing: border-box;
   width: min(100%, 900px);
   min-width: 0;
   margin-inline: auto;
@@ -20,11 +19,8 @@
 }
 
 .toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px 12px;
   margin-block-end: 12px;
 }
 
@@ -45,7 +41,7 @@
 .draftList {
   margin-block-start: 12px;
   gap: 0;
-  border: var(--dsh-control-border-width, 0.5px) solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: var(--dsw-radius-md, 12px);
   background: var(--dsw-alias-bg-layer-1);
   overflow: clip;
@@ -59,13 +55,11 @@
   gap: 8px;
   padding: 10px 12px;
   text-align: start;
-  border: 0;
-  box-shadow: none;
   border-radius: 0;
 }
 
 .draftRow + .draftRow {
-  border-block-start: var(--dsh-control-border-width, 0.5px) solid var(--dsw-alias-border-l2);
+  border-block-start: 0.5px solid var(--dsw-alias-border-l2);
 }
 
 .draftRow > span:first-child {

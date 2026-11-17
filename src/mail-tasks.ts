@@ -414,20 +414,6 @@ export class MailTaskBackend {
 export function installMailTasks(ctx: any, backend: MailTaskBackend) {
     ctx.inject?.(['connection'], (host: any) => host.connection?.fetch?.register?.({ path: MAIL_TASK_ROUTE, methods: ['POST'], requestBody: 'buffered', fetch: (r: Request) => backend.fetch(r) }));
     ctx.inject?.(['sessionController', 'sessionQuery'], (host: any) => backend.bind(host));
-    ctx.inject?.(['appReady'], (host: any) => {
-        if (typeof host.appReady?.onReady !== 'function') return;
-        if (typeof host.effect === 'function') host.effect(() => {
-            const off = host.appReady.onReady(() => backend.start());
-            return typeof off === 'function' ? off : () => {};
-        });
-        else host.appReady.onReady(() => backend.start());
-    });
-    let stopped = false;
-    const stopTasks = () => {
-        if (stopped) return;
-        stopped = true;
-        backend.stop();
-    };
-    ctx.effect?.(() => stopTasks);
-    ctx.on?.('dispose', stopTasks);
+    ctx.inject?.(['appReady'], (host: any) => host.appReady?.onReady?.(() => backend.start()));
+    ctx.on?.('dispose', () => backend.stop());
 }

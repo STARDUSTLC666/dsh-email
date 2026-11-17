@@ -1,14 +1,5 @@
 # 更新记录
 
-## 0.28.0 (2026-11-18)
-
-- 新增五种界面风格切换（`harness` 原生清透、`cream` 米白纸感、`claude` Claude 暖书卷、`pixel8bit` 8-Bit 像素、`mint` 晴空薄荷），跨工作台、Portal 弹窗/菜单与新邮件弹窗实时同步，并在宿主深色模式下采用通透柔和石板灰（`#1f232b` / `#272c36`）。
-- 升级按钮按压物理反馈（含 8-Bit 阶梯像素按压）、小按钮 SVG 图标微动效（`refresh`、`plus`/`close`、`send`/`reply`、`trash`、`down`、`star`/`check`、`download`）、邮件行聚光与悬浮过渡、弹窗入场动画及 `prefers-reduced-motion` 无障碍适配。
-- 深度适配 DeepSeek Harness `>=0.2.2-rc.3`：按需加载宿主 UI 原语并提供独立兜底、浮层标记 `data-window-drag-exclude`，以及补齐 Cordis 4 `ctx.effect` 热重载/卸载清理。
-- Add a 5-preset `[data-dsh-style]` switcher (`harness`, `cream`, `claude`, `pixel8bit`, `mint`) synced across the workbench, portaled dialogs/menus, and new-mail popup, with breathable slate (`#1f232b` / `#272c36`) in host dark mode.
-- Add tactile button press physics (including stepped 8-bit press), `data-dsh-icon` micro-animations, mail-row spotlight & hover lift, `@starting-style` transitions, and `prefers-reduced-motion` support.
-- Deeply adapt to DeepSeek Harness `>=0.2.2-rc.3` with lazy host UI primitives + standalone fallbacks, `data-window-drag-exclude` on overlays, and Cordis 4 `ctx.effect` HMR/unload cleanup.
-
 ## 0.27.4 (2026-11-18)
 
 - 修复「鲸鱼娘递信」新邮件弹窗竖图被裁切的问题：图片区域按原图比例自适应显示，兼容内置竖图与横版皮肤素材，并为弹窗节点提供稳定的 `data-whale` / `data-whale-skin` 属性（#55）。

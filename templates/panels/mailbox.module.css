@@ -167,7 +167,7 @@
   align-items: center;
   min-width: 0;
   padding-inline-start: 10px;
-  border-block-end: var(--dsh-control-border-width, 0.5px) solid var(--dsw-alias-border-l2);
+  border-block-end: 0.5px solid var(--dsw-alias-border-l2);
 }
 
 .messageRow[data-selected="true"] {
@@ -179,7 +179,7 @@
   position: absolute;
   inset-block: 0;
   inset-inline-start: 0;
-  width: 2.5px;
+  width: 2px;
   background: var(--dsw-alias-state-business-primary);
 }
 
@@ -192,8 +192,6 @@
   min-height: 62px;
   min-width: 0;
   padding: 8px 12px 8px 8px;
-  border: 0;
-  box-shadow: none;
   text-align: start;
 }
 
@@ -543,54 +541,6 @@
 
 .modalFlow > p {
   margin: 0;
-}
-
-@media (hover: hover) {
-  .messageRow::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background: radial-gradient(
-      220px circle at var(--mail-spot-x, -999px) var(--mail-spot-y, -999px),
-      var(--dsh-surface-spotlight, rgba(65, 118, 230, 0.06)),
-      transparent 70%
-    );
-    opacity: 0;
-  }
-
-  .messageRow:hover::after {
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .message,
-  .moveNotice {
-    opacity: 1;
-    translate: 0px 0px;
-    transition:
-      opacity 180ms var(--dsh-ease-out, ease-out),
-      translate 180ms var(--dsh-ease-out, ease-out);
-  }
-
-  @starting-style {
-    .message,
-    .moveNotice {
-      opacity: 0;
-      translate: 0px 4px;
-    }
-  }
-
-  @media (hover: hover) {
-    .messageRow::after {
-      transition: opacity 200ms ease;
-    }
-
-    .messageRow:hover:not([data-selected="true"]) .messageButton {
-      translate: 1.5px 0px;
-    }
-  }
 }
 
 @container (max-width: 1050px) {

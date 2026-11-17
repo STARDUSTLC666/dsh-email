@@ -612,20 +612,6 @@ export function installMailConsumers(ctx: any, backend: MailConsumerBackend): vo
     const dir = host.profileContext?.dir
     if (typeof dir === 'string' && dir) backend.useProfileStore(dir, ctx.fiber?.entry?.options.id)
   })
-  ctx.inject?.(['appReady'], (host: any) => {
-    if (typeof host.appReady?.onReady !== 'function') return
-    if (typeof host.effect === 'function') host.effect(() => {
-      const off = host.appReady.onReady(() => backend.markAppReady())
-      return typeof off === 'function' ? off : () => {}
-    })
-    else host.appReady.onReady(() => backend.markAppReady())
-  })
-  let stopped = false
-  const stopConsumers = () => {
-    if (stopped) return
-    stopped = true
-    return backend.stop()
-  }
-  ctx.effect?.(() => stopConsumers)
-  ctx.on?.('dispose', stopConsumers)
+  ctx.inject?.(['appReady'], (host: any) => host.appReady?.onReady?.(() => backend.markAppReady()))
+  ctx.on?.('dispose', () => backend.stop())
 }

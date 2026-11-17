@@ -2,25 +2,10 @@
 function createWorkbenchUI(React, require) {
   const h = React.createElement;
   const { useId, useState } = React;
-  const { clsx, ui, styleKit } = emailUi;
-  const {
-    DSH_STYLES,
-    DSH_STYLE_STORAGE_KEY,
-    DSH_STYLE_EVENT,
-    DSH_ICON_PATHS,
-    useDshStyle,
-    readDshStyle,
-    writeDshStyle,
-    subscribeDshStyle,
-    createOverlaySyncRef,
-    resolveHostPrimitives,
-    createStyleSwitcherComponent,
-  } = styleKit;
-  // Keep host controls on the render path with safe standalone/jsdom fallbacks.
-  const primitives = () => resolveHostPrimitives(React, require);
-  const StyleSwitcher = createStyleSwitcherComponent(React, require);
+  const { clsx, ui } = emailUi;
+  // Keep host controls on the render path. Slot and locale registration do not need them.
+  const primitives = () => require('@deepseek-ai/dsh-client-ui-primitives');
   const paths = {
-    ...DSH_ICON_PATHS,
     mail: ['M3 5h18v14H3z', 'm3 6 9 7 9-7'],
     inbox: ['M4 13 6 5h12l2 8v6H4z', 'M4 13h5l1 3h4l1-3h5'],
     send: ['m22 2-7 20-4-9-9-4Z', 'M22 2 11 13'],
@@ -46,11 +31,8 @@ function createWorkbenchUI(React, require) {
     image: ['M3 4h18v16H3z', 'm3 17 6-6 5 5 2-2 5 5M16 8h.01'],
   };
   function Icon({ name = 'file', size = 16, ...props }) {
-    return h('svg', {
-      width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
-      strokeWidth: 1.65, strokeLinecap: 'round', strokeLinejoin: 'round',
-      'aria-hidden': true, focusable: false, 'data-dsh-icon': name, ...props,
-    }, (paths[name] || paths.file).map((d, index) => h('path', { key: index, d })));
+    return h('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.65, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true, focusable: false, ...props },
+      (paths[name] || paths.file).map((d, index) => h('path', { key: index, d })));
   }
   function Button({ children, icon, variant = 'outline', className, size = 'sm', ...props }) {
     return h(primitives().Button, {
@@ -65,22 +47,15 @@ function createWorkbenchUI(React, require) {
   function Input({ icon, className, ...props }) {
     return h(primitives().Input, { ...props, icon: icon ? h(Icon, { name: icon }) : undefined, className: clsx(ui.input, className) });
   }
-  function Checkbox({ label, hiddenLabel = false, className, modalAutofocus, ...props }) {
-    const P = primitives();
-    const autofocusProps = P.isFallback
-      ? (modalAutofocus ? { 'data-modal-autofocus': '' } : {})
-      : (modalAutofocus !== undefined ? { modalAutofocus } : {});
-    return h(P.Checkbox, { ...props, ...autofocusProps, label, className: clsx(ui.checkbox, hiddenLabel && ui.checkboxIcon, className) });
+  function Checkbox({ label, hiddenLabel = false, className, ...props }) {
+    return h(primitives().Checkbox, { ...props, label, className: clsx(ui.checkbox, hiddenLabel && ui.checkboxIcon, className) });
   }
-  function Page({ title, navigation, actions, children, workbench = false, showUpdates = false, className, lang = 'zh' }) {
-    const [style, setStyle] = useDshStyle(React);
-    return h('section', { className: clsx(ui.page, !workbench && ui.embedded, className), 'data-dsh-style': style },
+  function Page({ title, navigation, actions, children, workbench = false, showUpdates = false, className }) {
+    return h('section', { className: clsx(ui.page, !workbench && ui.embedded, className) },
       h('header', { className: ui.pageHeader },
         h('h1', { className: ui.title }, h('span', { className: ui.brand }, h(Icon, { name: 'mail' })), title),
         navigation,
-        h('div', { className: ui.headerActions },
-          h(StyleSwitcher, { style, onChange: setStyle, lang, compact: true }),
-          actions)),
+        actions ? h('div', { className: ui.headerActions }, actions) : null),
       h('div', { className: ui.pageBody, 'data-show-updates': showUpdates }, children));
   }
   function Tabs({ items, value, onChange, label, id }) {
@@ -111,11 +86,9 @@ function createWorkbenchUI(React, require) {
   }
   function ChoiceMenu({ label, id, value, items, onChange, disabled, children, className, align }) {
     const [open, setOpen] = useState(false);
-    const [style] = useDshStyle(React);
-    const P = primitives();
     const selected = items.find(item => item.id === value);
-    return h(P.Menu, {
-      open: open && !disabled, selectedId: value, dshStyle: style, items, align, portal: !P.isFallback, autoFocus: true, minWidthFromAnchor: true,
+    return h(primitives().Menu, {
+      open: open && !disabled, selectedId: value, items, align, portal: true, autoFocus: true, minWidthFromAnchor: true,
       className: clsx(ui.menu, className),
       onClose: () => setOpen(false),
       onSelect: next => { setOpen(false); if (next !== value) onChange(next); },
@@ -139,15 +112,12 @@ function createWorkbenchUI(React, require) {
     });
   }
   function Dialog({ title, children, onClose, closeLabel, className, busy = false, footer, tone }) {
-    const [style] = useDshStyle(React);
-    const titleId = typeof useId === 'function' ? useId() : 'dsh-email-dialog-title';
-    const P = primitives();
+    const titleId = useId();
     const close = () => { if (!busy) onClose(); };
-    return h(P.Modal, { open: true, headless: true, title, onClose: close, backdropBlur: false, className: clsx(ui.dialog, className) },
-      h('div', { ref: createOverlaySyncRef(style), className: ui.dialogFrame, 'data-dsh-style': style, 'data-window-drag-exclude': '' },
-        h('header', { className: ui.dialogHeader }, h('h2', { id: titleId, 'data-tone': tone }, title), h(IconButton, { icon: 'close', label: closeLabel, disabled: busy, onClick: close })),
-        h('div', { className: ui.dialogBody, 'aria-busy': busy || undefined }, children),
-        footer ? h('footer', { className: ui.dialogFooter }, footer) : null));
+    return h(primitives().Modal, { open: true, headless: true, title, onClose: close, backdropBlur: false, className: clsx(ui.dialog, className) },
+      h('header', { className: ui.dialogHeader }, h('h2', { id: titleId, 'data-tone': tone }, title), h(IconButton, { icon: 'close', label: closeLabel, disabled: busy, onClick: close })),
+      h('div', { className: ui.dialogBody, 'aria-busy': busy || undefined }, children),
+      footer ? h('footer', { className: ui.dialogFooter }, footer) : null);
   }
   function register(ctx, { id, label, icon, component, order = 50 }) {
     ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: id, inject: () => ({ workbench: true }) }, component));
@@ -155,10 +125,5 @@ function createWorkbenchUI(React, require) {
       return h(Icon, { name: icon, size });
     }));
   }
-  return {
-    Button, IconButton, Input, Checkbox, Icon, Page, Tabs, Status, Empty,
-    ChoiceMenu, SettingsChoice, Dialog, StyleSwitcher, register, primitives,
-    styles: DSH_STYLES, styleKey: DSH_STYLE_STORAGE_KEY, styleEvent: DSH_STYLE_EVENT,
-    useStyle: () => useDshStyle(React), readStyle: readDshStyle, writeStyle: writeDshStyle, subscribeStyle: subscribeDshStyle,
-  };
+  return { Button, IconButton, Input, Checkbox, Icon, Page, Tabs, Status, Empty, ChoiceMenu, SettingsChoice, Dialog, register, primitives };
 }

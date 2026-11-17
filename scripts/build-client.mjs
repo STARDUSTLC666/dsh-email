@@ -17,8 +17,6 @@ const assets = await build({
   stdin: {
     contents: [
       "export { default as clsx } from 'clsx'",
-      "import './templates/themes-and-motion.css'",
-      "export * as styleKit from './templates/style-switcher.js'",
       "export { default as ui } from './templates/workbench.module.css'",
       "export { default as settings } from './templates/settings.module.css'",
       "export { default as mailbox } from './templates/panels/mailbox.module.css'",

@@ -1,14 +1,5 @@
 const { mailbox: mailCss, ui: uiCss, drafts: draftCss, settings: settingsCss, clsx } = emailUi;
 
-function moveMailSpotlight(event) {
-  if (event.pointerType === 'touch') return;
-  const row = event.target?.closest?.('[data-dsh-row]');
-  if (!row || !event.currentTarget.contains(row)) return;
-  const rect = row.getBoundingClientRect();
-  row.style.setProperty('--mail-spot-x', (event.clientX - rect.left) + 'px');
-  row.style.setProperty('--mail-spot-y', (event.clientY - rect.top) + 'px');
-}
-
 // The backend rechecks folder protection against the server on every mutation.
 const systemFolderName = /^(?:inbox|sent(?: messages| items)?|drafts|trash|junk(?: e-mail)?|deleted(?: messages| items)?|all mail|archives?|收件箱|已发送|草稿箱?|垃圾邮件|垃圾箱|废纸篓|已删除)$/i;
 const folderLeaf = row => row.path.split(row.delimiter || '/').at(-1);
@@ -320,14 +311,14 @@ function MailMessage({ detail, currentRow, account, folder, selected, busy, run,
       h(W.Button, { icon: 'reply', disabled: busy, onClick: () => reply(false) }, dt('回复到草稿', 'Reply in drafts')),
       h(W.Button, { disabled: busy, onClick: () => reply(true) }, dt('回复全部到草稿', 'Reply all in drafts')),
       formatted ? h(W.Button, { variant: 'ghost', onClick: () => setPlain(value => !value) }, plain ? dt('查看图文', 'View formatted message') : dt('查看纯文本', 'View plain text')) : null,
-      h(W.Button, { variant: 'ghost', 'aria-expanded': showHeaders, 'aria-controls': headerId, onClick: () => setShowHeaders(value => !value) }, headerLabel, h(W.Icon, { name: 'down', size: 14 })),
+      h(W.Button, { variant: 'ghost', 'aria-expanded': showHeaders, 'aria-controls': headerId, onClick: () => setShowHeaders(value => !value) }, headerLabel),
       currentRow?.flagsSupported !== false ? h(React.Fragment, null,
         h(W.IconButton, { icon: 'mail', disabled: busy, onClick: () => mark(currentRow?.seen ? 'unread' : 'read'), label: currentRow?.seen ? dt('标记未读', 'Mark unread') : dt('标记已读', 'Mark read') }),
         h(W.IconButton, { icon: 'star', disabled: busy, 'aria-pressed': !!currentRow?.flagged, onClick: () => mark(currentRow?.flagged ? 'unstar' : 'star'), label: currentRow?.flagged ? dt('取消星标', 'Unstar') : dt('添加星标', 'Star') })) : null,
       canTrash ? h(W.IconButton, { icon: 'trash', variant: 'danger', disabled: busy, onClick: () => onTrash([selected]), label: dt('移入废纸篓', 'Move to Trash') }) : null),
     h('div', { className: mailCss.readerScroll },
       h('h2', null, subject),
-      h('div', { className: mailCss.envelope, 'data-dsh-card': '' },
+      h('div', { className: mailCss.envelope },
         h('span', { className: mailCss.avatar, 'aria-hidden': true }, initials),
         h('div', { className: mailCss.envelopeAddresses },
           h('p', null, h('strong', null, from)),
@@ -582,7 +573,7 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
 
   return h('section', { className: mailCss.mailbox, 'aria-label': dt('邮箱工作台','Mailbox workbench') },
     error ? h('div', { className: mailCss.alert }, errorBanner) : null,
-    moved ? h('div', { className: mailCss.moveNotice, role: 'status', 'data-window-drag-exclude': '' },
+    moved ? h('div', { className: mailCss.moveNotice, role: 'status' },
       h('span', null, dt('已移动 ', 'Moved ') + moved.count + dt(' 封至 ', ' messages to ') + moved.target,
         !moved.undo ? h('p', { className: mailCss.listNote }, dt('如需恢复，请在邮箱客户端移回原文件夹。', 'To restore, move the messages back in your mail client.')) : null),
       moved.undo ? h(W.Button, { disabled: busy, onClick: undoTrash }, dt('撤销移动', 'Undo move')) : null,
@@ -595,7 +586,7 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
           h('form', { className: mailCss.search, onSubmit: event => { event.preventDefault(); if (!folder || busy || listLoading) return; reset(); setUnread(false); setQuery(input.trim()); setRefresh(n => n + 1); } },
             h(W.Input, { icon: 'search', type: 'search', 'aria-label': dt('搜索当前文件夹','Search current folder'), placeholder: dt('搜索当前文件夹','Search current folder'), value: input, maxLength: 500, disabled: busy, onChange: event => setInput(event.target.value) }),
             h(W.IconButton, { icon: 'search', label: dt('搜索','Search'), type: 'submit', disabled: listLoading || busy || !folder }),
-            h(W.IconButton, { icon: 'refresh', label: dt('刷新邮件','Refresh mail'), 'aria-busy': listLoading || undefined, disabled: listLoading || busy || !folder, onClick: () => setRefresh(n => n + 1) })),
+            h(W.IconButton, { icon: 'refresh', label: dt('刷新邮件','Refresh mail'), disabled: listLoading || busy || !folder, onClick: () => setRefresh(n => n + 1) })),
           h('div', { className: mailCss.filters },
             !isPop3 ? h(W.Button, { variant: unread ? 'primary' : 'outline', disabled: busy || !!query, 'aria-pressed': unread,
               onClick: () => { reset(); setUnread(value => !value); } }, dt('只看未读','Unread only')) : null,
@@ -607,12 +598,12 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
             checked: checked.length === visibleRows.length, onChange: value => setChecked(value ? visibleRows.map(row => row.uid) : []) }),
           checked.length ? h(W.Button, { variant: 'danger', icon: 'trash', disabled: busy || listLoading, onClick: () => requestTrash(checked) },
             dt('移入废纸篓（', 'Move to Trash (') + checked.length + dt('）', ')')) : null) : null,
-        h('div', { className: mailCss.listScroll, onPointerMove: moveMailSpotlight },
+        h('div', { className: mailCss.listScroll },
           visibleRows.length ? visibleRows.map(row => {
             const unseen = row.flagsSupported !== false && !row.seen;
             const subject = row.subject || dt('（无主题）','(No subject)');
             const from = who(row.from);
-            return h('div', { key: row.uid, className: mailCss.messageRow, 'data-dsh-row': '', 'data-selected': selected === row.uid, 'data-unread': unseen },
+            return h('div', { key: row.uid, className: mailCss.messageRow, 'data-selected': selected === row.uid, 'data-unread': unseen },
               canTrash ? h(W.Checkbox, { hiddenLabel: true, label: dt('选择邮件：', 'Select message: ') + subject,
                 checked: checked.includes(row.uid), disabled: busy || listLoading,
                 onChange: value => setChecked(old => value ? [...old, row.uid] : old.filter(uid => uid !== row.uid)) }) : null,
