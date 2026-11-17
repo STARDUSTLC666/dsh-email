@@ -10,7 +10,7 @@ import { constants } from 'node:fs'
 import { mkdir, open, stat, unlink, writeFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import type { Readable } from 'node:stream'
-import type { AuthKind, ResolvedEmailConfig, ResolvedEmailSettings } from './config.js'
+import { draftAttachmentLimit, type AuthKind, type ResolvedEmailConfig, type ResolvedEmailSettings } from './config.js'
 import { getFreshAccessToken, OAuth2Error } from './oauth2.js'
 import { prepareMailBody } from './outgoing-body.js'
 import { escapeMailHtml } from './mail-html.js'
@@ -1448,7 +1448,7 @@ export class EmailPool {
   /** Send the attachment bytes the human reviewed, without re-reading mutable paths. */
   async sendPrepared(accountName: string, to: string, subject: string, text: string, cc: string, attachments: Array<{ filename: string; content: Buffer }>, signal?: AbortSignal, reply?: { uid: number; folder: string; uidValidity?: number; mode?: EmailReplyMode }, pop3Thread?: Pick<BuiltReply, 'inReplyTo' | 'references'>, html?: string): Promise<EmailSendResult> {
     const name = this.resolveName(accountName), cfg = this.account(name)
-    if (attachments.length > 10 || attachments.reduce((sum, file) => sum + file.content.length, 0) > Math.min(this.settings.maxAttachmentBytes, 20 * 1024 * 1024)) throw new MailError('草稿附件超过大小或数量上限')
+    if (attachments.length > 10 || attachments.reduce((sum, file) => sum + file.content.length, 0) > draftAttachmentLimit(this.settings.maxAttachmentBytes, cfg.transport)) throw new MailError('草稿附件超过大小或数量上限')
     const thread: Record<string, unknown> = {}
     if (cfg.transport === 'pop3' && pop3Thread) {
       if (pop3Thread.inReplyTo) thread.inReplyTo = '<' + pop3Thread.inReplyTo + '>'

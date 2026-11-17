@@ -1,4 +1,5 @@
 const DRAFT_ROUTE = "api/dsh-email/drafts";
+const draftAttachmentSize = bytes => bytes >= 1024 * 1024 ? (bytes / 1024 / 1024) + " MiB" : (bytes / 1024) + " KiB";
 // Retain edits for the current browser session when the host closes settings.
 let draftUiCache = null;
 async function draftApi(action, payload, upload, signal) {
@@ -160,8 +161,8 @@ function DraftWorkbench({ active, defaultAccount, composeRequest, onComposeFinis
   const sender = form?.account || defaultAccount;
   const live = useDraftRecipientCheck(editorOpen && !locked, sender, form?.to || '', form?.cc || '');
   const denied = live?.matching?.rows.filter(row => row.blocked) || [];
-  const attachmentCap = data.attachmentLimits?.[sender] ?? 20 * 1024 * 1024;
-  const capLabel = attachmentCap >= 1024 * 1024 ? (attachmentCap / 1024 / 1024) + " MiB" : Math.ceil(attachmentCap / 1024) + " KiB";
+  const attachmentCap = data.attachmentLimits?.[sender] ?? data.attachmentLimit ?? 20 * 1024 * 1024;
+  const capLabel = draftAttachmentSize(attachmentCap);
 
   __stardustUpdatesGuard(React, "dsh-email.draft", { dirty, busy, retainOnClose: true });
   useEffect(() => { draftUiCache = { selected, form }; }, [selected, form]);
@@ -295,9 +296,13 @@ function DraftWorkbench({ active, defaultAccount, composeRequest, onComposeFinis
     event.target.value = '';
     if (!files.length) return;
     return run(async () => {
+      const fresh = await draftApi('get', { id: selected.id, revision: selected.revision, checkAttachments: true });
+      setData(old => ({ ...old, attachmentLimits: { ...old.attachmentLimits, [sender]: fresh.attachmentLimit } }));
+      if (fresh.attachmentCount + files.length > 10) throw new Error(t("draft.attachmentCount"));
+      const total = files.reduce((bytes, file) => bytes + file.size, fresh.attachmentSize);
+      if (total > fresh.attachmentLimit) throw new Error(t("draft.attachmentTotal", { size: draftAttachmentSize(fresh.attachmentLimit) }));
       let current = selected;
       for (const file of files) {
-        if (file.size > attachmentCap) throw new Error(dt('单个附件超过 ', 'Attachment exceeds ') + capLabel);
         current = await draftApi('upload', { id: current.id, revision: current.revision }, file);
         adopt(current, false);
       }

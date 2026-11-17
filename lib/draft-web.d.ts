@@ -23,10 +23,12 @@ export declare class EmailDraftBackend {
     private now;
     private prune;
     private invalidate;
+    private attachmentCap;
     private connection;
     private safe;
     private bytes;
     private attachments;
+    private attachmentSize;
     create(input: Record<string, unknown>, signal?: AbortSignal): Promise<EmailDraft>;
     private recover;
     action(body: Record<string, unknown>, signal?: AbortSignal): Promise<unknown>;

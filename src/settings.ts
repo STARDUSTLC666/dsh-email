@@ -1,5 +1,5 @@
 import z from 'schemastery'
-import { ENDPOINT_DEFAULTS, normalizeSettingsEndpoint, PROVIDER_NAMES, type EmailConfig } from './config.js'
+import { ENDPOINT_DEFAULTS, MAX_ATTACHMENT_BYTES, MIN_ATTACHMENT_BYTES, normalizeAttachmentLimit, normalizeSettingsEndpoint, PROVIDER_NAMES, type EmailConfig } from './config.js'
 import { parseRecipientPolicies } from './recipient-policy.js'
 import { normalizeMailConsumers } from './mail-consumers.js'
 
@@ -25,6 +25,7 @@ export const EmailSettingsSchema: z = z.object({
   newMailPopup: z.boolean().default(true),
   trustedRecipientsYaml: z.string().default(''),
   maxBodyChars: z.number().default(20000),
+  maxAttachmentBytes: z.number(),
   downloadDir: z.string().default(''),
   accountsYaml: z.string().role('secret').default(''),
   consumers: z.array(z.object({
@@ -66,6 +67,7 @@ export interface EmailSettingsValue {
   newMailPopup?: boolean
   trustedRecipientsYaml?: string
   maxBodyChars: number
+  maxAttachmentBytes?: number
   downloadDir: string
   accountsYaml: string
   consumers?: Array<{ id: string; account: string; folder?: string; senders?: string[]; subject?: string; enabled?: boolean }>
@@ -92,6 +94,7 @@ export function toSettingsBase(config: EmailConfig): Partial<EmailSettingsValue>
     ...(config.newMailPopup !== undefined ? { newMailPopup: config.newMailPopup } : {}),
     ...(config.trustedRecipientsYaml !== undefined ? { trustedRecipientsYaml: config.trustedRecipientsYaml } : {}),
     ...(config.maxBodyChars !== undefined ? { maxBodyChars: config.maxBodyChars } : {}),
+    ...(config.maxAttachmentBytes !== undefined ? { maxAttachmentBytes: normalizeAttachmentLimit(config.maxAttachmentBytes) } : {}),
     ...(config.consumers !== undefined ? { consumers: config.consumers.map(consumer => ({ ...consumer })) } : {}),
     ...(config.consumerPollSeconds !== undefined ? { consumerPollSeconds: config.consumerPollSeconds } : {}),
     ...(config.downloadDir !== undefined && config.downloadDir !== '' ? { downloadDir: config.downloadDir } : {}),
@@ -181,6 +184,7 @@ export function toEmailConfig(value: EmailSettingsValue, user?: Partial<EmailSet
   if (has('replyTimeZone')) set('replyTimeZone', draft.replyTimeZone)
   if (has('trustedRecipientsYaml')) set('trustedRecipientsYaml', draft.trustedRecipientsYaml)
   if (has('maxBodyChars')) set('maxBodyChars', draft.maxBodyChars)
+  if (has('maxAttachmentBytes')) set('maxAttachmentBytes', draft.maxAttachmentBytes)
   if (has('consumers')) set('consumers', draft.consumers)
   if (has('consumerPollSeconds')) set('consumerPollSeconds', draft.consumerPollSeconds)
   if (has('downloadDir')) set('downloadDir', draft.downloadDir)
@@ -278,5 +282,9 @@ export function validateSettingsValue(value: EmailSettingsValue, extraProviders:
   }
   if (isSet(draft.maxBodyChars) && (draft.maxBodyChars < 1000 || draft.maxBodyChars > 200000)) {
     throw new Error('正文截断上限必须在 1000-200000 之间，收到 ' + describeValue(draft.maxBodyChars))
+  }
+  const attachmentLimit = draft.maxAttachmentBytes
+  if (attachmentLimit !== undefined && (!Number.isSafeInteger(attachmentLimit) || attachmentLimit < MIN_ATTACHMENT_BYTES || attachmentLimit > MAX_ATTACHMENT_BYTES)) {
+    throw new Error('附件大小上限必须在 1 KiB 到 512 MiB 之间 / The attachment size limit must be between 1 KiB and 512 MiB.')
   }
 }

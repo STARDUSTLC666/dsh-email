@@ -220,8 +220,20 @@ export const POP3_PRESETS: Record<string, string> = {
 
 export const EMAIL_PASSWORD_ENV = 'DSH_EMAIL_PASSWORD'
 
-const DEFAULT_MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
+export const DEFAULT_MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
+export const MIN_ATTACHMENT_BYTES = 1024
+export const MAX_ATTACHMENT_BYTES = 512 * 1024 * 1024
+// Draft reviews retain immutable attachment bytes until confirmation.
+export const MAX_DRAFT_ATTACHMENT_BYTES = 40 * 1024 * 1024
 const DEFAULT_IDLE_TIMEOUT_MS = 60000
+
+export function normalizeAttachmentLimit(value: unknown): number {
+  return clampInt(value, DEFAULT_MAX_ATTACHMENT_BYTES, MIN_ATTACHMENT_BYTES, MAX_ATTACHMENT_BYTES)
+}
+
+export function draftAttachmentLimit(configuredBytes: number, transport?: ResolvedEmailConfig['transport']): number {
+  return Math.min(configuredBytes, transport === 'agentmail' ? 4 * 1024 * 1024 : MAX_DRAFT_ATTACHMENT_BYTES)
+}
 
 /** Fully resolved, validated configuration for one account. */
 export interface ResolvedEmailConfig {
@@ -527,7 +539,7 @@ export function resolveEmailSettings(config: EmailConfig | undefined, onlyAccoun
     maxBodyChars: clampInt(raw.maxBodyChars, 20000, 1000, 200000),
     downloadDir: raw.downloadDir?.trim() || defaultDownloadDir(),
     downloadDirExplicit: (raw.downloadDir?.trim() ?? '') !== '',
-    maxAttachmentBytes: clampInt(raw.maxAttachmentBytes, DEFAULT_MAX_ATTACHMENT_BYTES, 1024, 512 * 1024 * 1024),
+    maxAttachmentBytes: normalizeAttachmentLimit(raw.maxAttachmentBytes),
     idleTimeoutMs: clampInt(raw.idleTimeoutMs, DEFAULT_IDLE_TIMEOUT_MS, 5000, 600000),
     bodySearchFallback: raw.bodySearchFallback !== false,
     bodySearchLimit: clampInt(raw.bodySearchLimit, 30, 5, 200),

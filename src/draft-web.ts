@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { mkdir, open, stat } from 'node:fs/promises'
 import { basename, dirname, resolve } from 'node:path'
+import { draftAttachmentLimit, MAX_DRAFT_ATTACHMENT_BYTES, normalizeAttachmentLimit } from './config.js'
 import { DraftError, DraftStore, draftFields, type DraftAttachment, type EmailDraft } from './draft-store.js'
 import { assertRecipientsAllowed, matchRecipients, parseRecipientPolicies, serializeRecipientPolicies, RecipientPolicyError } from './recipient-policy.js'
 import { messageOf, redactCredentials } from './mail-client.js'
@@ -13,7 +14,6 @@ import { richEmailBody } from './rich-body.js'
 import { scheduledTime } from './scheduled-time.js'
 
 export const EMAIL_DRAFT_ROUTE = '/api/dsh-email/drafts'
-const MAX_BYTES = 20 * 1024 * 1024
 const hash = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex')
 const json = (status: number, value: unknown): Response => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } })
 interface Options { store?: DraftStore; now?: () => number }
@@ -21,6 +21,33 @@ interface AttachmentSnapshot { id: string; filename: string; content: Buffer }
 interface Plan { id: string; created: number; key: string; draft: EmailDraft; attachments: AttachmentSnapshot[] }
 const editable = (draft: EmailDraft): void => { if (draft.state !== 'draft') throw new DraftError('已提交或结果未确定的邮件不能再次发送；请先去邮箱核对，必要时复制为新草稿', 'draft-submitted') }
 const view = (draft: EmailDraft) => ({ ...draft, attachments: draft.attachments.map(({ id, filename }) => ({ id, filename })) })
+
+function attachmentSizeError(cap: number): DraftError {
+  const size = cap >= 1024 * 1024 ? (cap / 1024 / 1024) + ' MiB' : (cap / 1024) + ' KiB'
+  return new DraftError('草稿附件总大小最多 ' + size + ' / Total draft attachments may not exceed ' + size, 'draft-too-large')
+}
+
+async function* requestChunks(body: ReadableStream<Uint8Array>, limit: number, tooLarge: DraftError, signal: AbortSignal): AsyncGenerator<Uint8Array> {
+  const reader = body.getReader()
+  const cancel = () => { void reader.cancel().catch(() => {}) }
+  signal.addEventListener('abort', cancel, { once: true })
+  try {
+    let size = 0
+    for (;;) {
+      signal.throwIfAborted()
+      const { done, value } = await reader.read()
+      signal.throwIfAborted()
+      if (done) return
+      size += value.byteLength
+      if (size > limit) throw tooLarge
+      yield value
+    }
+  } finally {
+    signal.removeEventListener('abort', cancel)
+    cancel()
+    reader.releaseLock()
+  }
+}
 
 /** All mutations use the host's authenticated fetch carrier and an explicit UI action. */
 export class EmailDraftBackend {
@@ -36,11 +63,19 @@ export class EmailDraftBackend {
   private now(): number { return this.options.now?.() ?? Date.now() }
   private prune(): void { for (const [id, plan] of this.plans) if (this.now() - plan.created > 10 * 60 * 1000) this.plans.delete(id) }
   private invalidate(id: string): void { for (const [key, plan] of this.plans) if (plan.draft.id === id) this.plans.delete(key) }
+  private attachmentCap(account: string): number {
+    try {
+      const settings = this.runtime.getEffectiveSettings()
+      return draftAttachmentLimit(settings.maxAttachmentBytes, settings.accounts.get(account || settings.defaultAccount)?.transport)
+    } catch { // Local drafts can also have attachments before account setup.
+      return draftAttachmentLimit(normalizeAttachmentLimit(this.runtime.getSettingsValue()?.maxAttachmentBytes))
+    }
+  }
   private connection(account: string) {
     const settings = this.runtime.getEffectiveSettings(), name = account || settings.defaultAccount, config = settings.accounts.get(name)
     if (!config) throw new DraftError('发件账号不存在，请重新选择账号')
     const value = this.runtime.getSettingsValue(), policies = parseRecipientPolicies(value.trustedRecipientsYaml)
-    return { name, config, cap: Math.min(settings.maxAttachmentBytes, config.transport === 'agentmail' ? 4 * 1024 * 1024 : MAX_BYTES), policy: policies.get(name), key: hash({ name, config, cap: settings.maxAttachmentBytes, policies: value.trustedRecipientsYaml ?? '', approval: value.sendApproval }) }
+    return { name, config, cap: draftAttachmentLimit(settings.maxAttachmentBytes, config.transport), policy: policies.get(name), key: hash({ name, config, cap: settings.maxAttachmentBytes, policies: value.trustedRecipientsYaml ?? '', approval: value.sendApproval }) }
   }
   private safe(error: unknown): string {
     let message = redactCredentials(messageOf(error, '操作失败，请稍后重试'))
@@ -64,13 +99,24 @@ export class EmailDraftBackend {
     for (const file of draft.attachments) { const content = await this.bytes(file, cap - used, signal); used += content.length; result.push({ id: file.id, filename: file.filename, content }) }
     return result
   }
+  private async attachmentSize(draft: EmailDraft): Promise<number> {
+    let size = 0
+    for (const file of draft.attachments) {
+      const info = await stat(file.path).catch(() => null)
+      if (info?.isFile()) size += info.size
+    }
+    return size
+  }
   async create(input: Record<string, unknown>, signal?: AbortSignal): Promise<EmailDraft> {
     let fields = draftFields(input)
     if (!fields.account) { try { fields.account = this.runtime.getEffectiveSettings().defaultAccount } catch { /* A local draft is useful even before the mailbox is configured. */ } }
     const paths = input.attachments ?? []
     if (!Array.isArray(paths) || paths.length > 10 || paths.some(file => typeof file !== 'string' || !file.trim())) throw new DraftError('附件应为最多 10 个本地文件路径')
     const files: DraftAttachment[] = paths.map(path => ({ id: randomUUID(), path: resolve(path as string), filename: basename(path as string), owned: false }))
-    if (files.length) { const cap = fields.account ? this.connection(fields.account).cap : MAX_BYTES; await this.attachments({ attachments: files } as EmailDraft, cap, signal) }
+    if (files.length) {
+      const cap = fields.account ? this.connection(fields.account).cap : this.attachmentCap('')
+      await this.attachments({ attachments: files } as EmailDraft, cap, signal)
+    }
     let reply: EmailDraft['reply']
     if (input.reply !== undefined) {
       const reference = input.reply as Record<string, unknown>
@@ -91,9 +137,12 @@ export class EmailDraftBackend {
     if (body.action === 'list') {
       await this.recover(signal)
       const snapshot = await this.settings.snapshot()
-      const attachmentLimits: Record<string, number> = {}
-      try { for (const name of this.runtime.getEffectiveSettings().accounts.keys()) attachmentLimits[name] = this.connection(name).cap } catch { /* Drafts remain usable before account setup. */ }
-      return { drafts: (await this.store.list()).map(view), accounts: snapshot.accounts, attachmentLimits, revision: snapshot.settings.revision, writable: snapshot.writable, schedulerActive:this.scheduleActive, ...(this.scheduleError?{scheduleError:this.scheduleError}:{}) }
+      let attachmentLimits: Record<string, number> = {}
+      try {
+        const settings = this.runtime.getEffectiveSettings()
+        attachmentLimits = Object.fromEntries([...settings.accounts].map(([name, config]) => [name, draftAttachmentLimit(settings.maxAttachmentBytes, config.transport)]))
+      } catch { /* Drafts remain usable before account setup. */ }
+      return { drafts: (await this.store.list()).map(view), accounts: snapshot.accounts, attachmentLimits, attachmentLimit: this.attachmentCap(''), revision: snapshot.settings.revision, writable: snapshot.writable, schedulerActive:this.scheduleActive, ...(this.scheduleError?{scheduleError:this.scheduleError}:{}) }
     }
     if (body.action === 'rules') {
       const snapshot = await this.settings.snapshot()
@@ -121,7 +170,13 @@ export class EmailDraftBackend {
         this.invalidate(id);void this.armSchedule();return view(cancelled)
       },signal)
     }
-    if (body.action === 'get') return view(draft)
+    if (body.action === 'get') {
+      if (body.checkAttachments !== true) return view(draft)
+      editable(draft)
+      if (draft.revision !== body.revision) throw new DraftError('草稿已改变，请重新打开后添加附件', 'draft-conflict')
+      const used = await this.attachmentSize(draft)
+      return { attachmentCount: draft.attachments.length, attachmentSize: used, attachmentLimit: this.attachmentCap(draft.account) }
+    }
     if (body.action === 'cancelPreview') { this.invalidate(id); return { cancelled: true } }
     if (body.action === 'update') {
       editable(draft)
@@ -140,7 +195,8 @@ export class EmailDraftBackend {
       if (draft.revision !== body.revision) throw new DraftError('草稿已改变，请重新打开后复制', 'draft-conflict')
       if (draft.state === 'sending') throw new DraftError('邮件还在提交，请结束后再复制', 'draft-busy')
       if (body.confirmed !== true) throw new DraftError('请先核对邮箱，再确认复制为新草稿')
-      const contents = await this.attachments(draft, MAX_BYTES, signal), created = await this.store.create(draftFields(draft), [], signal), files: DraftAttachment[] = []
+      // A local copy can be edited even if the sender's limit was lowered after drafting.
+      const contents = await this.attachments(draft, MAX_DRAFT_ATTACHMENT_BYTES, signal), created = await this.store.create(draftFields(draft), [], signal), files: DraftAttachment[] = []
       try {
         for (const file of contents) { const owned = this.store.uploadPath(created.id, file.filename), stored = { id: randomUUID(), ...owned, owned: true }; files.push(stored); await this.writeUpload(owned.path, file.content, signal) }
         const changed = await this.store.change(created.id, created.revision, value => { value.attachments = files; if (draft.reply) value.reply = { ...draft.reply } }, signal); return view(changed)
@@ -250,25 +306,33 @@ export class EmailDraftBackend {
     }catch(error){this.scheduleError=this.safe(error)}
   }
   async stopScheduler():Promise<void>{this.scheduleActive=false;this.scheduleGeneration++;if(this.scheduleTimer)clearTimeout(this.scheduleTimer);this.scheduleController?.abort();await this.scheduleWork}
-  private async writeUpload(path: string, content: Buffer, signal?: AbortSignal): Promise<void> {
+  private async writeUpload(path: string, content: Buffer | AsyncIterable<Uint8Array>, signal?: AbortSignal): Promise<void> {
     signal?.throwIfAborted(); await mkdir(dirname(path), { recursive: true, mode: 0o700 })
     const file = await open(path, 'wx', 0o600)
     try { await file.writeFile(content); signal?.throwIfAborted(); await file.sync() } finally { await file.close() }
   }
-  private async upload(request: Request, content: Buffer, signal: AbortSignal): Promise<unknown> {
+  private async upload(request: Request, body: ReadableStream<Uint8Array>, signal: AbortSignal): Promise<unknown> {
     const id = request.headers.get('x-dsh-draft-id') ?? '', revision = Number(request.headers.get('x-dsh-draft-revision')), draft = await this.store.get(id); editable(draft)
     if (draft.revision !== revision || draft.attachments.length >= 10) throw new DraftError('草稿已改变或附件已达 10 个，请保存并重新打开后添加', 'draft-conflict')
     let filename: string
     try { filename = decodeURIComponent(request.headers.get('x-dsh-draft-filename') ?? '') } catch { throw new DraftError('附件名称无效') }
     if (!filename || filename.length > 500) throw new DraftError('附件名称为空或过长')
-    let existingSize = 0
-    for (const file of draft.attachments) { const info = await stat(file.path).catch(() => null); if (info?.isFile()) existingSize += info.size }
-    const cap = (() => { try { return this.connection(draft.account).cap } catch { return MAX_BYTES } })()
-    if (existingSize + content.length > cap) throw new DraftError('草稿附件总大小最多 ' + Math.floor(cap / 1024 / 1024) + ' MiB')
+    const existingSize = await this.attachmentSize(draft)
+    const cap = this.attachmentCap(draft.account), remaining = cap - existingSize
+    const tooLarge = attachmentSizeError(cap)
+    if (remaining < 0 || Number(request.headers.get('content-length')) > remaining) throw tooLarge
     const owned = { id: randomUUID(), ...this.store.uploadPath(id, filename), owned: true }
     try {
-      await this.writeUpload(owned.path, content, signal)
-      const changed = await this.store.change(id, revision, value => { editable(value); value.attachments.push(owned) }, signal); this.invalidate(id); return view(changed)
+      await this.writeUpload(owned.path, requestChunks(body, remaining, tooLarge, signal), signal)
+      const total = existingSize + (await stat(owned.path)).size
+      const changed = await this.store.change(id, revision, value => {
+        editable(value)
+        const currentCap = this.attachmentCap(value.account)
+        if (total > currentCap) throw attachmentSizeError(currentCap)
+        value.attachments.push(owned)
+      }, signal)
+      this.invalidate(id)
+      return view(changed)
     } catch (error) { await this.store.removeOwnedFile(id, owned); throw error }
   }
   async fetch(request: Request): Promise<Response> {
@@ -286,15 +350,18 @@ export class EmailDraftBackend {
       if (request.method !== 'POST') return fail(405, new DraftError('请使用草稿面板支持的操作'))
       const type = request.headers.get('content-type')?.split(';')[0].trim().toLowerCase()
       if (request.headers.get('x-dsh-email-draft') !== '1' || !['application/json', 'application/octet-stream'].includes(type ?? '')) return fail(403, new DraftError('请从邮件草稿面板操作'))
-      const reader = request.body?.getReader(); if (!reader) throw new DraftError('请求为空')
-      const limit = type === 'application/octet-stream' ? MAX_BYTES : 256 * 1024, chunks: Uint8Array[] = []; let size = 0
-      try { for (;;) { const { done, value } = await reader.read(); if (done) break; size += value.length; if (size > limit) { await reader.cancel(); return fail(413, new DraftError('请求超过大小上限')) } chunks.push(value) } } finally { reader.releaseLock() }
-      const content = Buffer.concat(chunks), signal = AbortSignal.any([request.signal, AbortSignal.timeout(120000)])
-      if (type === 'application/octet-stream') return json(200, { ok: true, value: await this.upload(request, content, signal) })
-      const body = JSON.parse(content.toString('utf8'))
+      if (!request.body) throw new DraftError('请求为空')
+      const signal = AbortSignal.any([request.signal, AbortSignal.timeout(120000)])
+      if (type === 'application/octet-stream') return json(200, { ok: true, value: await this.upload(request, request.body, signal) })
+      const chunks: Uint8Array[] = []
+      for await (const chunk of requestChunks(request.body, 256 * 1024, new DraftError('请求超过大小上限', 'draft-too-large'), signal)) chunks.push(chunk)
+      const body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
       if (!body || typeof body !== 'object' || Array.isArray(body)) throw new DraftError('请求必须为对象')
       return json(200, { ok: true, value: await this.action(body, signal) })
-    } catch (error) { return fail(error instanceof DraftError && ['draft-conflict', 'draft-busy', 'draft-submitted'].includes(error.code) || (error as { code?: string })?.code === 'SETTINGS_CONFLICT' ? 409 : 400, error) }
+    } catch (error) {
+      if (error instanceof DraftError && error.code === 'draft-too-large') return fail(413, error)
+      return fail(error instanceof DraftError && ['draft-conflict', 'draft-busy', 'draft-submitted'].includes(error.code) || (error as { code?: string })?.code === 'SETTINGS_CONFLICT' ? 409 : 400, error)
+    }
   }
 }
 export function installEmailDrafts(ctx: any, backend: EmailDraftBackend): void {

@@ -192,7 +192,7 @@ work:
 | `serverPresets` | 无 | 自定义服务商预设的 YAML 文本（键=预设名，值含 `label?`/`imap`/`smtp`）；只存端点、不含凭证，设置页下拉会列出预设名并把端点预填进账号卡片，改预设不会重连已建立的连接 |
 | `defaultAccount` | 单账号时自动 | 工具省略 account 参数时使用的账号（多账号必填） |
 | `downloadDir` | 会话工作区下 .dsh-email-downloads（回退 $DSH_HOME/email-downloads） | email_attachment 的落盘目录；显式设置后固定 |
-| `maxAttachmentBytes` | 20 MiB | 单个附件与附件总大小上限（1024–512 MiB） |
+| `maxAttachmentBytes` | 20 MiB | 原始发信附件合计与下载单附件的大小上限（1 KiB–512 MiB）。可在「邮箱账号 → 附件大小上限」设置。[草稿和服务商限制](DRAFTS.md#存储与范围)也适用 |
 | `idleTimeoutMs` | `60000` | IMAP 空闲连接回收时间（连接复用，连续操作更快） |
 | `bodySearchFallback` | `true` | 服务器搜索无结果时，回退到客户端扫描最近邮件的正文 |
 | `bodySearchLimit` | `30` | 正文回退扫描的邮件数量（5-200） |

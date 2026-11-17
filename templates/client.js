@@ -59,7 +59,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             if (/请先填写并保存邮件主题/.test(message))
                 return 'Fill in and save the email subject first.';
             if (/附件/.test(message))
-                return 'Check the attachments and the selected account limit (up to 4 MiB for AgentMail, 20 MiB for IMAP). Save first, use at most 10 files, and remove unreadable or oversized files.';
+                return 'Check the attachments and the selected sender’s limit. Save first, use at most 10 files, and remove unreadable or oversized files.';
             if (/AgentMail/.test(message)) {
                 const status = message.match(/HTTP \d+/)?.[0];
                 return 'AgentMail request failed' + (status ? ' (' + status + ')' : '') + '. Check the API region, key, inbox and service status. For sending, check Sent before trying again.';
@@ -252,6 +252,12 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "global.sendApprovalRisk": "关闭后，所有账号的模型发信、回复和转发将不再逐次询问，未列入可信名单的收件人也可能直接收到邮件。禁止收件人规则和宿主权限继续生效；草稿页仍需手动确认发送。",
                 "global.downloadDirLabel": "附件下载目录（默认保存在当前工作区）",
                 "global.downloadDirPlaceholder": "留空使用默认",
+                "global.attachmentLimit": "附件大小上限",
+                "global.attachmentCustom": "自定义（MiB）",
+                "global.attachmentHint": "默认 20 MiB。每封草稿按原始附件合计，最多 40 MiB，AgentMail 最多 4 MiB。邮箱服务器可能另有整封邮件大小限制。",
+                "global.attachmentRange": "请输入 1 KiB（0.0009765625 MiB）至 512 MiB 之间的值。",
+                "draft.attachmentCount": "每份草稿最多添加 10 个附件。",
+                "draft.attachmentTotal": "草稿附件总大小最多 {size}。",
                 "global.hint": "以上设置对所有账号统一生效。需要插件确认的工具发信在 Full Access 下不会弹框；可改用草稿页手动核对并确认。禁止收件人规则始终生效。",
                 // 自动保存状态条
                 "status.saved": "已保存",
@@ -433,6 +439,12 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "global.sendApprovalRisk": "With this off, model-initiated sends, replies and forwards skip this plugin's confirmation for every account, including recipients outside the trusted list. Blocked-recipient rules and host permissions still apply. Drafts still require manual send confirmation.",
                 "global.downloadDirLabel": "Attachment download directory (defaults to the current workspace)",
                 "global.downloadDirPlaceholder": "Leave empty for the default",
+                "global.attachmentLimit": "Attachment size limit",
+                "global.attachmentCustom": "Custom (MiB)",
+                "global.attachmentHint": "Defaults to 20 MiB. Drafts allow up to 40 MiB of original attachments in total, or 4 MiB for AgentMail. Mail servers may also limit the encoded message size.",
+                "global.attachmentRange": "Enter a value from 1 KiB (0.0009765625 MiB) to 512 MiB.",
+                "draft.attachmentCount": "A draft can have up to 10 attachments.",
+                "draft.attachmentTotal": "Total draft attachments may not exceed {size}.",
                 "global.hint": "These settings apply to every account. Tool sends that still require plugin confirmation cannot show a dialog under Full Access; use the Drafts tab to review and confirm manually. Blocked-recipient rules always apply.",
                 // 自动保存状态条
                 "status.saved": "Saved",
@@ -666,6 +678,12 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 // global
                 "global.sendApprovalRisk": "Si se desactiva, los envíos, respuestas y reenvíos iniciados por el modelo omiten la confirmación del complemento en todas las cuentas, incluso para destinatarios no incluidos en la lista de confianza. Las reglas de destinatarios bloqueados y los permisos del host siguen aplicándose. Los borradores aún requieren confirmación manual para enviar.",
                 "global.downloadDirPlaceholder": "Déjalo vacío para usar el valor predeterminado",
+                "global.attachmentLimit": "Límite de tamaño de los adjuntos",
+                "global.attachmentCustom": "Personalizado (MiB)",
+                "global.attachmentHint": "El valor predeterminado es 20 MiB. Cada borrador admite hasta 40 MiB de adjuntos originales en total, o 4 MiB con AgentMail. El servidor también puede limitar el tamaño del correo codificado.",
+                "global.attachmentRange": "Introduce un valor de 1 KiB (0,0009765625 MiB) a 512 MiB.",
+                "draft.attachmentCount": "Un borrador admite hasta 10 adjuntos.",
+                "draft.attachmentTotal": "El tamaño total de los adjuntos del borrador no puede superar {size}.",
                 "global.hint": "Estos ajustes se aplican a todas las cuentas. En Full Access no se mostrarán diálogos para los envíos desde herramientas que aún requieran confirmación del complemento; usa la pestaña Borradores para revisar y confirmar manualmente. Las reglas de destinatarios bloqueados siempre se aplican.",
                 // card
                 "card.unnamed": "(sin nombre)",
@@ -789,6 +807,12 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 // global
                 "global.sendApprovalRisk": "Si cette option est désactivée, les envois, réponses et transferts lancés par le modèle ne demandent plus la confirmation de ce module pour aucun compte, y compris pour les destinataires hors liste de confiance. Les règles de blocage des destinataires et les autorisations de l’hôte restent appliquées. L’envoi des brouillons nécessite toujours une confirmation manuelle.",
                 "global.downloadDirPlaceholder": "Laissez vide pour utiliser la valeur par défaut",
+                "global.attachmentLimit": "Taille maximale des pièces jointes",
+                "global.attachmentCustom": "Personnalisée (MiB)",
+                "global.attachmentHint": "La valeur par défaut est de 20 MiB. Un brouillon accepte jusqu’à 40 MiB de pièces jointes d’origine au total, ou 4 MiB avec AgentMail. Le serveur peut aussi limiter la taille du message encodé.",
+                "global.attachmentRange": "Saisissez une valeur comprise entre 1 KiB (0,0009765625 MiB) et 512 MiB.",
+                "draft.attachmentCount": "Un brouillon peut contenir jusqu’à 10 pièces jointes.",
+                "draft.attachmentTotal": "La taille totale des pièces jointes du brouillon est limitée à {size}.",
                 "global.hint": "Ces paramètres s’appliquent à tous les comptes. Sous Full Access, les envois depuis les outils qui nécessitent encore la confirmation du module ne peuvent pas afficher de boîte de dialogue ; utilisez l’onglet Brouillons pour vérifier et confirmer manuellement. Les règles de blocage des destinataires s’appliquent toujours.",
                 // card
                 "card.unnamed": "(sans nom)",
@@ -912,6 +936,12 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 // global
                 "global.sendApprovalRisk": "Ist diese Option deaktiviert, überspringen vom Modell gestartete Sendungen, Antworten und Weiterleitungen in allen Konten die Bestätigung dieses Plugins, auch bei Empfängern außerhalb der Vertrauensliste. Regeln für gesperrte Empfänger und Host-Berechtigungen gelten weiterhin. Entwürfe müssen weiterhin manuell zum Senden bestätigt werden.",
                 "global.downloadDirPlaceholder": "Leer lassen, um den Standard zu verwenden",
+                "global.attachmentLimit": "Größenlimit für Anhänge",
+                "global.attachmentCustom": "Benutzerdefiniert (MiB)",
+                "global.attachmentHint": "Standardmäßig 20 MiB. Pro Entwurf sind insgesamt bis zu 40 MiB an Originalanhängen möglich, bei AgentMail bis zu 4 MiB. Der Mailserver kann die Größe der kodierten Nachricht zusätzlich begrenzen.",
+                "global.attachmentRange": "Gib einen Wert zwischen 1 KiB (0,0009765625 MiB) und 512 MiB ein.",
+                "draft.attachmentCount": "Ein Entwurf kann bis zu 10 Anhänge enthalten.",
+                "draft.attachmentTotal": "Die Anhänge dieses Entwurfs dürfen zusammen höchstens {size} groß sein.",
                 "global.hint": "Diese Einstellungen gelten für alle Konten. Unter Full Access können Werkzeug-Sendungen, für die weiterhin eine Plugin-Bestätigung erforderlich ist, keinen Dialog anzeigen. Prüfen und bestätigen Sie sie manuell im Tab „Entwürfe“. Regeln für gesperrte Empfänger gelten immer.",
                 // card
                 "card.unnamed": "(unbenannt)",
@@ -1035,6 +1065,12 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 // global
                 "global.sendApprovalRisk": "オフにすると、モデルによる送信・返信・転送は、信頼リストにない宛先を含め、すべてのアカウントでこのプラグインの確認を省略します。禁止宛先ルールとホスト権限は引き続き適用されます。下書きの送信には引き続き手動確認が必要です。",
                 "global.downloadDirPlaceholder": "空欄でデフォルトを使用",
+                "global.attachmentLimit": "添付ファイルのサイズ上限",
+                "global.attachmentCustom": "カスタム（MiB）",
+                "global.attachmentHint": "既定値は 20 MiB です。下書き 1 通あたり、元の添付ファイルの合計は最大 40 MiB、AgentMail では 4 MiB です。メールサーバー側でエンコード後のサイズが制限される場合があります。",
+                "global.attachmentRange": "1 KiB（0.0009765625 MiB）から 512 MiB までの値を入力してください。",
+                "draft.attachmentCount": "下書き 1 通に最大 10 個のファイルを添付できます。",
+                "draft.attachmentTotal": "下書きに添付できるファイルの合計サイズは {size} までです。",
                 "global.hint": "これらの設定はすべてのアカウントに適用されます。Full Access では、プラグインの確認が必要なツール送信でダイアログを表示できません。「下書き」タブで確認して手動承認してください。禁止宛先ルールは常に適用されます。",
                 // card
                 "card.unnamed": "(名前なし)",
@@ -1158,6 +1194,12 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 // global
                 "global.sendApprovalRisk": "Se desativada, esta extensão não solicitará confirmação para envios, respostas e encaminhamentos iniciados pelo modelo em nenhuma conta, inclusive para destinatários fora da lista de confiança. As regras de destinatários bloqueados e as permissões do host continuam valendo. Rascunhos ainda exigem confirmação manual para envio.",
                 "global.downloadDirPlaceholder": "Deixe vazio para usar o padrão",
+                "global.attachmentLimit": "Limite de tamanho dos anexos",
+                "global.attachmentCustom": "Personalizado (MiB)",
+                "global.attachmentHint": "O padrão é 20 MiB. Cada rascunho permite até 40 MiB de anexos originais no total, ou 4 MiB com AgentMail. O servidor também pode limitar o tamanho da mensagem codificada.",
+                "global.attachmentRange": "Insira um valor entre 1 KiB (0,0009765625 MiB) e 512 MiB.",
+                "draft.attachmentCount": "Cada rascunho permite até 10 anexos.",
+                "draft.attachmentTotal": "O tamanho total dos anexos do rascunho é limitado a {size}.",
                 "global.hint": "Estas configurações valem para todas as contas. No Full Access, envios por ferramentas que ainda exigem confirmação da extensão não exibem uma caixa de diálogo; use a aba Rascunhos para revisar e confirmar manualmente. As regras de destinatários bloqueados sempre se aplicam.",
                 // card
                 "card.unnamed": "(sem nome)",
@@ -1281,6 +1323,12 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 // global
                 "global.sendApprovalRisk": "При отключении отправка, ответы и пересылка по инициативе модели во всех аккаунтах будут обходить подтверждение этого плагина, в том числе для адресатов вне списка доверенных. Правила блокировки получателей и разрешения хоста продолжают действовать. Отправку черновиков по-прежнему нужно подтверждать вручную.",
                 "global.downloadDirPlaceholder": "Оставьте пустым, чтобы использовать значение по умолчанию",
+                "global.attachmentLimit": "Максимальный размер вложений",
+                "global.attachmentCustom": "Свой лимит (MiB)",
+                "global.attachmentHint": "По умолчанию 20 MiB. Общий размер исходных вложений в черновике может достигать 40 MiB, а в AgentMail — 4 MiB. Почтовый сервер может отдельно ограничивать размер закодированного письма.",
+                "global.attachmentRange": "Введите значение от 1 KiB (0,0009765625 MiB) до 512 MiB.",
+                "draft.attachmentCount": "В черновик можно добавить до 10 вложений.",
+                "draft.attachmentTotal": "Общий размер вложений черновика не может превышать {size}.",
                 "global.hint": "Эти настройки применяются ко всем аккаунтам. В режиме Full Access для отправок инструментами, которым всё ещё требуется подтверждение плагина, нельзя показать диалог; проверяйте и подтверждайте их вручную на вкладке «Черновики». Правила блокировки получателей действуют всегда.",
                 // card
                 "card.unnamed": "(без имени)",
@@ -4887,6 +4935,48 @@ __stardustUpdatesGuard(React, "dsh-email.rules", { dirty: !!dirty, busy, retainO
                 data.records?.length?h('ul',{className:'dshe-match-list'},data.records.map(row=>h('li',{key:row.id},h('strong',null,states[row.state]||row.state),' · '+row.sender+' · '+row.workspace+' · '+formatDate(row.createdAt),row.message?h('p',null,emailError(row.message)):null,row.sessionId?h('div',null,field(dt('会话 ID','Session ID'),h('input',{readOnly:true,value:row.sessionId})),emailWorkspace?h('button',{type:'button',className:'dshe-btn',onClick:()=>run(async()=>emailWorkspace.openSession(row.sessionId))},dt('打开 DSH 会话','Open DSH session')):null):null))):h('p',null,dt('暂无任务；首次检查仅建立起点。','No tasks yet. The first check establishes a baseline.'))
             );
         }
+        function AttachmentLimitField({ bytes, disabled, onChange }) {
+            const mib = 1024 * 1024;
+            const presets = [20, 25, 30, 35, 40];
+            const size = (bytes ?? 20 * mib) / mib;
+            const [editCustom, setEditCustom] = useState(false);
+            const [invalid, setInvalid] = useState(false);
+            const custom = editCustom || !presets.includes(size);
+            const id = React.useId();
+            const label = t("global.attachmentLimit");
+
+            return h("div", { className: "dshe-field" },
+                h("label", { htmlFor: id }, label),
+                h(W.ChoiceMenu, {
+                    id, label, disabled, value: custom ? "custom" : String(size),
+                    items: [...presets.map(n => ({ id: String(n), label: n + " MiB" })),
+                        { id: "custom", label: t("global.attachmentCustom") }],
+                    onChange: next => {
+                        setInvalid(false);
+                        setEditCustom(next === "custom");
+                        if (next !== "custom") onChange(Number(next) * mib);
+                    },
+                }),
+                custom ? h("input", {
+                    key: size, type: "number", min: 1 / 1024, max: 512, step: "any", required: true, disabled,
+                    defaultValue: size, "aria-label": t("global.attachmentCustom"),
+                    "aria-invalid": invalid || undefined, "aria-describedby": id + "-hint",
+                    onInput: () => setInvalid(false),
+                    onBlur: event => {
+                        const input = event.currentTarget;
+                        setInvalid(!input.validity.valid);
+                        if (!input.validity.valid) return;
+                        const next = Math.round(input.valueAsNumber * mib);
+                        if (next !== bytes) onChange(next);
+                    },
+                    onKeyDown: event => {
+                        if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); }
+                    },
+                }) : null,
+                h("div", { id: id + "-hint", className: "dshe-hint" },
+                    invalid ? h("span", { role: "alert" }, t("global.attachmentRange")) : t("global.attachmentHint")),
+            );
+        }
         function EmailSettingsSection({workbench=false}={}) {
             const [composeAccount, setComposeAccount] = useState("");
             const [composeRequest, setComposeRequest] = useState(null);
@@ -5243,6 +5333,11 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                             h("label", null, t("global.downloadDirLabel")),
                             fieldInput("text", draft.downloadDir, (v) => update({ downloadDir: v }), t("global.downloadDirPlaceholder")),
                         ]),
+                        h(AttachmentLimitField, {
+                            bytes: draft.maxAttachmentBytes,
+                            disabled: snapshot?.writable === false,
+                            onChange: maxAttachmentBytes => update({ maxAttachmentBytes }),
+                        }),
                         h("div", { className: "dshe-hint" }, t("global.hint")),
                     ]),
                     snapshot?.configurationManagedAccounts?.length ? h('div', { className: 'dshe-alert info', role: 'status' },

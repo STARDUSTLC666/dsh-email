@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { createHash } from 'node:crypto'
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
+import { basename, dirname, join } from 'node:path'
 import { simpleParser } from 'mailparser'
 import { EmailService, EmailMailboxBackend, EmailDraftBackend, DraftStore, resolveEmailSettings, parseRawMessage, buildReplyMessage } from '../lib/index.js'
 import { richEmailBody, rasterMime } from '../lib/rich-body.js'
@@ -127,6 +128,64 @@ test('Trash enforces valid UID sets, existing destination and safe server capabi
 })
 test('server without destination mapping offers no unreliable Undo and uncertain moves demand refresh',async()=>{
   const client={mailbox:{uidValidity:1},capabilities:new Set(['MOVE']),list:async()=>[{path:'Trash',flags:new Set()}],fetchOne:async uid=>({uid}),messageMove:async()=>({})};assert.deepEqual(await moveImapMessages(client,'INBOX',[7],'Trash',1),{count:1});client.messageMove=async()=>{throw Error('connection lost')};await assert.rejects(moveImapMessages(client,'INBOX',[7],'Trash',1),/核对/)
+})
+test('draft attachments follow the configured 30 and 40 MiB limits through upload, review and SMTP', { timeout: 30000 }, async t => {
+  const f = await fixture(t)
+  const mib = 1024 * 1024
+  const block = Buffer.alloc(mib, 0x3c)
+  const draft = await f.drafts.create({ account: 'default', to: 'receiver@example.invalid', subject: 'Attachment limits', text: 'Loopback test' })
+  const upload = async (current, name, bytes, withLength = false) => {
+    let remaining = bytes
+    const body = new ReadableStream({
+      pull(controller) {
+        if (remaining === 0) return controller.close()
+        const chunk = block.subarray(0, Math.min(remaining, block.length))
+        controller.enqueue(chunk)
+        remaining -= chunk.length
+      },
+    })
+    const response = await f.drafts.fetch(new Request('http://127.0.0.1/api/dsh-email/drafts/upload', {
+      method: 'POST', duplex: 'half', body,
+      headers: {
+        'content-type': 'application/octet-stream', 'x-dsh-email-draft': '1',
+        'x-dsh-draft-id': current.id, 'x-dsh-draft-revision': String(current.revision),
+        'x-dsh-draft-filename': name, ...(withLength ? { 'content-length': String(bytes) } : {}),
+      },
+    }))
+    return { status: response.status, ...await response.json() }
+  }
+
+  const rejected = await upload(draft, 'sample.bin', 29 * mib, true)
+  assert.equal(rejected.status, 413)
+  assert.match(rejected.error.message, /20 MiB/)
+
+  f.settings.maxAttachmentBytes = 30 * mib
+  assert.equal((await f.drafts.action({ action: 'list' })).attachmentLimits.default, 30 * mib)
+  const sample = await upload(draft, 'sample.bin', 29 * mib)
+  assert.equal(sample.status, 200, JSON.stringify(sample.error))
+  const preflight = await f.drafts.action({ action: 'get', id: draft.id, revision: sample.value.revision, checkAttachments: true })
+  assert.deepEqual(preflight, { attachmentCount: 1, attachmentSize: 29 * mib, attachmentLimit: 30 * mib })
+  const uploaded = (await f.store.get(draft.id)).attachments[0]
+  const excess = await upload(sample.value, 'excess.bin', 2 * mib)
+  assert.equal(excess.status, 413)
+  assert.match(excess.error.message, /30 MiB/)
+  assert.equal((await f.store.get(draft.id)).revision, sample.value.revision)
+  assert.deepEqual(await readdir(dirname(uploaded.path)), [basename(uploaded.path)])
+
+  f.settings.maxAttachmentBytes = 40 * mib
+  const full = await upload(sample.value, 'extra.bin', 11 * mib)
+  assert.equal(full.status, 200, JSON.stringify(full.error))
+  assert.equal((await upload(full.value, 'above-limit.bin', 1)).status, 413)
+  const copy = await f.drafts.action({ action: 'copy', id: draft.id, revision: full.value.revision, confirmed: true })
+  const review = await f.drafts.action({ action: 'preview', id: copy.id, revision: copy.revision })
+  assert.deepEqual(review.attachments.map(file => file.size), [29 * mib, 11 * mib])
+  const send = await f.drafts.action({ action: 'send', id: copy.id, preview: review.id, confirmed: true })
+  assert.equal(send.draft.state, 'sent', send.draft.error)
+  assert.equal(f.peer.sent.length, 1)
+  const mail = await simpleParser(f.peer.sent[0])
+  assert.deepEqual(mail.attachments.map(file => ({
+    filename: file.filename, size: file.size, sha256: createHash('sha256').update(file.content).digest('hex'),
+  })), review.attachments.map(({ filename, size, sha256 }) => ({ filename, size, sha256 })))
 })
 test('reply draft quotes long original and actual SMTP message retains its original thread', {timeout:20000},async t=>{
   const f = await fixture(t)

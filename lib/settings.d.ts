@@ -26,6 +26,7 @@ export interface EmailSettingsValue {
     newMailPopup?: boolean;
     trustedRecipientsYaml?: string;
     maxBodyChars: number;
+    maxAttachmentBytes?: number;
     downloadDir: string;
     accountsYaml: string;
     consumers?: Array<{

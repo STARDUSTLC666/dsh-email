@@ -11,13 +11,14 @@ import {
   EmailPool,
 } from '../lib/index.js'
 
-async function fixture(t) {
+async function fixture(t, options = {}) {
   const root = await mkdtemp(join(import.meta.dirname, '.mailbox-fixture-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   const config = {
       provider: 'agentmail',
       user: 'assistant@agentmail.to',
       apiKey: 'synthetic-secret',
+      ...options,
     },
     settings = resolveEmailSettings(config),
     value = { sendApproval: true, trustedRecipientsYaml: '' },
@@ -213,7 +214,7 @@ test('mailbox list preserves explicit account, folder and match pagination witho
 })
 
 test('AgentMail draft attachments fail before preview or submission at the API limit', async (t) => {
-  const f = await fixture(t)
+  const f = await fixture(t, { maxAttachmentBytes: 40 * 1024 * 1024 })
   const draft = await f.drafts.create({
     account: 'default',
     to: 'human@example.invalid',

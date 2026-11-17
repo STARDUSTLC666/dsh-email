@@ -203,6 +203,12 @@ export declare const PROVIDER_NAMES: string[];
 /** Documented POP endpoints; unsupported providers require an explicit host. */
 export declare const POP3_PRESETS: Record<string, string>;
 export declare const EMAIL_PASSWORD_ENV = "DSH_EMAIL_PASSWORD";
+export declare const DEFAULT_MAX_ATTACHMENT_BYTES: number;
+export declare const MIN_ATTACHMENT_BYTES = 1024;
+export declare const MAX_ATTACHMENT_BYTES: number;
+export declare const MAX_DRAFT_ATTACHMENT_BYTES: number;
+export declare function normalizeAttachmentLimit(value: unknown): number;
+export declare function draftAttachmentLimit(configuredBytes: number, transport?: ResolvedEmailConfig['transport']): number;
 /** Fully resolved, validated configuration for one account. */
 export interface ResolvedEmailConfig {
     replyLocale?: string;

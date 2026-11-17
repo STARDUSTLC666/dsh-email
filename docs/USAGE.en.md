@@ -192,7 +192,7 @@ The existing **Server presets (custom providers, advanced)** feature is unchange
 | `serverPresets` | — | YAML text of custom provider presets (key = preset name, value has optional `label` + `imap`/`smtp`); endpoints only, no credentials. The settings-page dropdown lists preset names and pre-fills endpoints into account cards; editing a preset does not reconnect established connections |
 | `defaultAccount` | auto (single account) | Account used when the `account` argument is omitted (required for multi-account) |
 | `downloadDir` | `.dsh-email-downloads` under session workspace (fallback `$DSH_HOME/email-downloads`) | Download directory for `email_attachment`; pinned once explicitly set |
-| `maxAttachmentBytes` | 20 MiB | Per-attachment and total size cap (1024–512 MiB) |
+| `maxAttachmentBytes` | 20 MiB | Total original attachments per send and size per download (1 KiB–512 MiB). Editable under Accounts → Attachment size limit. [Draft and provider limits](DRAFTS.en.md#storage-and-limits) also apply |
 | `idleTimeoutMs` | `60000` | IMAP idle connection recycle time (connection reuse; consecutive ops are faster) |
 | `bodySearchFallback` | `true` | Fall back to client-side body scan of recent messages when server search returns nothing |
 | `bodySearchLimit` | `30` | Number of messages for the body fallback scan (5–200) |

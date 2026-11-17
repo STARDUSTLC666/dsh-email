@@ -57,7 +57,11 @@ Blocked addresses and domains still stop delivery before an SMTP connection. Hos
 
 Drafts live at `DSH_HOME/data/dsh-email/drafts-v1.json`, with uploads under `draft-uploads`. Without DSH_HOME the default is `~/.dsh`. Profiles sharing DSH_HOME share drafts; accounts resolve against the current profile and the actual identity appears in review.
 
-Limits are 50 drafts, 100 KiB of text, and 10 attachments totaling 20 MiB per draft. A smaller `maxAttachmentBytes` setting wins. File locks and atomic replacement protect concurrent processes. Corrupt storage is preserved with an error rather than silently reset.
+You can save 50 drafts, with up to 100 KiB of text and 10 attachments per draft. Open Email → Accounts → Attachment size limit to choose 20, 25, 30, 35 or 40 MiB, or enter a custom value. The default is 20 MiB in total. SMTP drafts accept up to 40 MiB and AgentMail drafts up to 4 MiB, subject to your configured limit.
+
+The draft limit counts the original attachments. Mail servers can also limit the entire encoded message, including headers, body and Base64-encoded attachments. A typical 40 MiB binary attachment occupies about 55 MiB after encoding.
+
+File locks and atomic replacement protect concurrent processes. The plugin preserves corrupt storage and reports an error.
 
 Deletion removes the local draft and plugin-uploaded copies, retaining original files and mailbox messages. This workbench composes new messages; reply/reply-all/forward retain `email_reply` and its original threading behavior.
 

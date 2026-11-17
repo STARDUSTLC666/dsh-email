@@ -1,6 +1,6 @@
 import { ImapFlow } from 'imapflow';
 import { type FolderMutationSnapshot } from './imap-folders.js';
-import type { ResolvedEmailConfig, ResolvedEmailSettings } from './config.js';
+import { type ResolvedEmailConfig, type ResolvedEmailSettings } from './config.js';
 import { type ReplyOptions } from './reply-locale.js';
 import type { AddressEntry, EmailAttachmentMeta, EmailAttachmentResult, EmailFoldersResult, EmailListResult, EmailMarkAction, EmailMarkResult, EmailReadResult, EmailReplyMode, EmailReplyResult, EmailSearchResult, EmailSearchOptions, EmailSendResult, ListedMessage } from './types.js';
 export declare class MailError extends Error {
