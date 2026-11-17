@@ -5381,11 +5381,14 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
             const root = document.createElement("div");
             root.id = "dsh-email-whale-root";
             root.className = settingsCss.whaleRoot;
+            root.setAttribute("data-whale", "root");
+            root.setAttribute("aria-live", "polite");
             document.body.appendChild(root);
             let pollTimer = 0;
             let hideTimer = 0;
             let whaleUrl = "";
             let whaleCredit = "";
+            let whaleSkin = false;
             let enabled = true;
             let localPreference = null;
             let disposed = false;
@@ -5410,9 +5413,19 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                 current = value;
                 const card = document.createElement("div");
                 card.className = settingsCss.whaleCard;
+                card.setAttribute("data-whale", "card");
+                card.setAttribute("data-whale-skin", String(whaleSkin));
+                card.setAttribute("role", "region");
+                card.setAttribute("aria-labelledby", "dsh-email-whale-title");
                 if (whaleUrl) {
                     const img = document.createElement("img");
                     img.className = settingsCss.whaleImg;
+                    img.setAttribute("data-whale", "image");
+                    img.setAttribute("data-whale-skin", String(whaleSkin));
+                    if (!whaleSkin) {
+                        img.setAttribute("width", "288");
+                        img.setAttribute("height", "512");
+                    }
                     img.src = whaleUrl;
                     img.alt = "";
                     img.onerror = () => { img.remove(); };
@@ -5420,13 +5433,17 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                 }
                 const body = document.createElement("div");
                 body.className = settingsCss.whaleBody;
+                body.setAttribute("data-whale", "body");
                 const title = document.createElement("div");
+                title.id = "dsh-email-whale-title";
                 title.className = settingsCss.whaleTitle;
+                title.setAttribute("data-whale", "title");
                 title.textContent = t("whale.title", { count: value.newCount });
                 body.appendChild(title);
                 (value.messages || []).slice(0, 3).forEach((m) => {
                     const row = document.createElement("div");
                     row.className = settingsCss.whaleItem;
+                    row.setAttribute("data-whale", "item");
                     const who = (m.from || []).map((a) => a.name || a.address).filter(Boolean).join(", ") || t("whale.unknownSender");
                     row.textContent = t("whale.row", { who, subject: m.subject || t("whale.noSubject") });
                     body.appendChild(row);
@@ -5434,24 +5451,39 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                 if (value.newCount > 3) {
                     const more = document.createElement("div");
                     more.className = settingsCss.whaleItem;
+                    more.setAttribute("data-whale", "more");
                     more.textContent = t("whale.more", { count: value.newCount - 3 });
                     body.appendChild(more);
                 }
                 if (whaleCredit) {
                     const credit = document.createElement("div");
                     credit.className = settingsCss.whaleCredit;
+                    credit.setAttribute("data-whale", "credit");
                     credit.textContent = whaleCredit;
                     body.appendChild(credit);
                 }
                 card.appendChild(body);
                 const closeBtn = document.createElement("button");
+                closeBtn.type = "button";
                 closeBtn.className = settingsCss.whaleClose;
+                closeBtn.setAttribute("data-whale", "close");
                 closeBtn.textContent = "\u2715";
                 closeBtn.setAttribute("aria-label", t("whale.close"));
                 closeBtn.onclick = closePopup;
                 card.appendChild(closeBtn);
                 root.appendChild(card);
-                hideTimer = setTimeout(closePopup, 12000);
+                const armDismiss = () => {
+                    if (hideTimer)
+                        clearTimeout(hideTimer);
+                    hideTimer = setTimeout(() => {
+                        if (card.matches?.(":hover, :focus-within")) {
+                            armDismiss();
+                            return;
+                        }
+                        closePopup();
+                    }, 12000);
+                };
+                armDismiss();
             };
             // 轮询策略：页面不可见时完全不打扰邮箱服务器；失败指数退避（上限 10 分钟），
             // 成功立刻回到 30s；本地设置快照同样刷新，以便跨页面的通知开关生效。
@@ -5487,6 +5519,7 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                     if (snap && snap.whale) {
                         whaleUrl = (snap.whale.url || "").replace(/^\/_dsh\//, "_dsh/");
                         whaleCredit = snap.whale.credit || "";
+                        whaleSkin = Boolean(snap.whale.skin);
                     }
                     if (!enabled || !snap?.accounts?.length || document.hidden) {
                         failures = 0;

@@ -7,16 +7,19 @@ import { createEmailRuntime } from '../lib/runtime.js'
 import { EmailSettingsBackend } from '../lib/web.js'
 
 const settle = async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve)) }
-function widgetFixture(enabled = true) {
+function widgetFixture(enabled = true, whale = {}) {
   const timers = new Map(), roots = [], events = new Map()
   let serial = 0, client, pendingWatch, hold = false, watches = 0
-  const element = () => ({ children: [], setAttribute() {}, appendChild(child) { this.children.push(child) },
+  const element = tag => ({ tag, attributes: new Map(), children: [],
+    setAttribute(name, value) { this.attributes.set(name, String(value)) },
+    getAttribute(name) { return this.attributes.get(name) ?? null },
+    appendChild(child) { this.children.push(child) },
     replaceChildren() { this.children = [] }, remove() { this.removed = true },
     get childElementCount() { return this.children.length } })
   const document = { hidden: false, createElement: element, querySelector: () => null,
     body: { appendChild(root) { roots.push(root) } }, addEventListener(name, cb) { events.set(name, cb) }, removeEventListener(name) { events.delete(name) } }
   const source = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8').replace('return module.exports;',
-    'module.exports.probe = { startWhaleWidget, preference: value => updateWhalePreference(value) }; return module.exports;')
+    'module.exports.probe = { startWhaleWidget, settingsCss, EMAIL_CSS, preference: value => updateWhalePreference(value) }; return module.exports;')
   runInNewContext(source, {
     window: { __ModuleLoader__: { load({ factory }) { client = factory(() => ({})) } } }, document, AbortController,
     setTimeout(fn, delay) { const id = ++serial; timers.set(id, { fn, delay }); return id }, clearTimeout(id) { timers.delete(id) },
@@ -27,13 +30,18 @@ function widgetFixture(enabled = true) {
         if (hold) await new Promise(resolve => { pendingWatch = resolve }) // Deliberately ignore abort.
       }
       return { ok: true, json: async () => ({ ok: true, value: action === 'watch'
-        ? { newCount: 1, messages: [{ subject: 'New message', from: [{ address: 'sender@example.test' }] }] }
-        : { settings: { value: { newMailPopup: enabled } }, accounts: ['default'], whale: {} } }) }
+        ? { newCount: 4, messages: [
+          { subject: 'New message 1', from: [{ address: 'sender1@example.test' }] },
+          { subject: 'New message 2', from: [{ name: 'Alice', address: 'alice@example.test' }] },
+          { subject: 'New message 3', from: [{ address: 'sender3@example.test' }] },
+        ] }
+        : { settings: { value: { newMailPopup: enabled } }, accounts: ['default'], whale } }) }
     },
   })
   const dispose = client.probe.startWhaleWidget()
   return { dispose, roots, timers, events, probe: client.probe, get watches() { return watches },
-    setSaved(value) { enabled = value }, hold() { hold = true }, release() { hold = false; pendingWatch?.() },
+    setSaved(value) { enabled = value }, setWhale(value) { whale = value },
+    hold() { hold = true }, release() { hold = false; pendingWatch?.() },
     async poll() { const item = [...timers.entries()].find(([, timer]) => timer.delay >= 30000); assert.ok(item); timers.delete(item[0]); item[1].fn(); await settle() } }
 }
 
@@ -84,4 +92,90 @@ test('closing the preference or unloading suppresses late watch results even if 
   assert.equal(f.roots[0].removed, true)
   assert.equal(f.timers.size, 0)
   assert.equal(f.events.size, 0)
+})
+
+test('whale popup fits portrait fallback and skin artwork without cropping, exposes data-whale hooks, and pauses dismiss on focus/hover (#55)', async t => {
+  const f = widgetFixture(true, { url: '/_dsh/dsh-email/assets/whale', skin: false, credit: 'community credit' })
+  t.after(f.dispose)
+  const { EMAIL_CSS: css, settingsCss } = f.probe
+  const rule = selector => {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const match = css.match(new RegExp(`${escaped}\\{([^}]+)\\}`))
+    assert.ok(match, `missing CSS rule for ${selector}`)
+    return match[1]
+  }
+  const cardCss = rule('.' + settingsCss.whaleCard)
+  const imgCss = rule('.' + settingsCss.whaleImg)
+  const fallbackImgCss = rule('.' + settingsCss.whaleImg + '[data-whale-skin=false]')
+  assert.match(cardCss, /display:flex/)
+  assert.match(cardCss, /flex-direction:column/)
+  assert.match(cardCss, /max-height:calc\(100dvh - 32px\)/)
+  assert.match(imgCss, /height:auto/)
+  assert.match(imgCss, /max-height:min\(52dvh,340px\)/)
+  assert.match(imgCss, /object-fit:contain/)
+  assert.match(imgCss, /object-position:center/)
+  assert.doesNotMatch(imgCss, /object-fit:cover/)
+  assert.doesNotMatch(imgCss, /(?:^|;)height:120px(?:;|$)/)
+  assert.match(fallbackImgCss, /background:#fff/)
+
+  await settle() // Baseline poll.
+  await f.poll() // Second poll surfaces the popup.
+  const root = f.roots[0]
+  assert.equal(root.getAttribute('data-whale'), 'root')
+  assert.equal(root.getAttribute('aria-live'), 'polite')
+  assert.equal(root.childElementCount, 1)
+
+  const card = root.children[0]
+  assert.equal(card.getAttribute('data-whale'), 'card')
+  assert.equal(card.getAttribute('data-whale-skin'), 'false')
+  assert.equal(card.getAttribute('role'), 'region')
+  assert.equal(card.getAttribute('aria-labelledby'), 'dsh-email-whale-title')
+
+  const [img, body, closeBtn] = card.children
+  assert.equal(img.tag, 'img')
+  assert.equal(img.getAttribute('data-whale'), 'image')
+  assert.equal(img.getAttribute('data-whale-skin'), 'false')
+  assert.equal(img.getAttribute('width'), '288')
+  assert.equal(img.getAttribute('height'), '512')
+  assert.equal(img.src, '_dsh/dsh-email/assets/whale')
+
+  assert.equal(body.getAttribute('data-whale'), 'body')
+  assert.deepEqual(
+    body.children.map(node => node.getAttribute('data-whale')),
+    ['title', 'item', 'item', 'item', 'more', 'credit'],
+  )
+  assert.equal(body.children[0].id, 'dsh-email-whale-title')
+
+  assert.equal(closeBtn.tag, 'button')
+  assert.equal(closeBtn.type, 'button')
+  assert.equal(closeBtn.getAttribute('data-whale'), 'close')
+
+  // Pause auto-dismiss while focused or hovered, then dismiss once idle.
+  let active = true
+  card.matches = selector => {
+    assert.equal(selector, ':hover, :focus-within')
+    return active
+  }
+  const firstDismiss = [...f.timers.entries()].find(([, timer]) => timer.delay === 12000)
+  assert.ok(firstDismiss)
+  f.timers.delete(firstDismiss[0])
+  firstDismiss[1].fn()
+  assert.equal(root.childElementCount, 1, 'focused/hovered toast stays open')
+
+  active = false
+  const secondDismiss = [...f.timers.entries()].find(([, timer]) => timer.delay === 12000)
+  assert.ok(secondDismiss)
+  f.timers.delete(secondDismiss[0])
+  secondDismiss[1].fn()
+  assert.equal(root.childElementCount, 0, 'idle toast closes on the next timer tick')
+
+  // Skin artwork of arbitrary aspect ratio omits fallback-only dimensions.
+  f.setWhale({ url: '/_dsh/dsh-email/assets/whale', skin: true, credit: 'skin credit' })
+  await f.poll()
+  const skinCard = root.children[0]
+  const skinImg = skinCard.children[0]
+  assert.equal(skinCard.getAttribute('data-whale-skin'), 'true')
+  assert.equal(skinImg.getAttribute('data-whale-skin'), 'true')
+  assert.equal(skinImg.getAttribute('width'), null)
+  assert.equal(skinImg.getAttribute('height'), null)
 })
