@@ -1,5 +1,7 @@
 .content {
+  box-sizing: border-box;
   width: min(100%, 900px);
+  min-width: 0;
   margin-inline: auto;
   padding: 16px 20px;
 }

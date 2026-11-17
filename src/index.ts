@@ -44,14 +44,33 @@ export function installEmailApplication(ctx:any,config:Config={},dependencies:Ma
   backend.watchImpl = runtime.watch
   installEmailSettingsWeb(ctx, backend)
   const drafts = new EmailDraftBackend(runtime, backend)
-  ctx.inject?.(['appReady'],(host:any)=>{if(typeof host.appReady?.onReady==='function')host.appReady.onReady(()=>drafts.startScheduler())})
-  ctx.on?.('dispose',()=>drafts.stopScheduler())
-  ctx.on?.('dispose',disposeOAuthFlows)
+  ctx.inject?.(['appReady'],(host:any)=>{
+    if(typeof host.appReady?.onReady!=='function')return
+    if(typeof host.effect==='function')host.effect(()=>{
+      const off=host.appReady.onReady(()=>drafts.startScheduler())
+      return typeof off==='function'?off:()=>{}
+    })
+    else host.appReady.onReady(()=>drafts.startScheduler())
+  })
+  const toolDisposers: Array<() => void> = []
+  let cleaned = false
+  const cleanupSession = () => {
+    if (cleaned) return
+    cleaned = true
+    drafts.stopScheduler()
+    disposeOAuthFlows()
+    for (const dispose of toolDisposers) dispose()
+  }
+  ctx.effect?.(() => cleanupSession)
+  ctx.on?.('dispose', cleanupSession)
   installEmailDrafts(ctx, drafts)
   installEmailMailbox(ctx, new EmailMailboxBackend(runtime, drafts))
   installMailTasks(ctx,new MailTaskBackend(runtime))
   installMailConsumers(ctx, new MailConsumerBackend(runtime, config))
-  for (const definition of buildEmailTools(runtime, drafts)) ctx.tools.register(definition)
+  for (const definition of buildEmailTools(runtime, drafts)) {
+    const off = ctx.tools.register(definition)
+    if (typeof off === 'function') toolDisposers.push(off)
+  }
   installSendApproval(ctx, runtime)
   installScheduleApproval(ctx,drafts)
 }

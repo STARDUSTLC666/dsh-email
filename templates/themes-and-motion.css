@@ -1,0 +1,823 @@
+/* ==========================================================================
+ * DeepSeek Harness (>=0.2.2-rc.3) Unified Workbench Themes & Motion System
+ * Shared across STARDUSTLC666 workbench plugins:
+ *   dsh-email, dsh-calendar, dsh-cite, dsh-dream, dsh-code-security,
+ *   dsh-rss, dsh-ppt, dsh-remotion, dsh-hyperframes
+ *
+ * Design Principles:
+ * 1. NEVER TOO DARK: Airy daylight defaults; when host `body[data-ds-dark-theme]`
+ *    is active under `harness`, soften to breathable slate (#1f232b / #272c36),
+ *    never pitch black (#000 / #090a0f / #151517).
+ * 2. 5 SWITCHABLE PRESETS via `[data-dsh-style]`:
+ *    - `harness`   (原生清透 / Native Airy)
+ *    - `cream`     (米白纸感 / Warm Cream)
+ *    - `claude`    (Claude 暖书卷 / Claude Warmth)
+ *    - `pixel8bit` (8-Bit 像素 / Bright 8-Bit)
+ *    - `mint`      (晴空薄荷 / Airy Mint)
+ * 3. PORTALED OVERLAY SYNC: Selectors match both `[data-dsh-style="..."]` roots
+ *    AND portaled `[role="dialog"]` / `[role="menu"]` containers carrying or
+ *    wrapping `[data-dsh-style="..."]`.
+ * 4. COMPOSITOR MOTION & ICON MICRO-ANIMATIONS with full `prefers-reduced-motion`
+ *    and `forced-colors` compliance.
+ * ========================================================================== */
+
+/* --------------------------------------------------------------------------
+ * 1. Motion Timing & Base Token Fallbacks (Standalone + Host Safe)
+ * -------------------------------------------------------------------------- */
+:where([data-dsh-style]),
+:where([role="dialog"], [role="alertdialog"], [role="menu"], dialog):has([data-dsh-style]) {
+  --dsh-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dsh-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  /* Standard cubic-bezier fallback before linear() physics spring */
+  --dsh-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dsh-motion-fast: 140ms;
+  --dsh-motion-base: 200ms;
+  --dsh-motion-dialog: 220ms;
+  --dsh-control-border-width: 0.5px;
+  --dsh-button-shadow: none;
+  --dsh-button-hover-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
+  --dsh-card-hover-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+}
+
+@supports (transition-timing-function: linear(0, 1)) {
+  :where([data-dsh-style]),
+  :where([role="dialog"], [role="alertdialog"], [role="menu"], dialog):has([data-dsh-style]) {
+    --dsh-ease-spring: linear(
+      0, 0.402 7.4%, 0.711 15.3%, 0.929 23.7%, 1.008 28.2%,
+      1.067 33%, 1.099 36.9%, 1.12 41%, 1.13 45.4%, 1.13 50.1%,
+      1.111 58.5%, 1.019 83.2%, 1.004 91.3%, 1
+    );
+  }
+}
+
+/* Electron / macOS 0.2.2+ window-drag-regions rule:
+ * Exclude ONLY the visible overlay owner box itself (never `[data-window-drag-exclude] *`,
+ * so scrolled/clipped descendants cannot register offscreen no-drag rects over headers). */
+[data-window-drag-exclude] {
+  -webkit-app-region: no-drag;
+}
+
+/* --------------------------------------------------------------------------
+ * 2. Preset 1: `harness` — 原生清透 / Native Airy
+ *    - Daylight: crisp airy white & mist slate; defers to host tokens when set,
+ *      with bright standalone fallbacks for tests/previews.
+ *    - Host Dark (`body[data-ds-dark-theme]`): softened breathable slate
+ *      (`#1f232b` / `#272c36`), overriding DSH's near-black `#151517`.
+ * -------------------------------------------------------------------------- */
+:where(body:not([data-ds-dark-theme])) [data-dsh-style="harness"],
+:where(body:not([data-ds-dark-theme])) :where([role="dialog"], [role="alertdialog"], [role="menu"], dialog):has([data-dsh-style="harness"]) {
+  color-scheme: light;
+  accent-color: var(--dsw-alias-state-business-primary, #4176e6);
+}
+
+/* Standalone fallbacks when host ui-theme stylesheet is not mounted (e.g. jsdom / preview) */
+:root:not([data-dsh-host-tokens]) [data-dsh-style="harness"] {
+  --dsw-radius-xs: 6px;
+  --dsw-radius-sm: 8px;
+  --dsw-radius-md: 12px;
+  --dsw-radius-lg: 16px;
+  --dsw-radius-xl: 20px;
+}
+
+body:not([data-ds-dark-theme]) [data-dsh-style="harness"] {
+  --dsh-surface-spotlight: rgba(65, 118, 230, 0.06);
+}
+
+/* NEVER TOO DARK: Soft breathable slate when host dark mode is active in `harness` mode */
+body[data-ds-dark-theme] [data-dsh-style="harness"],
+body[data-ds-dark-theme] :where([role="dialog"], [role="alertdialog"], [role="menu"], dialog):where([data-dsh-style="harness"], :has([data-dsh-style="harness"])) {
+  color-scheme: dark;
+  accent-color: #7aaaff;
+  --dsw-alias-bg-base: #1f232b;
+  --dsw-alias-bg-layer-1: #272c36;
+  --dsw-alias-bg-layer-2: #2f3542;
+  --dsw-alias-bg-layer-3: #373e4d;
+  --dsw-alias-bg-overlay: #2a303c;
+  --dsw-alias-bg-module-platform: #2c323e;
+  --dsw-alias-settings-card-fill: #262b35;
+  --dsw-alias-settings-card-stroke: rgba(226, 232, 240, 0.12);
+  --dsw-specific-menu: rgba(39, 44, 54, 0.96);
+  --dsw-alias-border-l1: rgba(226, 232, 240, 0.09);
+  --dsw-alias-border-l2: rgba(226, 232, 240, 0.15);
+  --dsw-alias-border-l3: rgba(226, 232, 240, 0.22);
+  --dsw-alias-border-l4: rgba(226, 232, 240, 0.28);
+  --dsw-alias-label-primary: #eef2f7;
+  --dsw-alias-label-secondary: #b6c0cf;
+  --dsw-alias-label-tertiary: #8d98ab;
+  --dsw-alias-label-dimmed: #737e91;
+  --dsw-alias-brand-primary: #7aaaff;
+  --dsw-alias-brand-text: #eef2f7;
+  --dsw-alias-state-business-primary: #7aaaff;
+  --dsw-alias-state-business-tertiary: rgba(122, 170, 255, 0.16);
+  --dsw-alias-link: #8bb6ff;
+  --dsw-alias-button-primary-fill: #5b8def;
+  --dsw-alias-button-primary-hover: #6f9cf4;
+  --dsw-alias-button-primary-ink: #ffffff;
+  --dsw-alias-interactive-bg-hover: rgba(226, 232, 240, 0.07);
+  --dsw-alias-interactive-bg-active: rgba(226, 232, 240, 0.13);
+  --dsw-alias-interactive-bg-hover-accent: rgba(122, 170, 255, 0.15);
+  --dsw-alias-interactive-bg-hover-danger: rgba(248, 113, 113, 0.16);
+  --dsw-alias-state-error-primary: #f87171;
+  --dsw-alias-state-warn-primary: #fbbf24;
+  --dsw-alias-state-warn-label: #fcd34d;
+  --dsw-alias-state-warn-tertiary: rgba(251, 191, 36, 0.15);
+  --dsw-alias-state-success-primary: #4ade80;
+  --dsw-elevation-panel: 0 4px 16px rgba(10, 14, 22, 0.28), 0 0 0 1px rgba(226, 232, 240, 0.12);
+  --dsw-elevation-prominent: 0 14px 38px rgba(10, 14, 22, 0.42), 0 0 0 1px rgba(226, 232, 240, 0.16);
+  --dsh-button-hover-shadow: 0 2px 8px rgba(10, 14, 22, 0.25);
+  --dsh-card-hover-shadow: 0 8px 22px rgba(10, 14, 22, 0.32);
+  --dsh-surface-spotlight: rgba(122, 170, 255, 0.10);
+}
+
+/* --------------------------------------------------------------------------
+ * 3. Preset 2: `cream` — 米白纸感 / Warm Cream
+ *    (#FAF7F0 / #F3EFE4 paper surfaces, #2B2620 ink, warm amber/sand accents)
+ * -------------------------------------------------------------------------- */
+[data-dsh-style="cream"],
+:where([role="dialog"], [role="alertdialog"], [role="menu"], dialog):where([data-dsh-style="cream"], :has([data-dsh-style="cream"])) {
+  color-scheme: light;
+  accent-color: #9e5829;
+  --dsw-alias-bg-base: #faf7f0;
+  --dsw-alias-bg-layer-1: #f3efe4;
+  --dsw-alias-bg-layer-2: #eae3d3;
+  --dsw-alias-bg-layer-3: #e0d7c3;
+  --dsw-alias-bg-overlay: #fcfaf4;
+  --dsw-alias-bg-module-platform: #efe9da;
+  --dsw-alias-settings-card-fill: #f5f1e6;
+  --dsw-alias-settings-card-stroke: #dfd5be;
+  --dsw-specific-menu: rgba(252, 250, 244, 0.97);
+  --dsw-alias-border-l1: #e6dec8;
+  --dsw-alias-border-l2: #d4c8ae;
+  --dsw-alias-border-l3: #c0b193;
+  --dsw-alias-border-l4: #ad9c7c;
+  --dsw-alias-label-primary: #2b2620;
+  --dsw-alias-label-secondary: #655b4e;
+  --dsw-alias-label-tertiary: #857968;
+  --dsw-alias-label-dimmed: #9c907f;
+  --dsw-alias-brand-primary: #9e5829;
+  --dsw-alias-brand-text: #2b2620;
+  --dsw-alias-state-business-primary: #a65e2e;
+  --dsw-alias-state-business-tertiary: rgba(166, 94, 46, 0.13);
+  --dsw-alias-link: #934e20;
+  --dsw-alias-button-primary-fill: #9e5829;
+  --dsw-alias-button-primary-hover: #86481e;
+  --dsw-alias-button-primary-ink: #fffdf9;
+  --dsw-alias-interactive-bg-hover: rgba(108, 84, 50, 0.075);
+  --dsw-alias-interactive-bg-active: rgba(166, 94, 46, 0.14);
+  --dsw-alias-interactive-bg-hover-accent: rgba(166, 94, 46, 0.12);
+  --dsw-alias-interactive-bg-hover-danger: rgba(185, 56, 44, 0.11);
+  --dsw-alias-state-error-primary: #b9382c;
+  --dsw-alias-state-warn-primary: #b45309;
+  --dsw-alias-state-warn-label: #8c3d08;
+  --dsw-alias-state-warn-tertiary: #fdefd6;
+  --dsw-alias-state-success-primary: #2a6f4e;
+  --dsw-radius-xs: 6px;
+  --dsw-radius-sm: 9px;
+  --dsw-radius-md: 13px;
+  --dsw-radius-lg: 16px;
+  --dsw-radius-xl: 20px;
+  --dsw-elevation-panel: 0 3px 12px rgba(68, 52, 32, 0.07), 0 0 0 1px rgba(180, 164, 138, 0.35);
+  --dsw-elevation-prominent: 0 14px 34px rgba(68, 52, 32, 0.14), 0 2px 6px rgba(68, 52, 32, 0.06), 0 0 0 1px rgba(180, 164, 138, 0.42);
+  --dsh-control-border-width: 1px;
+  --dsh-button-hover-shadow: 0 2px 6px rgba(84, 62, 34, 0.09);
+  --dsh-card-hover-shadow: 0 8px 20px rgba(84, 62, 34, 0.10);
+  --dsh-surface-spotlight: rgba(166, 94, 46, 0.08);
+}
+
+/* --------------------------------------------------------------------------
+ * 4. Preset 3: `claude` — Claude 暖书卷 / Claude Warmth
+ *    (#F5F4ED / #ECE9DF parchment, #C96442 terracotta accent, editorial warmth)
+ * -------------------------------------------------------------------------- */
+[data-dsh-style="claude"],
+:where([role="dialog"], [role="alertdialog"], [role="menu"], dialog):where([data-dsh-style="claude"], :has([data-dsh-style="claude"])) {
+  color-scheme: light;
+  accent-color: #c96442;
+  --dsw-alias-bg-base: #f5f4ed;
+  --dsw-alias-bg-layer-1: #ece9df;
+  --dsw-alias-bg-layer-2: #e3dfd2;
+  --dsw-alias-bg-layer-3: #d8d3c3;
+  --dsw-alias-bg-overlay: #faf9f4;
+  --dsw-alias-bg-module-platform: #e7e3d6;
+  --dsw-alias-settings-card-fill: #efece2;
+  --dsw-alias-settings-card-stroke: #dad5c6;
+  --dsw-specific-menu: rgba(250, 249, 244, 0.97);
+  --dsw-alias-border-l1: #e2ded0;
+  --dsw-alias-border-l2: #d0cbc0;
+  --dsw-alias-border-l3: #bcb6a7;
+  --dsw-alias-border-l4: #a69f8f;
+  --dsw-alias-label-primary: #1f1e1b;
+  --dsw-alias-label-secondary: #5d5a51;
+  --dsw-alias-label-tertiary: #7b776c;
+  --dsw-alias-label-dimmed: #948f83;
+  --dsw-alias-brand-primary: #c96442;
+  --dsw-alias-brand-text: #1f1e1b;
+  --dsw-alias-state-business-primary: #c96442;
+  --dsw-alias-state-business-tertiary: rgba(201, 100, 66, 0.14);
+  --dsw-alias-link: #b35030;
+  --dsw-alias-button-primary-fill: #c96442;
+  --dsw-alias-button-primary-hover: #b25232;
+  --dsw-alias-button-primary-ink: #faf9f5;
+  --dsw-alias-interactive-bg-hover: rgba(31, 30, 27, 0.055);
+  --dsw-alias-interactive-bg-active: rgba(201, 100, 66, 0.14);
+  --dsw-alias-interactive-bg-hover-accent: rgba(201, 100, 66, 0.11);
+  --dsw-alias-interactive-bg-hover-danger: rgba(180, 48, 42, 0.11);
+  --dsw-alias-state-error-primary: #b4302a;
+  --dsw-alias-state-warn-primary: #b85d19;
+  --dsw-alias-state-warn-label: #8c430c;
+  --dsw-alias-state-warn-tertiary: #f7e8d6;
+  --dsw-alias-state-success-primary: #2d6a4f;
+  --dsw-radius-xs: 7px;
+  --dsw-radius-sm: 10px;
+  --dsw-radius-md: 14px;
+  --dsw-radius-lg: 18px;
+  --dsw-radius-xl: 22px;
+  --dsw-elevation-panel: 0 3px 14px rgba(31, 30, 27, 0.06), 0 0 0 1px rgba(145, 139, 126, 0.28);
+  --dsw-elevation-prominent: 0 16px 38px rgba(31, 30, 27, 0.13), 0 2px 8px rgba(31, 30, 27, 0.05), 0 0 0 1px rgba(145, 139, 126, 0.34);
+  --dsh-control-border-width: 1px;
+  --dsh-button-hover-shadow: 0 2px 7px rgba(31, 30, 27, 0.08);
+  --dsh-card-hover-shadow: 0 8px 22px rgba(31, 30, 27, 0.09);
+  --dsh-surface-spotlight: rgba(201, 100, 66, 0.08);
+}
+
+/* Subtle editorial serif warmth on primary workbench/dialog headings in Claude preset */
+[data-dsh-style="claude"] :where(header h1, [data-dsh-editorial-heading]),
+:where([role="dialog"], dialog):where([data-dsh-style="claude"], :has([data-dsh-style="claude"])) header h2 {
+  font-family: "Iowan Old Style", "Georgia", "Songti SC", "Noto Serif SC", var(--dsw-font-family, serif);
+  letter-spacing: -0.01em;
+}
+
+/* --------------------------------------------------------------------------
+ * 5. Preset 4: `pixel8bit` — 8-Bit 像素 / Bright 8-Bit
+ *    (#F4F6E8 / #E7EED2 pastel arcade, #1E2826 ink, #2E7D5B & #D95B43 accents,
+ *     0px radius, 2px solid crisp borders, 2px 2px 0 pixel shadow,
+ *     stepped translate(1px, 1px) press — bright & legible!)
+ * -------------------------------------------------------------------------- */
+[data-dsh-style="pixel8bit"],
+:where([role="dialog"], [role="alertdialog"], [role="menu"], dialog):where([data-dsh-style="pixel8bit"], :has([data-dsh-style="pixel8bit"])) {
+  color-scheme: light;
+  accent-color: #2e7d5b;
+  --dsw-alias-bg-base: #f4f6e8;
+  --dsw-alias-bg-layer-1: #e7eed2;
+  --dsw-alias-bg-layer-2: #dbe5c0;
+  --dsw-alias-bg-layer-3: #cedaad;
+  --dsw-alias-bg-overlay: #f9fbf0;
+  --dsw-alias-bg-module-platform: #e2ebc9;
+  --dsw-alias-settings-card-fill: #edf2dc;
+  --dsw-alias-settings-card-stroke: #1e2826;
+  --dsw-specific-menu: #f9fbf0;
+  --dsw-alias-border-l1: #7e9478;
+  --dsw-alias-border-l2: #1e2826;
+  --dsw-alias-border-l3: #1e2826;
+  --dsw-alias-border-l4: #1e2826;
+  --dsw-alias-label-primary: #1e2826;
+  --dsw-alias-label-secondary: #3d514c;
+  --dsw-alias-label-tertiary: #58706a;
+  --dsw-alias-label-dimmed: #6e857f;
+  --dsw-alias-brand-primary: #2e7d5b;
+  --dsw-alias-brand-text: #1e2826;
+  --dsw-alias-state-business-primary: #2e7d5b;
+  --dsw-alias-state-business-tertiary: rgba(46, 125, 91, 0.18);
+  --dsw-alias-link: #226448;
+  --dsw-alias-button-primary-fill: #2e7d5b;
+  --dsw-alias-button-primary-hover: #24674a;
+  --dsw-alias-button-primary-ink: #f4f6e8;
+  --dsw-alias-interactive-bg-hover: #dfe9c4;
+  --dsw-alias-interactive-bg-active: #cfe0ad;
+  --dsw-alias-interactive-bg-hover-accent: rgba(46, 125, 91, 0.16);
+  --dsw-alias-interactive-bg-hover-danger: rgba(217, 91, 67, 0.18);
+  --dsw-alias-state-error-primary: #d95b43;
+  --dsw-alias-state-warn-primary: #c47614;
+  --dsw-alias-state-warn-label: #7a4808;
+  --dsw-alias-state-warn-tertiary: #f6e7b4;
+  --dsw-alias-state-success-primary: #2e7d5b;
+  --dsh-pixel-accent-secondary: #d95b43;
+  --dsw-radius-xs: 0px;
+  --dsw-radius-sm: 0px;
+  --dsw-radius-md: 0px;
+  --dsw-radius-lg: 0px;
+  --dsw-radius-xl: 0px;
+  --dsw-corner-shape: square;
+  --dsw-elevation-panel: 3px 3px 0px #1e2826;
+  --dsw-elevation-prominent: 4px 4px 0px #1e2826;
+  --dsh-control-border-width: 2px;
+  --dsh-button-shadow: 2px 2px 0px #1e2826;
+  --dsh-button-hover-shadow: 3px 3px 0px #1e2826;
+  --dsh-card-hover-shadow: 4px 4px 0px #1e2826;
+  --dsh-surface-spotlight: rgba(46, 125, 91, 0.12);
+}
+
+/* Crisp 0px corners, 2px solid borders, and arcade shadows in `pixel8bit` */
+[data-dsh-style="pixel8bit"] :where(button, input, select, textarea, [role="button"], [role="tab"], [role="menuitem"], [role="menuitemradio"], [data-dsh-card], [data-dsh-panel]),
+:where([role="dialog"], [role="alertdialog"], [role="menu"], dialog):where([data-dsh-style="pixel8bit"], :has([data-dsh-style="pixel8bit"])),
+:where([role="dialog"], [role="alertdialog"], [role="menu"], dialog):where([data-dsh-style="pixel8bit"], :has([data-dsh-style="pixel8bit"])) :where(button, input, select, textarea, [role="menuitem"], [role="menuitemradio"]) {
+  border-radius: 0px !important;
+  corner-shape: square;
+}
+
+[data-dsh-style="pixel8bit"] :where(button:not([role="tab"]), .dsh-btn),
+:where([role="dialog"], [role="alertdialog"], dialog):where([data-dsh-style="pixel8bit"], :has([data-dsh-style="pixel8bit"])) :where(button:not([role="tab"]), .dsh-btn) {
+  border: 2px solid #1e2826;
+  box-shadow: 2px 2px 0px #1e2826;
+}
+
+[data-dsh-style="pixel8bit"] :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea),
+:where([role="dialog"], [role="alertdialog"], dialog):where([data-dsh-style="pixel8bit"], :has([data-dsh-style="pixel8bit"])) :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea) {
+  border-width: 2px;
+  border-color: #1e2826;
+}
+
+:where([role="dialog"], [role="alertdialog"], [role="menu"], dialog):where([data-dsh-style="pixel8bit"], :has([data-dsh-style="pixel8bit"])) {
+  border: 2px solid #1e2826 !important;
+  box-shadow: 4px 4px 0px #1e2826 !important;
+  backdrop-filter: none;
+}
+
+[data-dsh-style="pixel8bit"] [role="tab"][aria-selected="true"]::after {
+  border-block-end-color: #d95b43;
+  border-block-end-width: 3px;
+}
+
+/* --------------------------------------------------------------------------
+ * 6. Preset 5: `mint` — 晴空薄荷 / Airy Mint
+ *    (#F5FAFB / #EAF3F6 breeze surfaces, #0F766E teal & #0284C7 sky accents)
+ * -------------------------------------------------------------------------- */
+[data-dsh-style="mint"],
+:where([role="dialog"], [role="alertdialog"], [role="menu"], dialog):where([data-dsh-style="mint"], :has([data-dsh-style="mint"])) {
+  color-scheme: light;
+  accent-color: #0f766e;
+  --dsw-alias-bg-base: #f5fafb;
+  --dsw-alias-bg-layer-1: #eaf3f6;
+  --dsw-alias-bg-layer-2: #dcebf0;
+  --dsw-alias-bg-layer-3: #cce1e8;
+  --dsw-alias-bg-overlay: #fafdff;
+  --dsw-alias-bg-module-platform: #e3eff3;
+  --dsw-alias-settings-card-fill: #eef6f8;
+  --dsw-alias-settings-card-stroke: #c7dde5;
+  --dsw-specific-menu: rgba(250, 253, 255, 0.97);
+  --dsw-alias-border-l1: #d5e6ec;
+  --dsw-alias-border-l2: #bdd5de;
+  --dsw-alias-border-l3: #9ec0cd;
+  --dsw-alias-border-l4: #7faab9;
+  --dsw-alias-label-primary: #132a2e;
+  --dsw-alias-label-secondary: #426067;
+  --dsw-alias-label-tertiary: #628088;
+  --dsw-alias-label-dimmed: #7c98a0;
+  --dsw-alias-brand-primary: #0f766e;
+  --dsw-alias-brand-text: #132a2e;
+  --dsw-alias-state-business-primary: #0f766e;
+  --dsw-alias-state-business-tertiary: rgba(15, 118, 110, 0.13);
+  --dsw-alias-link: #0284c7;
+  --dsw-alias-button-primary-fill: #0f766e;
+  --dsw-alias-button-primary-hover: #0d635c;
+  --dsw-alias-button-primary-ink: #f5fafb;
+  --dsw-alias-interactive-bg-hover: rgba(15, 118, 110, 0.07);
+  --dsw-alias-interactive-bg-active: rgba(15, 118, 110, 0.13);
+  --dsw-alias-interactive-bg-hover-accent: rgba(2, 132, 199, 0.11);
+  --dsw-alias-interactive-bg-hover-danger: rgba(200, 50, 64, 0.11);
+  --dsw-alias-state-error-primary: #c83240;
+  --dsw-alias-state-warn-primary: #b4690e;
+  --dsw-alias-state-warn-label: #864c07;
+  --dsw-alias-state-warn-tertiary: #fdf1d6;
+  --dsw-alias-state-success-primary: #0f766e;
+  --dsh-mint-sky-accent: #0284c7;
+  --dsw-radius-xs: 6px;
+  --dsw-radius-sm: 9px;
+  --dsw-radius-md: 12px;
+  --dsw-radius-lg: 16px;
+  --dsw-radius-xl: 20px;
+  --dsw-elevation-panel: 0 3px 12px rgba(15, 76, 92, 0.07), 0 0 0 1px rgba(127, 170, 185, 0.28);
+  --dsw-elevation-prominent: 0 14px 34px rgba(15, 76, 92, 0.13), 0 2px 6px rgba(15, 76, 92, 0.05), 0 0 0 1px rgba(127, 170, 185, 0.34);
+  --dsh-control-border-width: 1px;
+  --dsh-button-hover-shadow: 0 2px 7px rgba(15, 118, 110, 0.11);
+  --dsh-card-hover-shadow: 0 8px 22px rgba(2, 132, 199, 0.10);
+  --dsh-surface-spotlight: rgba(2, 132, 199, 0.08);
+}
+
+/* --------------------------------------------------------------------------
+ * 7. Interactive Dynamics: Tactile Button Physics & Active States
+ * -------------------------------------------------------------------------- */
+:where([data-dsh-style]) :where(button, [role="button"]),
+:where([role="dialog"], [role="alertdialog"], [role="menu"], dialog):has([data-dsh-style]) :where(button, [role="button"]) {
+  /* Identity transforms prevent mid-interaction stacking-context shifts */
+  translate: 0px 0px;
+  scale: 1;
+  transition-property: background-color, border-color, color, box-shadow, opacity, translate, scale;
+  transition-duration: var(--dsh-motion-fast);
+  transition-timing-function: var(--dsh-ease-out);
+}
+
+/* Visible active style on open menu triggers (per `menu` guidance) */
+:where([data-dsh-style]) :where(button, [role="button"])[aria-expanded="true"]:not(:disabled):not([aria-disabled="true"]),
+:where([role="dialog"], [role="alertdialog"], dialog):has([data-dsh-style]) :where(button, [role="button"])[aria-expanded="true"]:not(:disabled):not([aria-disabled="true"]) {
+  background-color: var(--dsw-alias-interactive-bg-active);
+  color: var(--dsw-alias-label-primary);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @media (hover: hover) {
+    :where([data-dsh-style]:not([data-dsh-style="pixel8bit"])) :where(button:not([role="tab"]):not([role="menuitem"]):not([role="menuitemradio"]):not([role="switch"]), .dsh-btn):hover:not(:disabled):not([aria-disabled="true"]),
+    :where([role="dialog"], [role="alertdialog"], dialog):has([data-dsh-style]:not([data-dsh-style="pixel8bit"])) :where(button:not([role="tab"]):not([role="menuitem"]):not([role="menuitemradio"]):not([role="switch"]), .dsh-btn):hover:not(:disabled):not([aria-disabled="true"]) {
+      translate: 0px -0.5px;
+    }
+
+    [data-dsh-style="pixel8bit"] :where(button:not([role="tab"]):not([role="menuitem"]):not([role="menuitemradio"]), .dsh-btn):hover:not(:disabled):not([aria-disabled="true"]),
+    :where([role="dialog"], [role="alertdialog"], dialog):where([data-dsh-style="pixel8bit"], :has([data-dsh-style="pixel8bit"])) :where(button:not([role="tab"]):not([role="menuitem"]):not([role="menuitemradio"]), .dsh-btn):hover:not(:disabled):not([aria-disabled="true"]) {
+      translate: -1px -1px;
+      box-shadow: 3px 3px 0px #1e2826;
+      transition-timing-function: steps(2, end);
+      transition-duration: 70ms;
+    }
+  }
+
+  /* Tactile spring press on non-pixel themes */
+  :where([data-dsh-style]:not([data-dsh-style="pixel8bit"])) :where(button:not([role="switch"]), [role="button"]):active:not(:disabled):not([aria-disabled="true"]),
+  :where([role="dialog"], [role="alertdialog"], [role="menu"], dialog):has([data-dsh-style]:not([data-dsh-style="pixel8bit"])) :where(button:not([role="switch"]), [role="button"]):active:not(:disabled):not([aria-disabled="true"]) {
+    scale: 0.965;
+    translate: 0px 0.5px;
+    transition-duration: 80ms;
+  }
+
+  /* Stepped 8-Bit arcade press (`translate(1px, 1px)` + crisp 1px pixel shadow) */
+  [data-dsh-style="pixel8bit"] :where(button:not([role="tab"]):not([role="switch"]), .dsh-btn):active:not(:disabled):not([aria-disabled="true"]),
+  :where([role="dialog"], [role="alertdialog"], [role="menu"], dialog):where([data-dsh-style="pixel8bit"], :has([data-dsh-style="pixel8bit"])) :where(button:not([role="tab"]):not([role="switch"]), .dsh-btn):active:not(:disabled):not([aria-disabled="true"]) {
+    translate: 1px 1px !important;
+    scale: 1 !important;
+    box-shadow: 1px 1px 0px #1e2826 !important;
+    transition-timing-function: steps(2, end);
+    transition-duration: 50ms;
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * 8. Small-Button SVG Icon Micro-Animations
+ *    Works automatically with `svg[data-dsh-icon="<name>"]` or `svg[data-icon="<name>"]`
+ * -------------------------------------------------------------------------- */
+:where([data-dsh-style]) :where(button, [role="button"], summary) svg,
+:where([role="dialog"], [role="alertdialog"], [role="menu"], dialog):has([data-dsh-style]) :where(button, [role="button"], summary) svg {
+  translate: 0px 0px;
+  rotate: 0deg;
+  scale: 1;
+  transform-origin: center;
+}
+
+@keyframes dsh-icon-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+@keyframes dsh-icon-wiggle {
+  0% { rotate: 0deg; }
+  25% { rotate: -12deg; }
+  55% { rotate: 10deg; }
+  80% { rotate: -5deg; }
+  100% { rotate: 0deg; }
+}
+
+@keyframes dsh-icon-pop {
+  0% { scale: 1; }
+  45% { scale: 1.26; }
+  75% { scale: 0.94; }
+  100% { scale: 1; }
+}
+
+@keyframes dsh-icon-bounce {
+  0%, 100% { translate: 0px 0px; }
+  45% { translate: 0px 2.5px; }
+  75% { translate: 0px -1px; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :where([data-dsh-style]) :where(button, [role="button"], summary) svg,
+  :where([role="dialog"], [role="alertdialog"], [role="menu"], dialog):has([data-dsh-style]) :where(button, [role="button"], summary) svg {
+    transition:
+      translate var(--dsh-motion-base) var(--dsh-ease-spring),
+      rotate 240ms var(--dsh-ease-spring),
+      scale var(--dsh-motion-base) var(--dsh-ease-spring);
+  }
+
+  /* 1) `down` / chevron: 180deg flip on `[aria-expanded="true"]` or `details[open]` */
+  :where([data-dsh-style]) :where([aria-expanded="true"], [data-open="true"], details[open] > summary) :is(svg[data-dsh-icon="down"], svg[data-dsh-icon="chevron-down"], svg[data-icon="down"], svg[data-icon="chevron-down"]),
+  :where([role="dialog"], [role="alertdialog"], dialog):has([data-dsh-style]) :where([aria-expanded="true"], [data-open="true"]) :is(svg[data-dsh-icon="down"], svg[data-dsh-icon="chevron-down"], svg[data-icon="down"], svg[data-icon="chevron-down"]) {
+    rotate: 180deg;
+  }
+
+  /* 2) `refresh` / `sync`: smooth 180deg spin on hover, continuous spin when busy */
+  :where([data-dsh-style]) :where(button, [role="button"])[aria-busy="true"] :is(svg[data-dsh-icon="refresh"], svg[data-dsh-icon="sync"], svg[data-icon="refresh"], svg[data-icon="sync"]),
+  :where([data-dsh-style]) :is(svg[data-dsh-icon="refresh"], svg[data-icon="refresh"])[data-spinning="true"] {
+    animation: dsh-icon-spin 0.85s linear infinite;
+  }
+
+  @media (hover: hover) {
+    :where([data-dsh-style], [role="dialog"], [role="alertdialog"], dialog) :where(button, [role="button"]):hover:not(:disabled):not([aria-disabled="true"]) :is(svg[data-dsh-icon="refresh"], svg[data-dsh-icon="sync"], svg[data-dsh-icon="reload"], svg[data-icon="refresh"], svg[data-icon="sync"], svg[data-icon="reload"]) {
+      rotate: 180deg;
+    }
+
+    /* 3) `plus` / `close`: crisp 90deg turn */
+    :where([data-dsh-style], [role="dialog"], [role="alertdialog"], dialog) :where(button, [role="button"]):hover:not(:disabled):not([aria-disabled="true"]) :is(svg[data-dsh-icon="plus"], svg[data-dsh-icon="add"], svg[data-dsh-icon="close"], svg[data-dsh-icon="x"], svg[data-icon="plus"], svg[data-icon="add"], svg[data-icon="close"], svg[data-icon="x"]) {
+      rotate: 90deg;
+    }
+
+    /* 4) `send` / `external` / `link`: forward/diagonal glide */
+    :where([data-dsh-style], [role="dialog"], [role="alertdialog"], dialog) :where(button, [role="button"], a):hover:not(:disabled):not([aria-disabled="true"]) :is(svg[data-dsh-icon="send"], svg[data-dsh-icon="external"], svg[data-dsh-icon="link"], svg[data-icon="send"], svg[data-icon="external"], svg[data-icon="link"]) {
+      translate: 2px -1.5px;
+    }
+
+    /* 5) `reply` / `left` / `undo`: leading glide */
+    :where([data-dsh-style], [role="dialog"], [role="alertdialog"], dialog) :where(button, [role="button"]):hover:not(:disabled):not([aria-disabled="true"]) :is(svg[data-dsh-icon="reply"], svg[data-dsh-icon="left"], svg[data-dsh-icon="undo"], svg[data-icon="reply"], svg[data-icon="left"], svg[data-icon="undo"]) {
+      translate: -2px 0px;
+    }
+
+    /* 6) `right` / `play`: trailing nudge & pulse */
+    :where([data-dsh-style], [role="dialog"], [role="alertdialog"], dialog) :where(button, [role="button"]):hover:not(:disabled):not([aria-disabled="true"]) :is(svg[data-dsh-icon="right"], svg[data-icon="right"]) {
+      translate: 2px 0px;
+    }
+
+    :where([data-dsh-style], [role="dialog"], [role="alertdialog"], dialog) :where(button, [role="button"]):hover:not(:disabled):not([aria-disabled="true"]) :is(svg[data-dsh-icon="play"], svg[data-icon="play"]) {
+      translate: 1.5px 0px;
+      scale: 1.14;
+    }
+
+    /* 7) `trash` / `delete`: tactile warning wiggle */
+    :where([data-dsh-style], [role="dialog"], [role="alertdialog"], dialog) :where(button, [role="button"]):hover:not(:disabled):not([aria-disabled="true"]) :is(svg[data-dsh-icon="trash"], svg[data-dsh-icon="delete"], svg[data-icon="trash"], svg[data-icon="delete"]) {
+      animation: dsh-icon-wiggle 360ms var(--dsh-ease-in-out);
+    }
+
+    /* 8) `star` / `check` / `copy` / `bookmark`: spring pop */
+    :where([data-dsh-style], [role="dialog"], [role="alertdialog"], dialog) :where(button, [role="button"]):hover:not(:disabled):not([aria-disabled="true"]) :is(svg[data-dsh-icon="star"], svg[data-dsh-icon="check"], svg[data-dsh-icon="copy"], svg[data-dsh-icon="bookmark"], svg[data-icon="star"], svg[data-icon="check"], svg[data-icon="copy"], svg[data-icon="bookmark"]) {
+      scale: 1.18;
+    }
+
+    /* 9) `download` / `export`: vertical bounce */
+    :where([data-dsh-style], [role="dialog"], [role="alertdialog"], dialog) :where(button, [role="button"]):hover:not(:disabled):not([aria-disabled="true"]) :is(svg[data-dsh-icon="download"], svg[data-dsh-icon="export"], svg[data-icon="download"], svg[data-icon="export"]) {
+      animation: dsh-icon-bounce 420ms var(--dsh-ease-out);
+    }
+
+    /* 10) `palette` / `sparkles` / `edit`: playful tilt */
+    :where([data-dsh-style], [role="dialog"], [role="alertdialog"], dialog) :where(button, [role="button"]):hover:not(:disabled):not([aria-disabled="true"]) :is(svg[data-dsh-icon="palette"], svg[data-dsh-icon="sparkles"], svg[data-dsh-icon="edit"], svg[data-icon="palette"], svg[data-icon="sparkles"], svg[data-icon="edit"]) {
+      rotate: -12deg;
+      scale: 1.08;
+    }
+
+    /* Closed chevron gentle downward cue on hover */
+    :where([data-dsh-style], [role="dialog"], [role="alertdialog"], dialog) :where(button, [role="button"])[aria-expanded="false"]:hover:not(:disabled):not([aria-disabled="true"]) :is(svg[data-dsh-icon="down"], svg[data-dsh-icon="chevron-down"], svg[data-icon="down"], svg[data-icon="chevron-down"]) {
+      translate: 0px 1.5px;
+    }
+  }
+
+  /* Pop feedback when toggled into active/pressed/checked state */
+  :where([data-dsh-style], [role="dialog"], [role="alertdialog"], dialog) :where([aria-pressed="true"], [aria-checked="true"], [data-active="true"], [data-copied="true"]) :is(svg[data-dsh-icon="star"], svg[data-dsh-icon="check"], svg[data-dsh-icon="copy"], svg[data-icon="star"], svg[data-icon="check"], svg[data-icon="copy"]) {
+    animation: dsh-icon-pop 300ms var(--dsh-ease-spring);
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * 9. Tabs, Interactive Rows, Cards & Top-Layer Dialog/Popover Entrance
+ * -------------------------------------------------------------------------- */
+:where([data-dsh-style]) [role="tablist"] {
+  scrollbar-width: thin;
+}
+
+:where([data-dsh-style]) [role="tab"] {
+  position: relative;
+}
+
+/* Non-color border indicator on selected tabs (WCAG 1.4.1 + Forced Colors safe) */
+:where([data-dsh-style]) [role="tab"][aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  inset-inline: 6px;
+  inset-block-end: 0;
+  border-block-end: 2px solid var(--dsw-alias-state-business-primary);
+  pointer-events: none;
+}
+
+/* Interactive workbench cards & list rows */
+:where([data-dsh-style]) :where([data-dsh-card], .dsh-card, [data-dsh-row], .dsh-row) {
+  translate: 0px 0px;
+  transition:
+    background-color var(--dsh-motion-fast) var(--dsh-ease-out),
+    border-color var(--dsh-motion-fast) var(--dsh-ease-out),
+    box-shadow var(--dsh-motion-base) var(--dsh-ease-out),
+    translate var(--dsh-motion-base) var(--dsh-ease-out);
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  :where([data-dsh-style]:not([data-dsh-style="pixel8bit"])) :where([data-dsh-card], .dsh-card):hover {
+    translate: 0px -1.5px;
+    box-shadow: var(--dsh-card-hover-shadow);
+  }
+
+  [data-dsh-style="pixel8bit"] :where([data-dsh-card], .dsh-card):hover {
+    translate: -1px -1px;
+    box-shadow: 4px 4px 0px #1e2826;
+  }
+
+  :where([data-dsh-style]) :where([data-dsh-row], .dsh-row):hover:not([data-selected="true"]):not([aria-selected="true"]) {
+    background-color: var(--dsh-surface-spotlight, var(--dsw-alias-interactive-bg-hover));
+  }
+}
+
+/* Modal / Dialog & Popover Top-Layer Entrance + Scroll Containment */
+:where([role="dialog"], [role="alertdialog"], dialog[open]):where([data-dsh-style], :has([data-dsh-style])) {
+  overscroll-behavior: contain;
+  opacity: 1;
+  transition-property: opacity, scale, translate, display, overlay;
+  transition-duration: var(--dsh-motion-dialog);
+  transition-timing-function: var(--dsh-ease-out);
+  /* Separate declaration after transition so older parsers never drop transitions */
+  transition-behavior: allow-discrete;
+}
+
+@starting-style {
+  :where([role="dialog"], [role="alertdialog"], dialog[open]):where([data-dsh-style], :has([data-dsh-style])) {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :where([role="dialog"], [role="alertdialog"], dialog[open]):where([data-dsh-style], :has([data-dsh-style])) {
+    scale: 1;
+    translate: 0px 0px;
+  }
+
+  @starting-style {
+    :where([role="dialog"], [role="alertdialog"], dialog[open]):where([data-dsh-style], :has([data-dsh-style])) {
+      scale: 0.965;
+      translate: 0px 6px;
+    }
+  }
+}
+
+dialog[open]::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+/* --------------------------------------------------------------------------
+ * 10. Unified Header Style Switcher Chrome (`.dsh-style-switcher`)
+ * -------------------------------------------------------------------------- */
+.dsh-style-switcher {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+.dsh-style-trigger.dsh-style-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding-inline: 8px;
+  width: auto;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-bg-layer-1);
+  border: var(--dsh-control-border-width, 0.5px) solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm, 8px);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+@media (hover: hover) {
+  .dsh-style-trigger.dsh-style-trigger:hover:not(:disabled) {
+    color: var(--dsw-alias-label-primary);
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+.dsh-style-swatch {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  corner-shape: round;
+  background: var(--dsh-swatch-color, var(--dsw-alias-state-business-primary));
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.16);
+}
+
+[data-dsh-style="pixel8bit"] .dsh-style-swatch {
+  border-radius: 0px !important;
+  corner-shape: square;
+  box-shadow: 1px 1px 0px #1e2826;
+}
+
+.dsh-style-fallback-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.dsh-style-fallback-menu {
+  position: absolute;
+  inset-block-start: calc(100% + 4px);
+  inset-inline-end: 0;
+  z-index: 2147483001;
+  display: grid;
+  gap: 2px;
+  min-width: 168px;
+  padding: 4px;
+  background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-base));
+  border: var(--dsh-control-border-width, 0.5px) solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md, 12px);
+  box-shadow: var(--dsw-elevation-prominent);
+}
+
+.dsh-style-fallback-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--dsw-radius-xs, 6px);
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.dsh-style-fallback-item[aria-checked="true"] {
+  background: var(--dsw-alias-interactive-bg-active);
+  font-weight: 600;
+}
+
+@media (hover: hover) {
+  .dsh-style-fallback-item:hover:not(:disabled) {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+/* Fallback Modal & Menu Chrome (when host `@deepseek-ai/dsh-client-ui-primitives` is absent) */
+.dsh-fallback-modal-root {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.dsh-fallback-modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.36);
+}
+
+.dsh-fallback-modal-dialog {
+  position: relative;
+  z-index: 1;
+  max-width: min(560px, calc(100dvw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: clip;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--dsw-radius-md, 12px);
+  background: var(--dsw-alias-bg-layer-1, #f8fafc);
+  color: var(--dsw-alias-label-primary, #1f232b);
+  box-shadow: var(--dsw-elevation-prominent);
+}
+
+/* --------------------------------------------------------------------------
+ * 11. Accessibility: Reduced Motion & Windows High Contrast (Forced Colors)
+ * -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  :where([data-dsh-style]) :where(button, [role="button"], [data-dsh-card], .dsh-card, [data-dsh-row], .dsh-row),
+  :where([role="dialog"], [role="alertdialog"], [role="menu"], dialog):has([data-dsh-style]) :where(button, [role="button"]) {
+    translate: none !important;
+    scale: none !important;
+    transition-property: background-color, border-color, color, opacity;
+    transition-duration: 90ms;
+  }
+
+  :where([data-dsh-style], [role="dialog"], [role="alertdialog"], dialog) :where(button, [role="button"], summary) svg {
+    animation: none !important;
+    transition: none !important;
+    translate: none !important;
+    scale: none !important;
+  }
+
+  /* Short, non-spatial fade only for top-layer dialogs under reduced motion */
+  :where([role="dialog"], [role="alertdialog"], dialog[open]):where([data-dsh-style], :has([data-dsh-style])) {
+    scale: none !important;
+    translate: none !important;
+    transition-duration: 100ms;
+  }
+}
+
+@media (forced-colors: active) {
+  :where([data-dsh-style]) :where(button, input, select, textarea),
+  :where([role="dialog"], [role="alertdialog"], [role="menu"], dialog):where([data-dsh-style], :has([data-dsh-style])) {
+    border: 1px solid ButtonText;
+  }
+
+  :where([data-dsh-style]) [role="tab"][aria-selected="true"]::after {
+    border-block-end: 3px solid Highlight;
+  }
+}
