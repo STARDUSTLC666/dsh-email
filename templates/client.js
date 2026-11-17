@@ -4370,7 +4370,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                             ? t("card.loggedInAs", { user: view.oauthUser || draft.user || t("oauth.unknownUser") })
                             : t("card.notLoggedIn"));
                     const oauthBusy = oauthSession !== null && oauthSession.state === "starting";
-                    return h("div", { key: id, className: "dshe-acc-card" }, [
+                    return h("div", { key: id, className: "dshe-acc-card", "data-dsh-card": "" }, [
                         h("div", { className: "dshe-acc-head" }, [
                             h("span", { className: "dshe-acc-name" }, draft.name || t("card.unnamed")),
                             h("span", { className: "dshe-acc-badge" + (summary.isCustom ? " todo" : "") }, summary.label),
@@ -4711,7 +4711,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                     const duplicate = trimmed !== "" && order.some((other) => other.key !== key && String((drafts[other.key] || {}).name || "").trim() === trimmed);
                     const empty = trimmed === "";
                     const label = String(draft.label || "").trim();
-                    return h("div", { key: id, className: "dshe-prst-card" }, [
+                    return h("div", { key: id, className: "dshe-prst-card", "data-dsh-card": "" }, [
                         h("div", { className: "dshe-prst-head" }, [
                             h("span", { className: "dshe-prst-name" }, trimmed || t("card.unnamed")),
                             label === "" ? null : h("span", { className: "dshe-prst-badge" }, label),
@@ -5258,7 +5258,7 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                 return api("test", { value, account: accountName });
             };
             if (draft === null) {
-                return h(W.Page, { workbench, title: dt('邮件','Email'), className: settingsCss.root },h(W.Status,{tone:error?'error':'info'},error || t('common.loading')),error?h(W.Button,{disabled:busy,onClick:load},dt('重试','Retry')):null);
+                return h(W.Page, { workbench, lang: uiLanguage(), title: dt('邮件','Email'), className: settingsCss.root },h(W.Status,{tone:error?'error':'info'},error || t('common.loading')),error?h(W.Button,{disabled:busy,onClick:load},dt('重试','Retry')):null);
             }
             const accounts = snapshot && snapshot.accounts ? snapshot.accounts : [];
             const presetsMerged = presetsWithNames((snapshot && snapshot.presets) || undefined, customNames);
@@ -5286,7 +5286,7 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                 role: "tabpanel", id: tabId + "-panel-" + value, "aria-labelledby": tabId + "-tab-" + value,
                 hidden: tab !== value, className: uiCss.panel,
             });
-            return h(W.Page, { workbench, title: dt("邮件", "Email"), className: settingsCss.root, showUpdates: tab === "accounts",
+            return h(W.Page, { workbench, lang: uiLanguage(), title: dt("邮件", "Email"), className: settingsCss.root, showUpdates: tab === "accounts",
                 navigation: h(W.Tabs, { id: tabId, label: dt("邮件功能", "Email features"), value: tab, onChange: setTab, items: tabs }),
                 actions: h(W.Button, { variant: "primary", icon: "edit", disabled: !!composeRequest,
                     onClick: () => setComposeRequest({ id: ++requestId.current, account: accounts.includes(composeAccount) ? composeAccount : defaultAccount }) }, dt("写邮件", "Compose")),
@@ -5415,6 +5415,9 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                 card.className = settingsCss.whaleCard;
                 card.setAttribute("data-whale", "card");
                 card.setAttribute("data-whale-skin", String(whaleSkin));
+                card.setAttribute("data-dsh-style", W.readStyle());
+                card.setAttribute("data-dsh-portal-synced", "true");
+                card.setAttribute("data-window-drag-exclude", "");
                 card.setAttribute("role", "region");
                 card.setAttribute("aria-labelledby", "dsh-email-whale-title");
                 if (whaleUrl) {
@@ -5562,6 +5565,10 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                 void tick().then(schedule);
             };
             document.addEventListener("visibilitychange", onVisibility);
+            const offStyle = W.subscribeStyle((next) => {
+                const openCard = root.children && root.children[0];
+                if (openCard) openCard.setAttribute("data-dsh-style", next);
+            });
             void tick().then(schedule);
             // 弹窗是命令式 DOM，没有 React 那层重渲染：语言切换后自己重画一次（开着的才重画）。
             relocalize = () => { if (current !== null && root.childElementCount > 0)
@@ -5572,6 +5579,7 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                 watchAbort?.abort();
                 clearTimeout(pollTimer);
                 document.removeEventListener("visibilitychange", onVisibility);
+                offStyle();
                 if (hideTimer)
                     clearTimeout(hideTimer);
                 relocalize = null;

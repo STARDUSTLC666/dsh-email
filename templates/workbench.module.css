@@ -1,6 +1,6 @@
 .page,
 .dialog {
-  color: var(--dsw-alias-label-primary);
+  color: var(--dsw-alias-label-primary, #1b1b1c);
   font-size: 13px;
   line-height: 20px;
 }
@@ -14,7 +14,7 @@
   min-width: 0;
   padding-block-start: var(--dsh-frame-top-clearance, 0px);
   padding-inline-start: var(--dsh-frame-leading-clearance, 0px);
-  background: var(--dsw-alias-bg-base);
+  background: var(--dsw-alias-bg-base, #ffffff);
   container-type: inline-size;
 }
 
@@ -60,6 +60,8 @@
 
 .headerActions {
   display: flex;
+  align-items: center;
+  gap: 8px;
   margin-inline-start: auto;
   flex: none;
 }
@@ -289,14 +291,63 @@
 
 .dialog.dialog {
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
   width: min(560px, 100%);
   max-height: 100%;
   min-height: 0;
   padding: 0;
   gap: 0;
   border: 0;
-  background: var(--dsw-alias-bg-layer-1);
+  background: var(--dsw-alias-bg-layer-1, #f8fafc);
   box-shadow: var(--dsw-elevation-prominent);
+}
+
+.dialogFrame {
+  box-sizing: border-box;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  max-height: 100%;
+  overflow: clip;
+  background: var(--dsw-alias-bg-layer-1, #f8fafc);
+  color: var(--dsw-alias-label-primary, #1b1b1c);
+}
+
+:global(.dsh-btn).button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding-inline: 10px;
+  border: 0;
+  border-radius: var(--dsw-radius-sm, 8px);
+  background: transparent;
+  color: var(--dsw-alias-label-primary, #1b1b1c);
+  font: inherit;
+  cursor: pointer;
+}
+
+:global(.dsh-btn).button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+:global(.dsh-fallback-input-wrap).input {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-inline: 8px;
+}
+
+:global(.dsh-fallback-input-wrap).input > input {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  outline: none;
 }
 
 .dialogHeader,
