@@ -12,8 +12,8 @@ importers:
         specifier: ^3.18.3
         version: 3.18.3
       '@stardustlc/dsh-updates':
-        specifier: 0.2.4
-        version: 0.2.4
+        specifier: 0.2.5
+        version: 0.2.5
       html-to-text:
         specifier: 10.0.1
         version: 10.0.1
@@ -236,8 +236,8 @@ packages:
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
-  '@stardustlc/dsh-updates@0.2.4':
-    resolution: {integrity: sha512-6b5Y0qKQxqqKu5ElTaHiHPnha1dt8a/dZscrSPLiOXkt3H8WZWMu4MTATL3nOmZr4EOVnSHQapPDx84tPMczog==}
+  '@stardustlc/dsh-updates@0.2.5':
+    resolution: {integrity: sha512-Qp0YP00Vi+hd973lCz6npTYpWizGDo87aPrKptd16wdfQWkuaKkO3H8tSBJuoBc/0YWaK8UvIcK9YvYvAHAX5w==}
     engines: {node: ^22.19.0 || >=24.0.0}
 
   '@types/node@26.2.0':
@@ -581,7 +581,7 @@ snapshots:
 
   '@standard-schema/spec@1.1.0': {}
 
-  '@stardustlc/dsh-updates@0.2.4':
+  '@stardustlc/dsh-updates@0.2.5':
     dependencies:
       acorn: 8.15.0
       proper-lockfile: 4.1.2
