@@ -1,5 +1,10 @@
 # 更新记录
 
+## 0.28.4 (2026-11-18)
+
+- 同步 `@stardustlc/dsh-updates` 0.2.3：侧边栏工作台平时默认隐藏底部更新栏（零高度占用），仅在检测到兼容新版本或执行更新时浮现单行精简提示条；完整更新设置与检查入口统一保留在 DSH「插件」详情页底部。
+- Sync `@stardustlc/dsh-updates` 0.2.3: keep the sidebar workbench update footer hidden by default when up-to-date, surfacing a single-line compact strip only for actionable updates or active jobs while retaining full controls in native Plugin Details.
+
 ## 0.28.3 (2026-11-18)
 
 - 收件箱工作台顶部新增覆盖 8 种语言的可折叠四步邮件协同指引与上下文感知指令按钮（自动携带当前选中邮件或文件夹信息，一键复制汇总待办、起草回复或提炼要点指令），并完善双语人类使用流程说明。
