@@ -315,3 +315,53 @@ test('collapsible MailWorkflowBar uses accessible <details>/<summary> and copies
   const liveRegions = findNodes(tree, n => n.props?.role === 'status')
   assert.equal(liveRegions.length, 1)
 })
+
+test('interactive CoachmarkTour renders tethered popover card, directional arrow, step dots, and 1-click prompt copy', async () => {
+  const { react, W, EMAIL_CSS } = loadClient()
+  assert.match(EMAIL_CSS, /:popover-open/)
+  assert.match(EMAIL_CSS, /\[data-side=["']?bottom["']?\]/)
+
+  let activeStep = 2
+  let closed = false
+  let copiedPrompt = ''
+  const steps = [
+    { id: 'accounts', selector: '#acc', side: 'bottom', title: '连接邮箱账号', desc: '测试连接' },
+    { id: 'filter', selector: '#flt', side: 'bottom', title: '筛选来信', desc: '只看未读' },
+    { id: 'ai-draft', selector: '#drf', side: 'bottom', title: '让 AI 汇总未读', desc: '先存草稿', prompt: '汇总未读重要邮件', promptLabel: '复制汇总指令' },
+    { id: 'compose', selector: '#cmp', side: 'bottom', title: '核对发送', desc: '收件规则' },
+  ]
+  const tree = renderTree(
+    react.createElement(W.CoachmarkTour, {
+      steps,
+      step: activeStep,
+      manual: true,
+      style: 'mint',
+      lang: 'zh',
+      onStep: next => { activeStep = next },
+      onClose: () => { closed = true },
+      onCopyPrompt: async val => { copiedPrompt = val; return true },
+    }),
+  )
+
+  assert.equal(tree.props['data-dsh-style'], 'mint')
+  const card = findNodes(tree, n => n.props?.role === 'dialog')[0]
+  assert.ok(card, 'coachmark card exposes role="dialog"')
+  assert.equal(card.props['aria-modal'], 'false')
+  const arrow = findNodes(card, n => n.props?.['data-tour-arrow'])[0]
+  assert.ok(arrow, 'coachmark card renders directional arrow')
+
+  const copyBtn = findNodes(card, n => n.props?.['data-copy-prompt'] === '汇总未读重要邮件')[0]
+  assert.ok(copyBtn, 'Step 3 renders inline prompt copy button')
+  await copyBtn.props.onClick()
+  assert.equal(copiedPrompt, '汇总未读重要邮件')
+
+  const nextBtn = findNodes(card, n => Object.hasOwn(n.props || {}, 'data-tour-next'))[0]
+  assert.ok(nextBtn)
+  nextBtn.props.onClick()
+  assert.equal(activeStep, 3)
+
+  const skipBtn = findNodes(card, n => n.type === 'button' && n.children?.includes('跳过'))[0]
+  assert.ok(skipBtn)
+  skipBtn.props.onClick()
+  assert.equal(closed, true)
+})

@@ -701,7 +701,6 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
 
   return h('section', { className: mailCss.mailbox, 'aria-label': dt('邮箱工作台','Mailbox workbench') },
     error ? h('div', { className: mailCss.alert }, errorBanner) : null,
-    h(MailWorkflowBar, { account, folder, selected, detail, currentRow, who }),
     moved ? h('div', { className: mailCss.moveNotice, role: 'status', 'data-window-drag-exclude': '' },
       h('span', null, dt('已移动 ', 'Moved ') + moved.count + dt(' 封至 ', ' messages to ') + moved.target,
         !moved.undo ? h('p', { className: mailCss.listNote }, dt('如需恢复，请在邮箱客户端移回原文件夹。', 'To restore, move the messages back in your mail client.')) : null),
@@ -711,7 +710,7 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
       h(MailFolderRail, { accounts, account, folder, folders, busy, loading: foldersLoading,
         onAccount: changeAccount, onFolder: changeFolder, onManage: () => setFoldersOpen(true) }),
       h('section', { className: mailCss.list, 'aria-label': dt('邮件列表', 'Message list'), 'aria-busy': listLoading || undefined },
-        h('div', { className: mailCss.listHeader },
+        h('div', { className: mailCss.listHeader, 'data-tour': 'mail-filter' },
           h('form', { className: mailCss.search, onSubmit: event => { event.preventDefault(); if (!folder || busy || listLoading) return; reset(); setUnread(false); setQuery(input.trim()); setRefresh(n => n + 1); } },
             h(W.Input, { icon: 'search', type: 'search', 'aria-label': dt('搜索当前文件夹','Search current folder'), placeholder: dt('搜索当前文件夹','Search current folder'), value: input, maxLength: 500, disabled: busy, onChange: event => setInput(event.target.value) }),
             h(W.IconButton, { icon: 'search', label: dt('搜索','Search'), type: 'submit', disabled: listLoading || busy || !folder }),

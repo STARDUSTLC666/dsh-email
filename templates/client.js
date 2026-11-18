@@ -5466,12 +5466,48 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                 openEmailInbox = () => setTab("mailbox");
                 return () => { if (openEmailInbox) openEmailInbox = null; };
             }, []);
+            const mailTourSteps = [
+                {
+                    id: "accounts",
+                    selector: "#" + tabId + "-tab-accounts",
+                    side: "bottom",
+                    title: dt("先连接并测试邮箱账号", "Connect & test your account"),
+                    desc: dt("首次使用点击「邮箱账号」添加 IMAP/SMTP 或企业邮箱并验证连接，密码仅在本地安全存储。", "Start in Accounts to configure and test IMAP/SMTP or work mail; credentials stay safely local."),
+                },
+                {
+                    id: "filter",
+                    selector: '[data-tour="mail-filter"]',
+                    fallback: "#" + tabId + "-tab-mailbox",
+                    side: "bottom",
+                    title: dt("搜索与快速筛选来信", "Filter & inspect mail"),
+                    desc: dt("在「收发邮件」按关键词、只看未读或本页有附件快速锁定重点来信，点开即可阅读与下载附件。", "Filter by keyword, Unread only, or Attachments in Mailbox to focus on priority messages."),
+                },
+                {
+                    id: "ai-draft",
+                    selector: "#" + tabId + "-tab-drafts",
+                    side: "bottom",
+                    title: dt("让 AI 汇总未读或起草回复", "Summarize or draft replies with AI"),
+                    desc: dt("复制下方指令发到对话，助手会自动梳理待办或把回复草稿存进「草稿」页供你核对，绝不会未经确认擅自发信。", "Copy the prompt below into chat — AI summarizes mail or saves reply drafts in Drafts without sending automatically."),
+                    prompt: dt("汇总未读重要邮件并列出待回复事项，先不要发送任何邮件。", "Summarize important unread mail and list replies needed (do not send)."),
+                    promptLabel: dt("复制：汇总未读与待办", "Copy: Summarize unread"),
+                },
+                {
+                    id: "compose",
+                    selector: '[data-tour="mail-compose"]',
+                    fallback: "#" + tabId + "-tab-rules",
+                    side: "bottom",
+                    title: dt("人工核对发送与发信规则", "Review before sending & recipient rules"),
+                    desc: dt("点「写邮件」或在「草稿」确认收件人与附件后手动发送；还可在「收件人规则」配置白名单与确认策略。", "Compose or send from Drafts after checking recipients, and configure allowlists in Recipient rules."),
+                },
+            ];
             return h(W.Page, { workbench, lang: uiLanguage(), title: dt("邮件", "Email"), className: settingsCss.root, showUpdates: tab === "accounts",
+                tourSteps: mailTourSteps,
+                onTourCopyPrompt: writeClipboardText,
                 navigation: h(W.Tabs, { id: tabId, label: dt("邮件功能", "Email features"), value: tab, onChange: setTab, items: tabs }),
                 actions: [
                     h(W.Button, { key: "courier", variant: "outline", icon: "star", "data-whale-trigger": "true",
                         onClick: () => { void toggleWhaleWidget?.(); } }, t("whale.summon")),
-                    h(W.Button, { key: "compose", variant: "primary", icon: "edit", disabled: !!composeRequest,
+                    h(W.Button, { key: "compose", variant: "primary", icon: "edit", disabled: !!composeRequest, "data-tour": "mail-compose",
                         onClick: () => setComposeRequest({ id: ++requestId.current, account: accounts.includes(composeAccount) ? composeAccount : defaultAccount }) }, dt("写邮件", "Compose")),
                 ],
             },

@@ -821,3 +821,7 @@ dialog[open]::backdrop {
     border-block-end: 3px solid Highlight;
   }
 }
+
+[data-email-tour][popover]:is(:popover-open, .\:popover-open) {
+  display: block;
+}

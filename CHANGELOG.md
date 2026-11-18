@@ -1,5 +1,10 @@
 # 更新记录
 
+## 0.28.6 (2026-11-18)
+
+- **交互式聚光灯 + 自动转向箭头分步引导（Coachmark Tour）**：顶栏新增 `? 引导` 按钮，首次进入工作台温和引导一次（跳过或完成后写入 `localStorage` 永久不再打扰），支持真实按钮聚光灯高亮、视口边缘自动翻转小箭头、键盘 `←`/`→`/`Esc` 导航与气泡内一键复制对话指令；移除占高度的静态折叠流程说明框。
+- **Interactive Spotlight + Directional Arrow Coachmark Tour**: add a header **? Tour** trigger with one-time non-intrusive first-visit onboarding (`localStorage` persisted), live target spotlighting, auto-flipping directional arrows, keyboard `←`/`→`/`Esc` navigation, and inline 1-click prompt copy, replacing the static collapsible workflow box.
+
 ## 0.28.5 (2026-11-18)
 
 - 替换内置默认鲸鱼娘信使插画为原创三态表情组（递信 / 摸摸头开心 / 查收新信），工作台右上角新增「信使」召唤按钮，支持摸摸头表情切换与粒子互动、实时查收新信与一键跳转收发邮件。

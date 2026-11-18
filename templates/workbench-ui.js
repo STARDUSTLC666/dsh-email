@@ -72,16 +72,269 @@ function createWorkbenchUI(React, require) {
       : (modalAutofocus !== undefined ? { modalAutofocus } : {});
     return h(P.Checkbox, { ...props, ...autofocusProps, label, className: clsx(ui.checkbox, hiddenLabel && ui.checkboxIcon, className) });
   }
-  function Page({ title, navigation, actions, children, workbench = false, showUpdates = false, className, lang = 'zh' }) {
+  let emailTourSessionDone = false;
+  function readEmailTourDone(storageKey) {
+    if (emailTourSessionDone) return true;
+    try {
+      return typeof window !== 'undefined' && window.localStorage?.getItem(storageKey) === 'done';
+    } catch {
+      return false;
+    }
+  }
+  function writeEmailTourDone(storageKey) {
+    emailTourSessionDone = true;
+    try {
+      if (typeof window !== 'undefined') window.localStorage?.setItem(storageKey, 'done');
+    } catch { /* ignore */ }
+  }
+  function computeTourLayout(target, preferredSide, cardEl) {
+    const vw = (typeof window !== 'undefined' && window.innerWidth) || 1280;
+    const vh = (typeof window !== 'undefined' && window.innerHeight) || 800;
+    const cw = cardEl?.offsetWidth || 320;
+    const ch = cardEl?.offsetHeight || 196;
+    const pad = 5;
+    const gap = 12;
+    const raw = target?.getBoundingClientRect?.();
+    if (!target) {
+      return {
+        spotlight: null,
+        side: 'center',
+        left: Math.max(12, Math.round((vw - cw) / 2)),
+        top: Math.max(12, Math.round((vh - ch) / 2)),
+        arrowX: 28,
+        arrowY: 24,
+      };
+    }
+    const hasBox = Boolean(raw && (raw.width > 0 || raw.height > 0));
+    const rect = hasBox ? raw : { left: 120, top: 72, width: 140, height: 32 };
+    const spotlight = {
+      left: Math.round(rect.left - pad),
+      top: Math.round(rect.top - pad),
+      width: Math.round(rect.width + pad * 2),
+      height: Math.round(rect.height + pad * 2),
+    };
+    const spaceBottom = vh - spotlight.top - spotlight.height;
+    const spaceTop = spotlight.top;
+    const spaceRight = vw - spotlight.left - spotlight.width;
+    const spaceLeft = spotlight.left;
+    let side = preferredSide || 'bottom';
+    if (side === 'right' && spaceRight < cw + gap + 12) {
+      side = spaceBottom >= ch + gap + 12 ? 'bottom' : spaceLeft >= cw + gap + 12 ? 'left' : 'top';
+    } else if (side === 'left' && spaceLeft < cw + gap + 12) {
+      side = spaceRight >= cw + gap + 12 ? 'right' : 'bottom';
+    } else if (side === 'bottom' && spaceBottom < ch + gap + 12 && spaceTop > spaceBottom) {
+      side = 'top';
+    } else if (side === 'top' && spaceTop < ch + gap + 12 && spaceBottom > spaceTop) {
+      side = 'bottom';
+    }
+    let left = spotlight.left;
+    let top = spotlight.top + spotlight.height + gap;
+    if (side === 'top') top = spotlight.top - ch - gap;
+    else if (side === 'right') { left = spotlight.left + spotlight.width + gap; top = spotlight.top; }
+    else if (side === 'left') { left = spotlight.left - cw - gap; top = spotlight.top; }
+    left = Math.round(Math.max(12, Math.min(vw - cw - 12, left)));
+    top = Math.round(Math.max(12, Math.min(vh - ch - 12, top)));
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    return {
+      spotlight,
+      side,
+      left,
+      top,
+      arrowX: Math.round(Math.max(18, Math.min(cw - 18, centerX - left))),
+      arrowY: Math.round(Math.max(18, Math.min(ch - 18, centerY - top))),
+    };
+  }
+  function CoachmarkTour({ rootRef, steps = [], step = 0, manual = false, style = 'harness', lang = 'zh', layout: rawLayout, setLayout, onStep, onClose, onCopyPrompt }) {
+    const layerRef = React.useRef ? React.useRef(null) : { current: null };
+    const cardRef = React.useRef ? React.useRef(null) : { current: null };
+    const nextBtnRef = React.useRef ? React.useRef(null) : { current: null };
+    const [copied, setCopied] = useState(false);
+    const titleId = (typeof useId === 'function' ? useId() : 'dsh-email-tour') + '-title';
+    const isEn = String(lang).startsWith('en');
+    const l = (zh, en) => (isEn ? en : zh);
+    const current = steps[Math.max(0, Math.min(steps.length - 1, step))] || {};
+    const layout = rawLayout && typeof rawLayout === 'object' && rawLayout.side
+      ? rawLayout
+      : { spotlight: null, side: current.side || 'bottom', left: 24, top: 76, arrowX: 28, arrowY: 24 };
+
+    React.useEffect?.(() => {
+      const node = layerRef.current;
+      if (!node) return undefined;
+      try {
+        node.setAttribute?.('popover', 'manual');
+        node.showPopover?.();
+      } catch { /* ignore */ }
+      return () => { try { node.hidePopover?.(); } catch { /* ignore */ } };
+    }, []);
+
+    React.useEffect?.(() => {
+      function measure() {
+        const scope = rootRef?.current || (typeof document !== 'undefined' ? document : null);
+        if (!scope || typeof scope.querySelector !== 'function') return;
+        const target = (current.selector && scope.querySelector(current.selector))
+          || (current.fallback && scope.querySelector(current.fallback))
+          || null;
+        setLayout?.(computeTourLayout(target, current.side, cardRef.current));
+      }
+      measure();
+      const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(measure) : null;
+      if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') {
+        return () => { if (raf && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(raf); };
+      }
+      window.addEventListener('resize', measure, { passive: true });
+      window.addEventListener('scroll', measure, true);
+      return () => {
+        if (raf && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(raf);
+        window.removeEventListener('resize', measure);
+        window.removeEventListener('scroll', measure, true);
+      };
+    }, [step, current.selector, current.fallback, current.side]);
+
+    React.useEffect?.(() => {
+      if (manual) nextBtnRef.current?.focus?.();
+    }, [manual, step]);
+
+    async function handleCopy() {
+      if (!current.prompt || !onCopyPrompt) return;
+      const ok = await onCopyPrompt(current.prompt);
+      if (ok !== false) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1800);
+      }
+    }
+
+    const isLast = step >= steps.length - 1;
+    function finish() { onClose?.(manual); }
+    function onKeyDown(event) {
+      if (event.isComposing || event.nativeEvent?.isComposing) return;
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); finish(); }
+      else if (event.key === 'ArrowRight' && !isLast) { event.preventDefault(); onStep?.(step + 1, true); }
+      else if (event.key === 'ArrowLeft' && step > 0) { event.preventDefault(); onStep?.(step - 1, true); }
+    }
+
+    return h('div', {
+      ref: layerRef,
+      className: ui.tourLayer,
+      'data-dsh-style': style,
+      'data-email-tour': current.id || String(step),
+      'data-window-drag-exclude': '',
+    },
+      layout.spotlight
+        ? h('div', {
+            className: ui.tourSpotlight,
+            'data-tour-spotlight': current.id || String(step),
+            'aria-hidden': 'true',
+            style: {
+              left: layout.spotlight.left + 'px',
+              top: layout.spotlight.top + 'px',
+              width: layout.spotlight.width + 'px',
+              height: layout.spotlight.height + 'px',
+            },
+          })
+        : h('div', { className: ui.tourBackdropFallback, 'aria-hidden': 'true' }),
+      h('div', {
+        ref: cardRef,
+        role: 'dialog',
+        'aria-modal': 'false',
+        'aria-labelledby': titleId,
+        tabIndex: -1,
+        onKeyDown,
+        className: ui.tourCard,
+        'data-side': layout.side,
+        'data-tour-card': current.id || String(step),
+        style: {
+          left: layout.left + 'px',
+          top: layout.top + 'px',
+          '--arrow-x': layout.arrowX + 'px',
+          '--arrow-y': layout.arrowY + 'px',
+        },
+      },
+        h('span', { className: ui.tourArrow, 'data-tour-arrow': layout.side, 'aria-hidden': 'true' }),
+        h('div', { className: ui.tourHead },
+          h('div', { className: ui.tourStepMeta },
+            h('span', { className: ui.tourStepBadge }, (step + 1) + ' / ' + steps.length),
+            h('span', { className: ui.tourDots, 'aria-hidden': 'true' },
+              steps.map((item, idx) => h('span', { key: item.id || idx, className: ui.tourDot, 'data-active': idx === step ? 'true' : undefined })))),
+          h('button', { type: 'button', className: ui.tourSkip, onClick: finish }, l('跳过', 'Skip'))),
+        h('h2', { id: titleId, className: ui.tourTitle }, current.title),
+        h('p', { className: ui.tourDesc }, current.desc),
+        current.prompt ? h('div', { className: ui.tourInlineAction },
+          h(Button, {
+            variant: 'outline',
+            icon: copied ? 'check' : 'copy',
+            'data-copy-prompt': current.prompt,
+            'data-copied': copied ? 'true' : undefined,
+            onClick: () => { void handleCopy(); },
+          }, copied ? l('已复制', 'Copied') : (current.promptLabel || l('复制对话指令', 'Copy prompt')))) : null,
+        h('div', { className: ui.tourFooter },
+          step > 0
+            ? h(Button, { variant: 'ghost', onClick: () => onStep?.(step - 1, true), 'data-tour-prev': '' }, l('上一步', 'Back'))
+            : h('span', null),
+          h('div', { className: ui.tourNav },
+            h(Button, {
+              ref: nextBtnRef,
+              variant: 'primary',
+              'data-tour-next': '',
+              onClick: () => (isLast ? finish() : onStep?.(step + 1, true)),
+            }, isLast ? l('完成引导', 'Done') : l('下一步', 'Next'))))));
+  }
+  function Page({ title, navigation, actions, children, workbench = false, showUpdates = false, className, lang = 'zh', tourSteps = null, tourStorageKey = 'dsh-email.tour.v1', onTourCopyPrompt }) {
     const [style, setStyle] = useDshStyle(React);
-    return h('section', { className: clsx(ui.page, !workbench && ui.embedded, className), 'data-dsh-style': style },
+    const rootRef = React.useRef ? React.useRef(null) : { current: null };
+    const triggerRef = React.useRef ? React.useRef(null) : { current: null };
+    const [tour, setTour] = useState({ open: false, step: 0, manual: false });
+    const [tourLayout, setTourLayout] = useState(null);
+    const hasTour = Array.isArray(tourSteps) && tourSteps.length > 0;
+    const isEn = String(lang).startsWith('en');
+
+    React.useEffect?.(() => {
+      if (!workbench || !hasTour || readEmailTourDone(tourStorageKey)) return undefined;
+      const timer = setTimeout(() => {
+        if (!readEmailTourDone(tourStorageKey)) {
+          setTour({ open: true, step: 0, manual: false });
+        }
+      }, 280);
+      return () => clearTimeout(timer);
+    }, [workbench, hasTour, tourStorageKey]);
+
+    function closeTour(restoreFocus = false) {
+      writeEmailTourDone(tourStorageKey);
+      setTour(prev => ({ ...prev, open: false }));
+      if (restoreFocus) setTimeout(() => triggerRef.current?.focus?.(), 0);
+    }
+
+    return h('section', { ref: rootRef, className: clsx(ui.page, !workbench && ui.embedded, className), 'data-dsh-style': style },
       h('header', { className: ui.pageHeader },
         h('h1', { className: ui.title }, h('span', { className: ui.brand }, h(Icon, { name: 'mail' })), title),
         navigation,
         h('div', { className: ui.headerActions },
+          hasTour ? h(Button, {
+            ref: triggerRef,
+            variant: 'ghost',
+            className: ui.tourTrigger,
+            'data-email-tour-trigger': '',
+            'aria-label': isEn ? 'Interactive guide' : '使用引导',
+            'aria-expanded': tour.open,
+            title: isEn ? 'Interactive guide' : '使用引导',
+            onClick: () => setTour({ open: true, step: 0, manual: true }),
+          }, isEn ? '? Tour' : '? 引导') : null,
           h(StyleSwitcher, { style, onChange: setStyle, lang, compact: true }),
           actions)),
-      h('div', { className: ui.pageBody, 'data-show-updates': showUpdates }, children));
+      h('div', { className: ui.pageBody, 'data-show-updates': showUpdates }, children),
+      hasTour && tour.open ? h(CoachmarkTour, {
+        rootRef,
+        steps: tourSteps,
+        step: tour.step,
+        manual: tour.manual,
+        style,
+        lang,
+        layout: tourLayout,
+        setLayout: setTourLayout,
+        onStep: (next, isManual) => setTour({ open: true, step: next, manual: Boolean(isManual) }),
+        onClose: closeTour,
+        onCopyPrompt: onTourCopyPrompt,
+      }) : null);
   }
   function Tabs({ items, value, onChange, label, id }) {
     function onKeyDown(event, index) {
@@ -157,7 +410,7 @@ function createWorkbenchUI(React, require) {
   }
   return {
     Button, IconButton, Input, Checkbox, Icon, Page, Tabs, Status, Empty,
-    ChoiceMenu, SettingsChoice, Dialog, StyleSwitcher, register, primitives,
+    ChoiceMenu, SettingsChoice, Dialog, StyleSwitcher, CoachmarkTour, register, primitives,
     styles: DSH_STYLES, styleKey: DSH_STYLE_STORAGE_KEY, styleEvent: DSH_STYLE_EVENT,
     useStyle: () => useDshStyle(React), readStyle: readDshStyle, writeStyle: writeDshStyle, subscribeStyle: subscribeDshStyle,
   };
