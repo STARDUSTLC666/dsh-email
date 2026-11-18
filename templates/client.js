@@ -5526,7 +5526,7 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                 className: "dshe-auto-status" + (hasIncompleteDraft ? " is-draft" : saveState === null ? "" : " is-" + saveState.kind),
             }, statusText);
             const defaultAccount = snapshot?.accountsDetail?.defaultAccount || (accounts.length === 1 ? accounts[0] : "");
-            // React 的 useId() 一定带冒号（":r2o:"），拼成 "#id" 后不是合法 CSS 选择器：
+            // React 的 useId 值一定带冒号（":r2o:"），拼成 "#id" 后不是合法 CSS 选择器：
             // 引导层 measure() 的 querySelector 会抛 SyntaxError，main 槽位整块崩掉。
             // 属性选择器的引号里冒号是普通字符，所以这里一律写 [id="..."]。
             const tabElement = suffix => '[id="' + tabId + "-tab-" + suffix + '"]';
