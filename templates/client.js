@@ -5164,6 +5164,9 @@ __stardustUpdatesGuard(React, "dsh-email.rules", { dirty: !!dirty, busy, retainO
             const openMailboxDraft = draftId => setComposeRequest({ id: ++requestId.current, draftId });
             const finishCompose = useCallback(() => setComposeRequest(null), []);
             useEffect(() => { if(workbench) emailActiveTab=tab;else emailSettingsActiveTab=tab; }, [tab]);
+            // 「从对话打开收件箱」的桥：命令式入口只认最后挂载的那个工作台。
+            // 它必须待在所有提前 return 之前 —— 加载态每轮渲染都会先 return，
+            // 放在 return 后面会让 hook 数量在快照到达的那一轮变多，React #310。
             useEffect(() => {
                 openEmailInbox = () => setTab("mailbox");
                 return () => { if (openEmailInbox) openEmailInbox = null; };
