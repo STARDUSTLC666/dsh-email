@@ -2,6 +2,7 @@ import { resolve } from 'node:path'
 import { clampInt, PROVIDER_PRESETS } from './config.js'
 import { messageOf } from './mail-client.js'
 import { NOT_LOGGED_IN_MESSAGE, oauth2StateOf } from './oauth2.js'
+import { uiLanguageOf } from './ui-lang.js'
 import type { EmailRuntime } from './runtime.js'
 import type { EmailDraftBackend } from './draft-web.js'
 import { takeReplyAuthorization, takeFolderAuthorization } from './approval.js'
@@ -68,8 +69,8 @@ export interface EmailToolDefinition {
   timeoutMs?: number
 }
 
-export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffectiveSettings' | 'watch'>, drafts?: Pick<EmailDraftBackend, 'create'> & Partial<Pick<EmailDraftBackend,'action'|'store'>>): EmailToolDefinition[] {
-  const { getPool, getEffectiveSettings, watch: watchCore } = runtime
+export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffectiveSettings' | 'getSettingsValue' | 'watch'>, drafts?: Pick<EmailDraftBackend, 'create'> & Partial<Pick<EmailDraftBackend,'action'|'store'>>): EmailToolDefinition[] {
+  const { getPool, getEffectiveSettings, getSettingsValue, watch: watchCore } = runtime
 
   return [
     ...(drafts?.action&&drafts.store?[scheduleTool(drafts as EmailDraftBackend)]:[]),
@@ -77,7 +78,7 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
       name: 'email_draft',
       description: 'Prepare an editable plain-text or HTML draft without delivering it. reply quotes the original message and keeps the reply/forward thread. The user reviews the body and attachments in Settings → Email → Drafts and sends only after confirming a preview.',
       parameters: DRAFT_PARAMETERS,
-      output: { schema: { type: 'object', properties: { id: { type: 'string' }, state: { type: 'string' }, subject: { type: 'string' } }, required: ['id', 'state', 'subject'] }, render: (_args: unknown, value: unknown): TextBlock[] => [{ type: 'text', text: '本地草稿已保存，邮件未发送。请在设置 → 邮件 → 草稿中打开并检查。\n草稿编号：' + (value as { id: string }).id + '\n主题：' + (value as { subject: string }).subject }] },
+      output: { schema: { type: 'object', properties: { id: { type: 'string' }, state: { type: 'string' }, subject: { type: 'string' } }, required: ['id', 'state', 'subject'] }, render: (_args: unknown, value: unknown): TextBlock[] => [{ type: 'text', text: 'Local draft saved; nothing was sent. Open and review it under Settings → Email → Drafts.\nDraft id: ' + (value as { id: string }).id + '\nSubject: ' + (value as { subject: string }).subject }] },
       timeoutMs: QUERY_TIMEOUT_MS,
       async execute(args: unknown, exec?: unknown) { const input = args as Record<string, unknown>; const draft = await drafts.create({ ...input, attachments: attachmentPaths(input.attachments, exec) }, executionSignal(exec)); return { id: draft.id, state: draft.state, subject: draft.subject } },
     } satisfies EmailToolDefinition] : []),
@@ -111,7 +112,7 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
       async execute(rawArgs: unknown, exec: unknown) {
         const args = rawArgs as EmailReadArgs
         if (!validUid(args.uid)) {
-          throw new Error('uid 必须是正整数（IMAP）或 email_list 返回的字符串邮件标识（AgentMail）')
+          throw new Error('uid must be a positive integer (IMAP) or the string message id returned by email_list (AgentMail)')
         }
         return await getPool().read(args.account, args.uid, args.folder?.trim() || '', executionSignal(exec))
       }
@@ -128,14 +129,14 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
       async execute(rawArgs: unknown, exec: unknown) {
         const args = rawArgs as EmailMarkArgs
         if (!validUid(args.uid)) {
-          throw new Error('uid 必须是正整数（IMAP）或 email_list 返回的字符串邮件标识（AgentMail）')
+          throw new Error('uid must be a positive integer (IMAP) or the string message id returned by email_list (AgentMail)')
         }
         const action = (typeof args.action === 'string' ? args.action.trim().toLowerCase() : '') as EmailMarkAction
         if (!MARK_ACTIONS.includes(action)) {
-          throw new Error('action 必须是 ' + MARK_ACTIONS.join('、') + ' 之一')
+          throw new Error('action must be one of ' + MARK_ACTIONS.join(', '))
         }
         if (action === 'move' && (typeof args.toFolder !== 'string' || args.toFolder.trim() === '')) {
-          throw new Error('action=move 时需要 toFolder 参数（用 email_folders 查看可用文件夹）')
+          throw new Error('action=move needs the toFolder parameter (see the available folders with email_folders)')
         }
         return await getPool().mark(args.account, args.folder?.trim() || '', args.uid, action, args.toFolder, executionSignal(exec))
       }
@@ -151,7 +152,7 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
       timeoutMs: BATCH_TIMEOUT_MS,
       async execute(rawArgs: unknown, exec: unknown) {
         const args = rawArgs as EmailSearchArgs
-        if (typeof args.query !== 'string' || args.query.trim() === '') throw new Error('query 不能为空')
+        if (typeof args.query !== 'string' || args.query.trim() === '') throw new Error('query must not be empty')
         const limit = clampInt(args.limit, 10, 1, MAX_LIMIT)
         const offset = clampInt(args.offset, 0, 0, 10000)
         const since = args.since?.trim() ? parseEmailDay(args.since, 'since') : undefined
@@ -173,8 +174,8 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
       timeoutMs: QUERY_TIMEOUT_MS,
       async execute(rawArgs: unknown, exec: unknown) {
         const args = rawArgs as EmailSendArgs
-        if (typeof args.to !== 'string' || args.to.trim() === '') throw new Error('to 不能为空')
-        if (typeof args.subject !== 'string' || args.subject.trim() === '') throw new Error('subject 不能为空')
+        if (typeof args.to !== 'string' || args.to.trim() === '') throw new Error('to must not be empty')
+        if (typeof args.subject !== 'string' || args.subject.trim() === '') throw new Error('subject must not be empty')
         return await getPool().send(
           args.account,
           args.to.trim(),
@@ -196,15 +197,15 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
       async execute(rawArgs: unknown, exec: unknown) {
         const args = rawArgs as EmailReplyArgs
         if (!validUid(args.uid)) {
-          throw new Error('uid 必须是正整数（IMAP）或 email_list 返回的字符串邮件标识（AgentMail）')
+          throw new Error('uid must be a positive integer (IMAP) or the string message id returned by email_list (AgentMail)')
         }
-        if (!(typeof args.text === 'string' && args.text.trim()) && !(typeof args.html === 'string' && args.html.trim())) throw new Error('请填写 text 或 html 正文')
+        if (!(typeof args.text === 'string' && args.text.trim()) && !(typeof args.html === 'string' && args.html.trim())) throw new Error('Provide a text or html body')
         const mode = ((typeof args.mode === 'string' && args.mode.trim() !== '' ? args.mode.trim().toLowerCase() : 'reply')) as EmailReplyMode
         if (!REPLY_MODES.includes(mode)) {
-          throw new Error('mode 必须是 ' + REPLY_MODES.join('、') + ' 之一')
+          throw new Error('mode must be one of ' + REPLY_MODES.join(', '))
         }
         if (mode === 'forward' && (typeof args.to !== 'string' || args.to.trim() === '')) {
-          throw new Error('mode=forward 时需要 to 参数指定转发收件人')
+          throw new Error('mode=forward needs the to parameter to name the forward recipient')
         }
         const cc = typeof args.cc === 'string' && args.cc.trim() !== '' ? args.cc.trim() : undefined
         const prepared=takeReplyAuthorization(rawArgs,runtime as any)
@@ -238,14 +239,17 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
       async execute(_rawArgs: unknown, exec: unknown) {
         executionSignal(exec)?.throwIfAborted()
         const checks: Array<Record<string, unknown>> = []
+        const zh = uiLanguageOf(getSettingsValue()) === 'zh'
         try {
           const effective = getEffectiveSettings()
+          const accountLabel = zh ? '账号 ' : 'Account '
+          const noSmtp = zh ? '尚未配置（只收信）' : 'not configured (receive only)'
           const entries = [...effective.accounts.entries()]
           for (const [accountName, account] of entries.slice(0, 8)) {
             const provider = Object.entries(PROVIDER_PRESETS).find(([, preset]) => (
               preset.imap.host === account.imap.host && preset.smtp.host === account.smtp.host
             ))?.[0] ?? 'custom'
-            const base = account.transport === 'agentmail' ? 'AgentMail / ' + account.user + ' / ' + account.apiBase : account.transport === 'pop3' ? account.user + ' / POP3 ' + account.pop3?.host + ':' + account.pop3?.port + ' / SMTP ' + (account.smtp.host || '尚未配置（只收信）') : provider + ' / ' + account.user + ' / IMAP ' + account.imap.host + ' / SMTP ' + account.smtp.host
+            const base = account.transport === 'agentmail' ? 'AgentMail / ' + account.user + ' / ' + account.apiBase : account.transport === 'pop3' ? account.user + ' / POP3 ' + account.pop3?.host + ':' + account.pop3?.port + ' / SMTP ' + (account.smtp.host || noSmtp) : provider + ' / ' + account.user + ' / IMAP ' + account.imap.host + ' / SMTP ' + account.smtp.host
             // An OAuth2 account with no token is configured, not broken: the
             // missing piece is a browser login, and saying so is the whole
             // point of this check.
@@ -255,20 +259,20 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
               const state = oauth2StateOf(accountName, account.user)
               const loggedIn = state.state === 'logged-in'
               checks.push({
-                name: '账号 ' + accountName,
+                name: accountLabel + accountName,
                 ok: true,
                 detail: loggedIn
-                  ? base + ' / OAuth2 已登录' + (state.user !== undefined ? '（' + state.user + '）' : '')
+                  ? base + (zh ? ' / OAuth2 已登录' : ' / OAuth2 logged in') + (state.user !== undefined ? (zh ? '（' : ' (') + state.user + (zh ? '）' : ')') : '')
                   : base + ' / OAuth2 ' + NOT_LOGGED_IN_MESSAGE,
               })
               continue
             }
-            checks.push({ name: '账号 ' + accountName, ok: true, detail: base })
+            checks.push({ name: accountLabel + accountName, ok: true, detail: base })
           }
-          return { ok: true, plugin: 'dsh-email', accountCount: entries.length, checks }
+          return { ok: true, plugin: 'dsh-email', accountCount: entries.length, checks, lang: zh ? 'zh' : 'en' }
         } catch (error) {
-          checks.push({ name: '邮箱配置', ok: false, detail: messageOf(error, '未配置邮箱账号') })
-          return { ok: false, plugin: 'dsh-email', accountCount: 0, checks }
+          checks.push({ name: zh ? '邮箱配置' : 'Mailbox configuration', ok: false, detail: messageOf(error, zh ? '未配置邮箱账号' : 'no mailbox account configured') })
+          return { ok: false, plugin: 'dsh-email', accountCount: 0, checks, lang: zh ? 'zh' : 'en' }
         }
       }
     },
@@ -284,7 +288,7 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
       async execute(rawArgs: unknown, exec: any) {
         const args = rawArgs as EmailAttachmentArgs
         if (!validUid(args.uid)) {
-          throw new Error('uid 必须是正整数（IMAP）或 email_list 返回的字符串邮件标识（AgentMail）')
+          throw new Error('uid must be a positive integer (IMAP) or the string message id returned by email_list (AgentMail)')
         }
         const index = clampInt(args.index, 0, 0, 999)
         const workspaceHint = typeof exec?.agent?.session?.header?.cwd === 'string' ? exec.agent.session.header.cwd : undefined
@@ -311,7 +315,7 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
       timeoutMs: QUERY_TIMEOUT_MS,
       async execute(rawArgs: unknown, exec: unknown) {
         const args = rawArgs as EmailFolderArgs
-        if (!args.path?.trim()) throw new Error('path 参数不能为空')
+        if (!args.path?.trim()) throw new Error('path must not be empty')
         const permit = takeFolderAuthorization(rawArgs, runtime)
         await getPool().createFolder(permit.account, permit.path, executionSignal(exec))
         return { account: permit.account, action: 'create' as EmailFolderAction, path: permit.path }
@@ -325,8 +329,8 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
       timeoutMs: QUERY_TIMEOUT_MS,
       async execute(rawArgs: unknown, exec: unknown) {
         const args = rawArgs as EmailFolderArgs
-        if (!args.path?.trim()) throw new Error('path 参数不能为空')
-        if (!args.newName?.trim()) throw new Error('newName 参数不能为空')
+        if (!args.path?.trim()) throw new Error('path must not be empty')
+        if (!args.newName?.trim()) throw new Error('newName must not be empty')
         const permit = takeFolderAuthorization(rawArgs, runtime)
         await getPool().renameFolder(permit.account, permit.path, permit.newName!, executionSignal(exec))
         return { account: permit.account, action: 'rename' as EmailFolderAction, path: permit.path, newName: permit.newName }
@@ -340,7 +344,7 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
       timeoutMs: QUERY_TIMEOUT_MS,
       async execute(rawArgs: unknown, exec: unknown) {
         const args = rawArgs as EmailFolderArgs
-        if (!args.path?.trim()) throw new Error('path 参数不能为空')
+        if (!args.path?.trim()) throw new Error('path must not be empty')
         const permit = takeFolderAuthorization(rawArgs, runtime)
         await getPool().deleteFolder(permit.account, permit.path, permit.snapshot!, executionSignal(exec))
         return { account: permit.account, action: 'delete' as EmailFolderAction, path: permit.path }
@@ -354,7 +358,7 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
       timeoutMs: BATCH_TIMEOUT_MS,
       async execute(rawArgs: unknown, exec: unknown) {
         const args = rawArgs as EmailFolderArgs
-        if (!args.path?.trim()) throw new Error('path 参数不能为空')
+        if (!args.path?.trim()) throw new Error('path must not be empty')
         const permit = takeFolderAuthorization(rawArgs, runtime)
         const result = await getPool().purgeFolder(permit.account, permit.path, permit.snapshot!, executionSignal(exec))
         return { account: permit.account, action: 'purge' as EmailFolderAction, path: permit.path, count: result.count }

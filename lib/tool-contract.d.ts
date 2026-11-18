@@ -5,7 +5,7 @@ export type TextBlock = {
     text: string;
 };
 export declare const MAX_LIMIT = 100;
-export declare const ACCOUNT_HINT = "\u8D26\u53F7\u540D\uFF08\u914D\u7F6E\u4E86 accounts \u591A\u4E2A\u8D26\u53F7\u65F6\u9009\u62E9\uFF09\uFF0C\u7701\u7565\u65F6\u7528 defaultAccount\u3002\u53EF\u7528\u8D26\u53F7\u89C1 email_folders \u7684\u62A5\u9519\u6216\u63D2\u4EF6 README";
+export declare const ACCOUNT_HINT = "Account name (choose one when accounts has several); omit it to use defaultAccount. Available accounts appear in the email_folders error or the plugin README";
 /** Parse date-only or ISO input; an inclusive end date maps to the next UTC day. */
 export declare function parseEmailDay(input: string, label: string, endInclusive?: boolean): Date;
 export declare function executionSignal(exec: unknown): AbortSignal | undefined;
