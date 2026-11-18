@@ -32,15 +32,15 @@ function validReplyReference(reply: NonNullable<EmailDraft['reply']>): boolean {
 }
 
 export function draftFields(input: unknown): DraftFields {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new DraftError('草稿内容必须是对象')
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new DraftError('Draft content must be an object')
   const raw = input as Record<string, unknown>, fields = {} as DraftFields
   for (const [key, cap] of [['account', 200], ['to', 4096], ['cc', 4096], ['subject', 500], ['text', 100 * 1024]] as const) {
     const value = raw[key] ?? ''
-    if (typeof value !== 'string' || Buffer.byteLength(value) > cap || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value) || (key !== 'text' && /[\r\n]/.test(value))) throw new DraftError(key === 'text' ? '正文最多 100 KiB，且不能包含非文本控制字符' : key + ' 内容过长或包含换行/控制字符')
+    if (typeof value !== 'string' || Buffer.byteLength(value) > cap || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value) || (key !== 'text' && /[\r\n]/.test(value))) throw new DraftError(key === 'text' ? 'Body text may be at most 100 KiB and must not contain non-text control characters' : key + ' is too long or contains line breaks or control characters')
     fields[key] = key === 'text' ? value : value.trim()
   }
   if (Object.hasOwn(raw, 'html')) {
-    if (raw.html !== undefined && (typeof raw.html !== 'string' || Buffer.byteLength(raw.html) > 256 * 1024 || raw.html.includes('\0'))) throw new DraftError('HTML 正文必须是文本，最多 256 KiB')
+    if (raw.html !== undefined && (typeof raw.html !== 'string' || Buffer.byteLength(raw.html) > 256 * 1024 || raw.html.includes('\0'))) throw new DraftError('HTML body must be text, at most 256 KiB')
     fields.html = typeof raw.html === 'string' && raw.html.trim() ? raw.html : undefined
   }
   if(Object.hasOwn(raw,'sendAt'))fields.sendAt=raw.sendAt?scheduledTime(raw.sendAt):undefined
@@ -71,12 +71,12 @@ export class DraftStore {
       return doc
     } catch (error) {
       if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return { version: 1, drafts: [] }
-      throw new DraftError('本地草稿文件无法读取，已保留原文件；请检查存储位置或从备份恢复', 'draft-storage')
+      throw new DraftError('Cannot read the local drafts file; the original file was kept. Check the storage location or restore from a backup.', 'draft-storage')
     }
   }
   private async write(doc: Document): Promise<void> {
     const data = JSON.stringify(doc, null, 2)
-    if (Buffer.byteLength(data) > 16 * 1024 * 1024) throw new DraftError('草稿总量过大，请先删除不再需要的草稿')
+    if (Buffer.byteLength(data) > 16 * 1024 * 1024) throw new DraftError('Draft storage is too large; delete drafts you no longer need')
     const temporary = join(this.root, '.drafts-' + randomUUID() + '.json')
     try {
       const handle = await open(temporary, 'wx', 0o600)
@@ -91,8 +91,8 @@ export class DraftStore {
     try {
       release = await lockfile.lock(file, { realpath: false, stale: 120000, update: 10000, retries: wait ? { retries: 10, factor: 1, minTimeout: 50, maxTimeout: 50 } : 0, onCompromised: error => compromised.abort(error) })
     } catch (error) {
-      if ((error as NodeJS.ErrnoException)?.code === 'ELOCKED') throw new DraftError('另一处 DSH 正在保存或发送这份草稿，请稍后重试', 'draft-busy')
-      throw new DraftError('无法锁定草稿存储，请检查目录权限', 'draft-storage')
+      if ((error as NodeJS.ErrnoException)?.code === 'ELOCKED') throw new DraftError('Another DSH instance is saving or sending this draft; retry shortly', 'draft-busy')
+      throw new DraftError('Cannot lock draft storage; check directory permissions', 'draft-storage')
     }
     try { const current = signal ? AbortSignal.any([signal, compromised.signal]) : compromised.signal; current.throwIfAborted(); return await action(current) }
     finally { await release().catch(() => {}) }
@@ -102,14 +102,14 @@ export class DraftStore {
   }
   async get(id: string): Promise<EmailDraft> {
     const draft = (await this.list()).find(d => d.id === id)
-    if (!draft) throw new DraftError('草稿不存在或已被移除', 'draft-missing')
+    if (!draft) throw new DraftError('Draft does not exist or was removed', 'draft-missing')
     return draft
   }
   async create(fields: DraftFields, attachments: DraftAttachment[] = [], signal?: AbortSignal, reply?: EmailDraft['reply']): Promise<EmailDraft> {
-    if (attachments.length > 10 || attachments.some(file => !isId(file.id) || !isAbsolute(file.path) || typeof file.filename !== 'string' || typeof file.owned !== 'boolean')) throw new DraftError('草稿最多 10 个有效本地附件')
-    if (reply && !validReplyReference(reply)) throw new DraftError('回复草稿的原邮件编号或文件夹无效')
+    if (attachments.length > 10 || attachments.some(file => !isId(file.id) || !isAbsolute(file.path) || typeof file.filename !== 'string' || typeof file.owned !== 'boolean')) throw new DraftError('A draft may have at most 10 valid local attachments')
+    if (reply && !validReplyReference(reply)) throw new DraftError('The reply draft has an invalid original uid or folder')
     return this.mutate(doc => {
-      if (doc.drafts.length >= 50) throw new DraftError('已有 50 份草稿，请先删除不再需要的草稿')
+      if (doc.drafts.length >= 50) throw new DraftError('There are already 50 drafts; delete drafts you no longer need')
       const now = new Date().toISOString(), draft: EmailDraft = {
         ...draftFields(fields), id: randomUUID(), revision: 1, attachments, state: 'draft', createdAt: now, updatedAt: now,
         ...(reply ? { reply: { ...reply } } : {}),
@@ -120,17 +120,17 @@ export class DraftStore {
   async change(id: string, expectedRevision: unknown, action: (draft: EmailDraft) => void, signal?: AbortSignal): Promise<EmailDraft> {
     return this.mutate(doc => {
       const draft = doc.drafts.find(d => d.id === id)
-      if (!draft) throw new DraftError('草稿不存在或已被移除', 'draft-missing')
-      if (draft.revision !== expectedRevision) throw new DraftError('草稿已在另一处修改，请重新打开；当前编辑内容尚未覆盖服务器', 'draft-conflict')
+      if (!draft) throw new DraftError('Draft does not exist or was removed', 'draft-missing')
+      if (draft.revision !== expectedRevision) throw new DraftError('The draft was changed elsewhere; reopen it. Your current edits have not overwritten the server copy yet.', 'draft-conflict')
       action(draft); draft.revision++; draft.updatedAt = new Date().toISOString(); return draft
     }, signal)
   }
   async remove(id: string, revision: unknown, signal?: AbortSignal): Promise<void> {
     const removed = await this.mutate(doc => {
       const draft = doc.drafts.find(d => d.id === id)
-      if (!draft) throw new DraftError('草稿已被移除', 'draft-missing')
-      if (draft.revision !== revision) throw new DraftError('草稿已改变，请重新打开后删除', 'draft-conflict')
-      if (draft.state === 'sending') throw new DraftError('邮件正在提交，请结束后再移除草稿', 'draft-busy')
+      if (!draft) throw new DraftError('Draft was removed', 'draft-missing')
+      if (draft.revision !== revision) throw new DraftError('Draft changed; reopen it before deleting', 'draft-conflict')
+      if (draft.state === 'sending') throw new DraftError('The email is being submitted; remove the draft after it finishes', 'draft-busy')
       doc.drafts = doc.drafts.filter(d => d.id !== id); return draft
     }, signal)
     for (const file of removed.attachments) await this.removeOwnedFile(id, file)
@@ -144,11 +144,11 @@ export class DraftStore {
     } catch { /* Never remove a referenced original or a path outside this draft's owned upload directory. */ }
   }
   async sendLock<T>(id: string, action: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> {
-    if (!isId(id)) throw new DraftError('草稿编号不合法')
+    if (!isId(id)) throw new DraftError('Invalid draft id')
     return this.withLock(join(this.root, 'send-' + id), action, signal, false)
   }
   uploadPath(id: string, filename: string): { path: string; filename: string } {
-    if (!isId(id)) throw new DraftError('草稿编号不合法')
+    if (!isId(id)) throw new DraftError('Invalid draft id')
     const safe = basename(filename).replace(/[\u0000-\u001f\u007f<>:"/\\|?*]/g, '_').slice(0, 160).replace(/[. ]+$/, '') || 'attachment'
     return { path: join(this.root, 'draft-uploads', id, randomUUID() + '-' + safe), filename: safe }
   }

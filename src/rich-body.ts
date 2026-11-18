@@ -41,7 +41,7 @@ export function richEmailBody(html: unknown, attachments: EmailAttachmentMeta[] 
           try { const url = new URL(src); if (url.protocol === 'https:' && !url.username && !url.password && (!url.port || url.port === '443') && src.length <= 4096) image = { kind: 'remote', alt, source: url.href } } catch {}
         }
         if (image) { out.push({ tag: 'img', image: result.images.length }); result.images.push(image) }
-        else out.push(alt ? '[' + alt + ']' : '[图片不可用 / Image unavailable]')
+        else out.push(alt ? '[' + alt + ']' : '[Image unavailable]')
         continue
       }
       const children = visit(node.children || [], depth + 1)

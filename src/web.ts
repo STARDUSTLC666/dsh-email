@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+﻿import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Readable } from 'node:stream'
@@ -65,7 +65,7 @@ const SKIN_PACKAGES = [
   '@dsh-external/dsh-client-ui-skin-maid-atelier',
 ]
 
-const WHALE_CREDIT = '鲸鱼娘：一创 上善（pixiv 62155430）· 二创 Small-tailqwq / dsh-deep-whale · CC BY-NC-SA 4.0（非商业）'
+const WHALE_CREDIT = 'Whale maid: original by 上善 (pixiv 62155430) · fan art by Small-tailqwq / dsh-deep-whale · CC BY-NC-SA 4.0 (non-commercial)'
 
 /** Built-in original whale-maid courier artwork needs no third-party credit line. */
 const FALLBACK_CREDIT = ''
@@ -357,7 +357,7 @@ function customPresetsOf(serverPresets: string | undefined): { custom: Record<st
   try {
     return { custom: parseServerPresets(serverPresets ?? '') as Record<string, ServerPreset> }
   } catch (error) {
-    return { custom: {}, error: messageOf(error, 'serverPresets 解析失败') }
+    return { custom: {}, error: messageOf(error, 'could not parse serverPresets') }
   }
 }
 
@@ -401,14 +401,14 @@ function adjudicateAccounts(
   const explicit = (rowDefault ?? '').trim()
   if (explicit !== '') {
     if (!names.includes(explicit)) {
-      return { error: `defaultAccount "${explicit}" 不存在，可用账号：${names.join('、')}` }
+      return { error: `defaultAccount "${explicit}" does not exist; available accounts: ${names.join(', ')}` }
     }
     return { defaultAccount: explicit }
   }
   if (names.length === 1) return { defaultAccount: names[0] }
   if (yamlDefault !== undefined && names.includes(yamlDefault)) return { defaultAccount: yamlDefault }
   if (names.includes('default')) return { defaultAccount: 'default' }
-  return { error: `配置了多个账号（${names.join('、')}），请设置 defaultAccount 指定默认账号` }
+  return { error: `Several accounts are configured (${names.join(', ')}); set defaultAccount to choose the default` }
 }
 
 /**
@@ -456,7 +456,7 @@ function readAccountsDraft(
     yamlDefault = parsed.defaultAccount
   } catch (caught) {
     // No mapping could be read: report it and hand back an empty draft.
-    return { list: [], error: messageOf(caught, 'accountsYaml 解析失败') }
+    return { list: [], error: messageOf(caught, 'could not parse accountsYaml') }
   }
   const verdict = adjudicateAccounts(raw, yamlDefault, rowDefault)
   return {
@@ -545,10 +545,10 @@ function washEndpoint(account: YAMLMap, key: 'imap' | 'smtp'): void {
  */
 function writeEndpoint(doc: Document, account: YAMLMap, key: 'imap' | 'smtp' | 'pop3', endpoint: NonNullable<AccountCardInput['imap']>): void {
   if (endpoint.port !== undefined) {
-    if (!Number.isInteger(endpoint.port) || endpoint.port < 1 || endpoint.port > 65535) throw new Error(key.toUpperCase() + ' 端口必须在 1-65535 之间')
+    if (!Number.isInteger(endpoint.port) || endpoint.port < 1 || endpoint.port > 65535) throw new Error(key.toUpperCase() + ' port must be between 1 and 65535')
   }
-  if (endpoint.secure !== undefined && typeof endpoint.secure !== 'boolean') throw new Error('TLS 开关必须为布尔值')
-  if (endpoint.host !== undefined && (typeof endpoint.host !== 'string' || /\s/.test(endpoint.host.trim()))) throw new Error(key.toUpperCase() + ' 主机地址无效')
+  if (endpoint.secure !== undefined && typeof endpoint.secure !== 'boolean') throw new Error('The TLS switch must be true or false')
+  if (endpoint.host !== undefined && (typeof endpoint.host !== 'string' || /\s/.test(endpoint.host.trim()))) throw new Error(key.toUpperCase() + ' host is invalid')
   const host = endpoint.host?.trim()
   if (host === '') {
     account.delete(key)
@@ -627,9 +627,9 @@ function normalizeCardForYaml(
         const endpoint = card[key]
         if (endpoint === undefined) continue
         if (endpoint.port !== undefined && (!Number.isInteger(endpoint.port) || endpoint.port < 1 || endpoint.port > 65535)) {
-          throw new Error(key.toUpperCase() + ' 端口必须在 1-65535 之间')
+          throw new Error(key.toUpperCase() + ' port must be between 1 and 65535')
         }
-        if (endpoint.secure !== undefined && typeof endpoint.secure !== 'boolean') throw new Error('TLS 开关必须为布尔值')
+        if (endpoint.secure !== undefined && typeof endpoint.secure !== 'boolean') throw new Error('The TLS switch must be true or false')
         const host = typeof endpoint.host === 'string' ? endpoint.host.trim() : ''
         if (host === '') continue
         out[key] = { host, ...(endpoint.port !== undefined ? { port: endpoint.port } : {}), ...(endpoint.secure !== undefined ? { secure: endpoint.secure } : {}) }
@@ -781,7 +781,7 @@ function serializeAccountsDraft(
   }
 
   const desired = new Set(cards.map(card => card.name as string))
-  if (desired.size !== cards.length) throw new Error('账号名重复，不能覆盖已有账号')
+  if (desired.size !== cards.length) throw new Error('Duplicate account names; refusing to overwrite an existing account')
   // Rename the YAML node before filtering, retaining secrets and advanced keys.
   // originalName may already have been renamed by a preceding auto-save.
   const renameTargets = new Set<string>()
@@ -789,7 +789,7 @@ function serializeAccountsDraft(
     const from = card.originalName
     const to = card.name as string
     if (!from || from === to || !root.has(from)) continue
-    if (root.has(to) || renameTargets.has(from)) throw new Error('账号名已存在，不能覆盖已有账号')
+    if (root.has(to) || renameTargets.has(from)) throw new Error('Account name already exists; refusing to overwrite it')
     const pair = root.items.find(item => keyTextOf(item) === from)
     if (pair !== undefined) {
       pair.key = doc.createNode(to)
@@ -849,7 +849,7 @@ function serializeAccountsDraft(
     if (card.senderName !== undefined) writeField(account, 'senderName', String(card.senderName).trim())
     if (card.authUser !== undefined) writeField(account, 'authUser', String(card.authUser).trim())
     if (card.proxy !== undefined) {
-      if (typeof card.proxy !== 'string') throw new Error('代理地址必须是文本')
+      if (typeof card.proxy !== 'string') throw new Error('Proxy address must be a string')
       writeField(account, 'proxy', card.proxy.trim())
     }
     // authPassword is a secret and follows the password contract verbatim: the
@@ -893,7 +893,7 @@ function serializeAccountsDraft(
     }
     writeField(account, 'inboxFolder', card.inboxFolder)
     if (card.receiveProtocol !== undefined) {
-      if (!['imap', 'pop3'].includes(card.receiveProtocol)) throw new Error('收信协议只能是 IMAP 或 POP3')
+      if (!['imap', 'pop3'].includes(card.receiveProtocol)) throw new Error('Receive protocol must be IMAP or POP3')
       account.set('receiveProtocol', card.receiveProtocol)
     }
     // Endpoints are never written for a provider-backed account: they come from
@@ -1188,7 +1188,7 @@ export class EmailSettingsBackend {
       if (protectedNames.length && incomingYaml) {
         let submitted: string[] = []
         try { submitted = Object.keys(parseAccountsYaml(value.accountsYaml).map) } catch { /* invalid input cannot prove preservation */ }
-        if (protectedNames.some(name => !submitted.includes(name))) throw new Error('现有账号由配置文件的 accounts 管理；本次表单缺少原账号，未覆盖任何账号。 / Existing accounts are managed by the configuration accounts map; the submitted list omits existing accounts. No accounts were replaced.')
+        if (protectedNames.some(name => !submitted.includes(name))) throw new Error('Existing accounts are managed by the configuration accounts map; the submitted list omits existing accounts. No accounts were replaced.')
       }
       const section: Record<string, unknown> = Object.hasOwn(value, 'accountsYaml')
         ? keepsMappedAccounts ? withoutMappedAccountStorage(value) : { ...value, accounts: {}, user: '', password: '', authUser: '', authPassword: '' }
@@ -1224,7 +1224,7 @@ export class EmailSettingsBackend {
 
   async saveRecipientRules(text: string, expectedRevision: number) {
     if (this.ctx.settings.writable === false) throw new Error('settings provider is read-only')
-    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) throw new Error('请重新加载规则后保存')
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) throw new Error('Reload the rules before saving')
     validateSettingsValue({ trustedRecipientsYaml: text } as EmailSettingsValue)
     if (this.scope.config) await this.ctx.settings.update(this.namespace, { trustedRecipientsYaml: text }, expectedRevision)
     else await this.ctx.settings.replace(this.namespace, { ...this.scope.get(), trustedRecipientsYaml: text }, expectedRevision)
@@ -1253,26 +1253,26 @@ export class EmailSettingsBackend {
     const name = requested !== '' ? requested : settings.defaultAccount
     const cfg = settings.accounts.get(name)
     if (cfg === undefined) {
-      throw new Error(`未知账号 "${name}"，可用：${available.join('、')}`)
+      throw new Error(`Unknown account "${name}"; available: ${available.join(', ')}`)
     }
     if (cfg.transport === 'agentmail') {
       await new AgentMailClient(settings,this.apiFetch).test(name)
-      return { ok: true, account: name, apiHost: cfg.apiBase, message: 'AgentMail API 连接成功 / AgentMail API connection successful' }
+      return { ok: true, account: name, apiHost: cfg.apiBase, message: 'AgentMail API connection successful' }
     }
     if (cfg.transport === 'pop3') {
       const client = new Pop3Client(settings), started = Date.now()
-      try { const result = await client.test(name); return { ok: true, account: name, protocol: 'POP3', imapHost: cfg.pop3!.host, imapPort: cfg.pop3!.port, ms: Date.now() - started, messages: result.messages, message: 'POP3 收信连接成功；发送使用单独的 SMTP 配置 / POP3 connected; sending uses separate SMTP settings' } }
+      try { const result = await client.test(name); return { ok: true, account: name, protocol: 'POP3', imapHost: cfg.pop3!.host, imapPort: cfg.pop3!.port, ms: Date.now() - started, messages: result.messages, message: 'POP3 connected; sending uses separate SMTP settings' } }
       finally { client.clear() }
     }
     const target = { account: name, imapHost: cfg.imap.host, imapPort: cfg.imap.port }
-    const targetDescription = '账号 "' + name + '" · IMAP ' + cfg.imap.host + ':' + cfg.imap.port
+    const targetDescription = 'Account "' + name + '" · IMAP ' + cfg.imap.host + ':' + cfg.imap.port
     // An OAuth2 account has no password to check: without a token there is
     // nothing to dial with, and a failed dial would only say so less clearly.
     if (cfg.authKind === 'oauth2') {
       try {
         await getFreshAccessToken(name, cfg)
       } catch (error) {
-        throw new Error(targetDescription + '（OAuth2）：' + redactCredentials(messageOf(error, '尚未登录：请先在设置页完成设备码登录')))
+        throw new Error(targetDescription + ' (OAuth2): ' + redactCredentials(messageOf(error, 'not signed in: complete device-code sign-in in Settings first')))
       }
     }
     const pool = new EmailPool(settings)
@@ -1292,10 +1292,10 @@ export class EmailSettingsBackend {
       const lower = raw.toLowerCase()
       if (lower.includes('command failed') || lower.includes('authentication') || lower.includes('login')) {
         throw new Error(cfg.authKind === 'oauth2'
-          ? targetDescription + '（OAuth2）：邮箱登录失败：请在设置页重新完成设备码登录（' + raw + '）'
-          : targetDescription + '：邮箱登录失败：请检查邮箱地址与授权码（' + raw + '）')
+          ? targetDescription + ' (OAuth2): mailbox sign-in failed; complete device-code sign-in in Settings again (' + raw + ')'
+          : targetDescription + ': mailbox sign-in failed; check the mailbox address and app password (' + raw + ')')
       }
-      throw new Error(targetDescription + '：' + raw)
+      throw new Error(targetDescription + ': ' + raw)
     } finally {
       pool.dispose()
     }
@@ -1309,21 +1309,21 @@ export class EmailSettingsBackend {
    */
   private oauthAccount(name: unknown, action: string): { name: string; cfg: ResolvedEmailConfig } {
     const wanted = typeof name === 'string' ? name.trim() : ''
-    if (wanted === '') throw new Error(action + ' 需要 account 参数（账号名）')
+    if (wanted === '') throw new Error(action + ' needs the account parameter (an account name)')
     let settings
     try {
       settings = resolveEmailSettings(this.effectiveStored(),wanted)
     } catch (error) {
-      throw new Error(messageOf(error, '邮箱账号未配置'))
+      throw new Error(messageOf(error, 'no mailbox account configured'))
     }
     const cfg = settings.accounts.get(wanted)
     if (cfg === undefined) {
-      throw new Error('未知账号 "' + wanted + '"，可用：' + [...settings.accounts.keys()].join('、'))
+      throw new Error('Unknown account "' + wanted + '"; available: ' + [...settings.accounts.keys()].join(', '))
     }
     if (cfg.authKind !== 'oauth2') {
       // The card only offers the login button on an OAuth2 account; reaching
       // here means the page is stale or the provider was just changed.
-      throw new Error('账号 "' + wanted + '" 未选择 OAuth2 登录 / Select OAuth2 authentication first')
+      throw new Error('Account "' + wanted + '" does not use OAuth2; select OAuth2 authentication first')
     }
     return { name: wanted, cfg }
   }
@@ -1358,7 +1358,7 @@ export class EmailSettingsBackend {
         expires_in: start.expiresIn,
       }
     } catch (error) {
-      return { ok: false, message: messageOf(error, '登录失败：请稍后重试') }
+      return { ok: false, message: messageOf(error, 'sign-in failed; retry later') }
     }
   }
 
@@ -1378,7 +1378,7 @@ export class EmailSettingsBackend {
     } catch (error) {
       // Every failure of a poll is a login failure the user has to see, so it
       // leaves as the flat { ok:false, message } the page renders.
-      return { ok: false, message: messageOf(error, '登录失败：请稍后重试') }
+      return { ok: false, message: messageOf(error, 'sign-in failed; retry later') }
     }
   }
 
@@ -1489,7 +1489,7 @@ export class EmailSettingsBackend {
       } else if (body?.action === 'test') {
         this.responseJson(res, 200, { ok: true, value: await this.test(body.value, body.account) })
       } else if (body?.action === 'watch') {
-        if (typeof this.watchImpl !== 'function') throw new Error('email_watch 未就绪')
+        if (typeof this.watchImpl !== 'function') throw new Error('email_watch is not ready')
         const account = typeof body.account === 'string' ? body.account : ''
         const folder = typeof body.folder === 'string' ? body.folder : ''
         const limit = Number.isSafeInteger(body.limit) ? (body.limit as number) : 5
@@ -1512,13 +1512,13 @@ export class EmailSettingsBackend {
           },
         })
       } else if (body?.action === 'serializeAccounts') {
-        if (!Array.isArray(body.accounts)) throw new Error('accounts 必须是数组')
+        if (!Array.isArray(body.accounts)) throw new Error('accounts must be an array')
         const cards: AccountCardInput[] = []
         for (const entry of body.accounts) {
-          if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) throw new Error('accounts 的每一项都必须是对象')
+          if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) throw new Error('every accounts entry must be an object')
           const name = typeof entry.name === 'string' ? entry.name.trim() : ''
-          if (name === '') throw new Error('accounts 的每一项都需要非空的 name')
-          if (name === 'defaultAccount') throw new Error('账号名不能是 defaultAccount（该键保留给默认账号）')
+          if (name === '') throw new Error('every accounts entry needs a non-empty name')
+          if (name === 'defaultAccount') throw new Error('An account name cannot be defaultAccount (that key is reserved for the default account)')
           cards.push({ ...entry, name })
         }
         const source = typeof body.accountsYaml === 'string' ? body.accountsYaml : ''
