@@ -19,13 +19,13 @@ export interface TaskMatch {
 }
 export function validateTaskRules(value: unknown): TaskRule[] {
     if (!Array.isArray(value) || value.length > 8)
-        throw new Error('任务规则最多 8 条 / At most 8 rules');
+        throw new Error('At most 8 task rules');
     for (const raw of value) {
         if (!raw || typeof raw !== 'object' || !['all', 'any'].includes(raw.mode) || !Array.isArray(raw.conditions) || !raw.conditions.length || raw.conditions.length > 6 || typeof raw.workspace !== 'string' || raw.workspace.length > 200 || raw.prompt !== undefined && (typeof raw.prompt !== 'string' || raw.prompt.length > 4000) || raw.session !== undefined && (typeof raw.session !== 'string' || raw.session.length > 200))
-            throw new Error('任务规则格式无效 / Invalid task rule');
+            throw new Error('Invalid task rule');
         for (const c of raw.conditions)
             if (!c || !['subject', 'body', 'from', 'to', 'cc'].includes(c.field) || !['contains', 'equals', 'regex'].includes(c.op) || typeof c.value !== 'string' || !c.value || c.value.length > 300)
-                throw new Error('任务条件格式无效 / Invalid task condition');
+                throw new Error('Invalid task condition');
     }
     return value;
 }
@@ -68,14 +68,14 @@ export async function matchTaskRules(rules: TaskRule[], fields: Record<string, s
             error ? reject(error) : resolve(result);
         };
         const abort = () => finish(new Error('Task matching cancelled'));
-        const timer = setTimeout(() => finish(new Error('规则匹配超时，请简化正则表达式 / Rule timed out; simplify regex')), 500);
+        const timer = setTimeout(() => finish(new Error('Rule matching timed out; simplify the regular expression')), 500);
         signal?.addEventListener('abort', abort, { once: true });
-        worker.once('error', () => finish(new Error('任务规则无效 / Invalid task regex')));
+        worker.once('error', () => finish(new Error('Invalid task regex')));
         worker.once('exit', code => {
             if (!settled)
                 finish(new Error('Task rule worker stopped: ' + code));
         });
-        worker.once('message', value => value.error ? finish(new Error('任务规则无效 / Invalid task regex')) : finish(undefined, value.result));
+        worker.once('message', value => value.error ? finish(new Error('Invalid task regex')) : finish(undefined, value.result));
     });
 }
 if (!isMainThread && parentPort) {

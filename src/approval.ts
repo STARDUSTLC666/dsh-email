@@ -15,9 +15,9 @@ const folderTools = new Set(['email_folder_create', 'email_folder_rename', 'emai
 const folderStamp = (runtime: Pick<EmailRuntime, 'getEffectiveSettings'>, args: unknown, account: string) => createHash('sha256').update(JSON.stringify({ args, account: runtime.getEffectiveSettings().accounts.get(account) })).digest('hex')
 export function takeFolderAuthorization(args: unknown, runtime: Pick<EmailRuntime, 'getEffectiveSettings'>): FolderAuthorization {
   const permit = args && typeof args === 'object' ? approvedFolders.get(args) : undefined
-  if (!permit) throw new Error('文件夹操作需要单独确认，请在邮件面板操作 / Folder changes require separate confirmation; use the mailbox panel')
+  if (!permit) throw new Error('Folder changes require separate confirmation; use the mailbox panel')
   approvedFolders.delete(args as object)
-  if (permit.expires < Date.now() || permit.stamp !== folderStamp(runtime, args, permit.account)) throw new Error('账号或确认已改变，请重新确认 / Account or confirmation changed; confirm again')
+  if (permit.expires < Date.now() || permit.stamp !== folderStamp(runtime, args, permit.account)) throw new Error('Account or confirmation changed; confirm again')
   return permit
 }
 function replyStamp(runtime: Runtime, prepared: PreparedReply, args: unknown): string {
@@ -29,7 +29,7 @@ export function takeReplyAuthorization(args: unknown, runtime: Runtime): Prepare
   if (!args || typeof args !== 'object') return
   const plan=approvedReplies.get(args);if(!plan)return
   approvedReplies.delete(args)
-  if(plan.expires<Date.now()||plan.stamp!==replyStamp(runtime,plan.prepared,args))throw new Error('回复的账号或规则已改变，或确认已过期；请重新确认，邮件未发送')
+  if(plan.expires<Date.now()||plan.stamp!==replyStamp(runtime,plan.prepared,args))throw new Error('The reply account or rules changed, or the confirmation expired; confirm again. No email was sent.')
   return plan.prepared
 }
 
@@ -53,21 +53,21 @@ export function installSendApproval(ctx: ApprovalContext, runtime: Runtime): voi
     if (folderTools.has(exec?.name)) {
       try {
         const args = exec.arguments as Record<string, unknown> | undefined
-        if (!args || typeof args !== 'object') throw new Error('文件夹参数无效 / Invalid folder arguments')
+        if (!args || typeof args !== 'object') throw new Error('Invalid folder arguments')
         const settings = runtime.getEffectiveSettings(), account = typeof args.account === 'string' && args.account.trim() ? args.account.trim() : settings.defaultAccount
         const config = settings.accounts.get(account), path = folderPath(args.path)
-        if (!config || config.transport) throw new Error('文件夹管理仅支持 IMAP 账号 / Folder management requires IMAP')
+        if (!config || config.transport) throw new Error('Folder management requires an IMAP account')
         const newName = exec.name === 'email_folder_rename' ? folderPath(args.newName) : undefined
         const destructive = exec.name === 'email_folder_delete' || exec.name === 'email_folder_purge'
         const snapshot = destructive ? await runtime.getPool!().previewFolderMutation(account, path, exec.name === 'email_folder_delete' ? 'delete' : 'purge', exec.signal) : undefined
         const approval = ctx.get('approval')
-        if (!approval) return { kind: 'deny', reason: '文件夹操作需要审批界面，请使用邮件面板 / Folder changes need a confirmation UI; use the mailbox panel' }
+        if (!approval) return { kind: 'deny', reason: 'Folder changes need a confirmation UI; use the mailbox panel' }
         const stamp = folderStamp(runtime, args, account)
         const result = await approval.request({ agent: exec.agent, toolName: exec.name, callId: exec.callId, signal: exec.signal,
-          reason: `${exec.name} · ${account} · ${path}${newName ? ' → ' + newName : ''}${snapshot ? ' · ' + snapshot.count + ' 封邮件 / messages; permanent operation' : ''}` })
-        if (result !== 'allowed-once') return { kind: 'deny', reason: '文件夹操作未获确认，未执行修改 / Folder change was not confirmed; no changes made' }
+          reason: `${exec.name} · ${account} · ${path}${newName ? ' → ' + newName : ''}${snapshot ? ' · ' + snapshot.count + ' messages; permanent operation' : ''}` })
+        if (result !== 'allowed-once') return { kind: 'deny', reason: 'Folder change was not confirmed; no changes made' }
         exec.signal?.throwIfAborted()
-        if (stamp !== folderStamp(runtime, args, account)) return { kind: 'deny', reason: '账号已改变，请重新确认 / Account changed; confirm again' }
+        if (stamp !== folderStamp(runtime, args, account)) return { kind: 'deny', reason: 'Account changed; confirm again' }
         approvedFolders.set(args, { account, path, newName, snapshot, stamp, expires: Date.now() + 60000 })
         return next()
       } catch (error) { return { kind: 'deny', reason: error instanceof Error ? error.message : 'Folder operation refused' } }
@@ -87,7 +87,7 @@ export function installSendApproval(ctx: ApprovalContext, runtime: Runtime): voi
           const policy = parseRecipientPolicies(value.trustedRecipientsYaml).get(account)
           if (policy) {
             const matching = await matchRecipients(args.to, args.cc ?? '', policy)
-            if (matching.blocked) return { kind: 'deny', reason: '收件人被禁止规则拦截，邮件未发送：' + matching.rows.filter(row => row.blocked).map(row => row.address).join(', ') }
+            if (matching.blocked) return { kind: 'deny', reason: 'Recipients blocked by a deny rule; no email sent: ' + matching.rows.filter(row => row.blocked).map(row => row.address).join(', ') }
             if (matching.skipsApproval) return next()
           }
         }
@@ -100,7 +100,7 @@ export function installSendApproval(ctx: ApprovalContext, runtime: Runtime): voi
       try {
         const pool=runtime.getPool()
         if(typeof pool.prepareReply==='function') prepared=await pool.prepareReply(args.account,args.folder||'',args.uid,args.mode||'reply',args.text||'',args.to||'',args.cc,exec.signal,{html:args.html,locale:args.locale,timeZone:args.timeZone})
-      }catch{return {kind:'deny',reason:'无法读取原邮件以核对实际收件人；请重新打开邮件后再试，邮件未发送。'}}
+      }catch{return {kind:'deny',reason:'Cannot read the original message to verify the actual recipients; reopen the message and try again. No email was sent.'}}
     }
     const rememberReply = () => { if(prepared && exec.arguments && typeof exec.arguments==='object')approvedReplies.set(exec.arguments,{prepared,stamp:replyStamp(runtime,prepared,exec.arguments),expires:Date.now()+60000}) }
     if(prepared && value.allowTrustedReply===true){
@@ -108,23 +108,23 @@ export function installSendApproval(ctx: ApprovalContext, runtime: Runtime): voi
         const policy=parseRecipientPolicies(value.trustedRecipientsYaml).get(prepared.account)
         if(policy){
           const matching=await matchRecipients(prepared.to,prepared.cc,policy)
-          if(matching.blocked)return {kind:'deny',reason:'回复的实际收件人被禁止规则拦截，邮件未发送。'}
+          if(matching.blocked)return {kind:'deny',reason:'The actual reply recipients are blocked by a deny rule; no email was sent.'}
           if(matching.skipsApproval){rememberReply();return next()}
         }
       }catch{/* Invalid rules never grant trusted reply. */}
     }
     if (value.sendApproval === false) return next()
-    const replyHint = exec.name === 'email_reply' ? value.allowTrustedReply===true ? ' 本次回复未满足所有实际 To/Cc 都可信的条件，仍需确认。' : ' 可信回复免审默认关闭；可在设置页单独开启，或在草稿页预览收件人后手动发送。' : ''
+    const replyHint = exec.name === 'email_reply' ? value.allowTrustedReply===true ? ' This reply does not meet the trusted-To/Cc conditions, so approval is still required.' : ' Trusted-reply skip is off by default; enable it in Settings, or preview the recipients on the Drafts page and send manually.' : ''
     let reason: string
     if (exec.name === 'email_send') {
       const args = (exec.arguments ?? {}) as EmailSendArgs
       const attachCount = Array.isArray(args.attachments) ? args.attachments.length : 0
-      reason = '发送邮件给 ' + args.to + (args.cc ? '，抄送 ' + args.cc : '') + '，主题「' + args.subject + '」' + (attachCount > 0 ? '，附件 ' + attachCount + ' 个' : '')
+      reason = 'Send email to ' + args.to + (args.cc ? ', cc ' + args.cc : '') + ', subject "' + args.subject + '"' + (attachCount > 0 ? ', attachments: ' + attachCount : '')
     } else {
       const args = (exec.arguments ?? {}) as EmailReplyArgs
       const mode = typeof args.mode === 'string' && args.mode.trim() !== '' ? args.mode.trim().toLowerCase() : 'reply'
-      const modeLabel = mode === 'forward' ? '转发' : mode === 'reply-all' ? '回复全部' : '回复'
-      reason = modeLabel + '邮件（原邮件 uid=' + args.uid + '）' + (prepared ? '，账号 '+prepared.account+'，收件人 '+prepared.to+(prepared.cc?'，抄送 '+prepared.cc:'')+'，主题「'+prepared.subject+'」' : mode === 'forward' && typeof args.to === 'string' && args.to.trim() !== '' ? '，收件人 ' + args.to : '')
+      const modeLabel = mode === 'forward' ? 'Forward' : mode === 'reply-all' ? 'Reply all' : 'Reply'
+      reason = modeLabel + ' email (original uid=' + args.uid + ')' + (prepared ? ', account '+prepared.account+', to '+prepared.to+(prepared.cc?', cc '+prepared.cc:'')+', subject "'+prepared.subject+'"' : mode === 'forward' && typeof args.to === 'string' && args.to.trim() !== '' ? ', to ' + args.to : '')
     }
     // Gate-owned approval: we run the approval round-trip ourselves so the
     // denial reason is always honest and actionable — including the Full
@@ -134,7 +134,7 @@ export function installSendApproval(ctx: ApprovalContext, runtime: Runtime): voi
     if (approval === undefined) {
       return {
         kind: 'deny',
-        reason: exec.name + ' 需要确认，但当前环境没有审批通道（如 headless）。' + replyHint,
+        reason: exec.name + ' needs approval, but this environment has no approval channel (headless, for example).' + replyHint,
       }
     }
     const outcome = await approval.request({
@@ -145,11 +145,11 @@ export function installSendApproval(ctx: ApprovalContext, runtime: Runtime): voi
       signal: exec.signal,
     })
     if (outcome === 'allowed-once') { rememberReply(); return next() }
-    if (outcome === 'cancelled') return { kind: 'deny', reason: '发信确认被取消，邮件未发送。' }
-    if (outcome === 'unavailable') return { kind: 'deny', reason: '发信确认不可用（没有可用的审批界面），邮件未发送。' + replyHint }
+    if (outcome === 'cancelled') return { kind: 'deny', reason: 'Send approval was cancelled; no email was sent.' }
+    if (outcome === 'unavailable') return { kind: 'deny', reason: 'Send approval is unavailable (no approval UI); no email was sent.' + replyHint }
     return {
       kind: 'deny',
-      reason: '发信未获批准：要么你拒绝了，要么当前会话处于 Full Access（审批策略 never，不会弹框）。可切回支持确认的权限模式，或在草稿页预览并手动发送。' + replyHint,
+      reason: 'Send was not approved: either you rejected it, or this session runs in Full Access (approval policy never, so no prompt appears). Switch to a permission mode that supports confirmation, or preview and send manually from the Drafts page.' + replyHint,
     }
   }, { prepend: true })
 }

@@ -6,18 +6,18 @@ export interface RecipientPolicy { skipApproval: boolean; addresses: string[]; d
 export interface RecipientMatch { field: 'to' | 'cc'; address: string; matched: boolean; blocked: boolean; rule: 'address' | 'domain' | ''; value: string }
 export class RecipientPolicyError extends Error {
   readonly code = 'recipient-denied'
-  constructor(addresses: string[]) { super('收件人被禁止规则拦截，邮件未发送 / Recipients blocked; no email sent: ' + addresses.join(', ')); this.name = 'RecipientPolicyError' }
+  constructor(addresses: string[]) { super('Recipients blocked by a deny rule; no email sent: ' + addresses.join(', ')); this.name = 'RecipientPolicyError' }
 }
 const normalizer = nodemailer.createTransport({ jsonTransport: true, disableFileAccess: true, disableUrlAccess: true })
 export function canonicalDomain(value: string): string {
   const domain = domainToASCII(value.trim().replace(/\.$/, '')).toLowerCase()
-  if (!domain || domain.length > 253 || domain.split('.').some(label => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) throw new Error('请填写有效的完整域名，如 example.com；不支持通配符或网址')
+  if (!domain || domain.length > 253 || domain.split('.').some(label => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) throw new Error('Enter a valid full domain such as example.com; wildcards and URLs are not supported')
   return domain
 }
 export function canonicalAddress(value: string): string {
   const address = value.trim(), at = address.lastIndexOf('@'), local = address.slice(0, at)
   if (at <= 0 || Buffer.byteLength(local) > 64 || /[\r\n\u0000-\u001f\u007f]/.test(local)
-    || (!/^"(?:[^"\\]|\\.)*"$/.test(local) && (/[^\S\r\n]|[@<>()\[\],;:\\"]/.test(local) || local.startsWith('.') || local.endsWith('.') || local.includes('..')))) throw new Error('请填写完整邮箱地址，如 name@example.com')
+    || (!/^"(?:[^"\\]|\\.)*"$/.test(local) && (/[^\S\r\n]|[@<>()\[\],;:\\"]/.test(local) || local.startsWith('.') || local.endsWith('.') || local.includes('..')))) throw new Error('Enter a full email address such as name@example.com')
   return local + '@' + canonicalDomain(address.slice(at + 1))
 }
 
@@ -25,34 +25,34 @@ export function canonicalAddress(value: string): string {
 export async function normalizeRecipients(to: string, cc = ''): Promise<Array<{ field: 'to' | 'cc'; address: string }>> {
   const rows: Array<{ field: 'to' | 'cc'; address: string }> = []
   for (const [field, value] of [['to', to], ['cc', cc]] as const) {
-    if (typeof value !== 'string' || value.length > 4096 || /[\r\n\u0000]/.test(value)) throw new Error('收件人字段不能含换行，且最多 4096 字符')
-    if (!value.trim()) { if (field === 'to') throw new Error('请填写收件人'); continue }
+    if (typeof value !== 'string' || value.length > 4096 || /[\r\n\u0000]/.test(value)) throw new Error('The recipient field must not contain line breaks and may be at most 4096 characters')
+    if (!value.trim()) { if (field === 'to') throw new Error('Enter a recipient'); continue }
     const info = await normalizer.sendMail({ from: 'preview@example.invalid', to: value, text: '' })
     const envelope = info.envelope.to
-    if (!Array.isArray(envelope) || !envelope.length) throw new Error('收件人没有可投递的完整邮箱地址')
+    if (!Array.isArray(envelope) || !envelope.length) throw new Error('The recipients contain no complete deliverable email address')
     for (const raw of envelope) {
       const address = canonicalAddress(String(raw))
       if (!rows.some(row => row.field === field && row.address === address)) rows.push({ field, address })
     }
   }
-  if (rows.length > 100) throw new Error('单封草稿最多 100 个 To/Cc 收件地址')
+  if (rows.length > 100) throw new Error('A single draft may have at most 100 To/Cc addresses')
   return rows
 }
 
 const plain = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
 export function parseRecipientPolicies(text?: string): Map<string, RecipientPolicy> {
   if (!text?.trim()) return new Map()
-  if (Buffer.byteLength(text) > 64 * 1024) throw new Error('可信收件人规则超过 64 KiB')
+  if (Buffer.byteLength(text) > 64 * 1024) throw new Error('Trusted recipient rules exceed 64 KiB')
   let data: unknown
-  try { data = parse(text, { maxAliasCount: 0, uniqueKeys: true }) } catch { throw new Error('可信收件人规则不是有效 YAML，请检查重复账号、缩进或引用') }
-  if (!plain(data) || Object.keys(data).length > 50) throw new Error('规则应按账号名填写，最多 50 个账号')
+  try { data = parse(text, { maxAliasCount: 0, uniqueKeys: true }) } catch { throw new Error('Trusted recipient rules are not valid YAML; check duplicate accounts, indentation or references') }
+  if (!plain(data) || Object.keys(data).length > 50) throw new Error('Rules are keyed by account name, at most 50 accounts')
   const policies = new Map<string, RecipientPolicy>()
   for (const [account, raw] of Object.entries(data)) {
-    if (!account.trim() || account.length > 200 || !plain(raw) || Object.keys(raw).some(key => !['skipApproval', 'addresses', 'domains', 'denyAddresses', 'denyDomains'].includes(key))) throw new Error('账号规则只支持 skipApproval、addresses、domains、denyAddresses 与 denyDomains')
-    if (raw.skipApproval !== undefined && typeof raw.skipApproval !== 'boolean') throw new Error('skipApproval 必须是布尔值')
+    if (!account.trim() || account.length > 200 || !plain(raw) || Object.keys(raw).some(key => !['skipApproval', 'addresses', 'domains', 'denyAddresses', 'denyDomains'].includes(key))) throw new Error('Account rules only support skipApproval, addresses, domains, denyAddresses and denyDomains')
+    if (raw.skipApproval !== undefined && typeof raw.skipApproval !== 'boolean') throw new Error('skipApproval must be true or false')
     const list = (key: string, convert: (s: string) => string): string[] => {
       const values = raw[key] ?? []
-      if (!Array.isArray(values) || values.length > 100 || values.some(value => typeof value !== 'string')) throw new Error(key + ' 必须为字符串数组，最多 100 项')
+      if (!Array.isArray(values) || values.length > 100 || values.some(value => typeof value !== 'string')) throw new Error(key + ' must be a list of strings, at most 100 items')
       return [...new Set(values.map(value => convert(value as string)))]
     }
     policies.set(account, { skipApproval: raw.skipApproval === true, addresses: list('addresses', canonicalAddress), domains: list('domains', canonicalDomain), denyAddresses: list('denyAddresses', canonicalAddress), denyDomains: list('denyDomains', canonicalDomain) })

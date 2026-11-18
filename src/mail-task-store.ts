@@ -67,7 +67,7 @@ export class MailTaskStore {
         catch (error) {
             if ((error as NodeJS.ErrnoException)?.code === 'ENOENT')
                 return { version: 1, revision: 0, config: defaultMailTasks(), records: [] };
-            throw new Error('任务存储无法读取，原文件已保留 / Task ledger unreadable; existing file kept');
+            throw new Error('Task ledger is unreadable; the existing file was kept');
         }
     }
     async lock<T>(name: string, action: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> {
