@@ -6,8 +6,8 @@ import { publicAddress, syntheticAddress, syntheticAddress6, validPublicRecords,
 export class PublicDownloadError extends Error {
   constructor(public readonly code: string, message: string) { super(message); this.name = 'PublicDownloadError' }
 }
-const blocked = () => new PublicDownloadError('PUBLIC_ADDRESS_REQUIRED', '图片或附件地址必须指向公网 HTTPS 服务 / A public HTTPS destination is required')
-const dnsFailure = () => new PublicDownloadError('PUBLIC_DNS_UNAVAILABLE', '当前网络使用虚拟地址，但未能确认真实公网目标；请稍后重试 / The network uses virtual DNS addresses; the public destination could not be verified')
+const blocked = () => new PublicDownloadError('PUBLIC_ADDRESS_REQUIRED', 'A public HTTPS destination is required')
+const dnsFailure = () => new PublicDownloadError('PUBLIC_DNS_UNAVAILABLE', 'The network uses virtual DNS addresses, so the real public destination could not be verified; retry later')
 
 export async function withAbort<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
   signal.throwIfAborted()
@@ -102,7 +102,7 @@ export async function resolvePublicAddresses(host: string, signal: AbortSignal, 
   }
   let rows: PublicAddress[]
   try { rows = await withAbort((dependencies.lookup ?? (name => lookup(name, { all: true })))(host), signal) }
-  catch { signal.throwIfAborted(); throw new PublicDownloadError('PUBLIC_DNS_FAILED', '无法解析图片或附件域名，请稍后重试 / Cannot resolve the public download host') }
+  catch { signal.throwIfAborted(); throw new PublicDownloadError('PUBLIC_DNS_FAILED', 'Cannot resolve the public download host; retry later') }
   if (validPublicRecords(rows)) return rows
   if (!rows.length || rows.length > 32 || !rows.every(row => (row.family === 4 && syntheticAddress(row.address)) || (row.family === 6 && syntheticAddress6(row.address))) || !publicDnsName(host)) throw blocked()
   const real = await withAbort((dependencies.query ?? queryPublicDns)(host, signal), signal)

@@ -251,16 +251,16 @@ function describeValue(value: unknown): string {
  */
 export function validateSettingsValue(value: EmailSettingsValue, extraProviders: readonly string[] = []): void {
   const draft = (value ?? {}) as Partial<EmailSettingsValue>
-  if(draft.allowTrustedReply!==undefined&&typeof draft.allowTrustedReply!=='boolean')throw new Error('可信回复免审开关必须为布尔值')
-  if(draft.replyLocale!==undefined&&(typeof draft.replyLocale!=='string'||!/^(?:auto|(?:zh|en|fr)(?:-[a-z0-9]{1,8})*)$/i.test(draft.replyLocale)))throw new Error('回复引用语言请选择 auto、zh、en 或 fr')
-  if(draft.replyTimeZone!==undefined){if(typeof draft.replyTimeZone!=='string')throw new Error('时区必须为文本');if(draft.replyTimeZone.trim())try{new Intl.DateTimeFormat('en',{timeZone:draft.replyTimeZone.trim()})}catch{throw new Error('引用日期时区无效，请填写 Asia/Shanghai、Europe/Paris 等 IANA 时区')}}
-  if (draft.receiveProtocol !== undefined && !['imap', 'pop3'].includes(draft.receiveProtocol)) throw new Error('收信协议只能是 IMAP 或 POP3')
-  if (portOutOfRange(endpointPort(draft.pop3))) throw new Error('POP3 端口必须在 1-65535 之间')
+  if(draft.allowTrustedReply!==undefined&&typeof draft.allowTrustedReply!=='boolean')throw new Error('The trusted-reply skip switch must be true or false')
+  if(draft.replyLocale!==undefined&&(typeof draft.replyLocale!=='string'||!/^(?:auto|(?:zh|en|fr)(?:-[a-z0-9]{1,8})*)$/i.test(draft.replyLocale)))throw new Error('Reply quote language must be auto, zh, en or fr')
+  if(draft.replyTimeZone!==undefined){if(typeof draft.replyTimeZone!=='string')throw new Error('Time zone must be a string');if(draft.replyTimeZone.trim())try{new Intl.DateTimeFormat('en',{timeZone:draft.replyTimeZone.trim()})}catch{throw new Error('Quoted-date time zone is invalid; use an IANA zone such as Asia/Shanghai or Europe/Paris')}}
+  if (draft.receiveProtocol !== undefined && !['imap', 'pop3'].includes(draft.receiveProtocol)) throw new Error('Receive protocol must be IMAP or POP3')
+  if (portOutOfRange(endpointPort(draft.pop3))) throw new Error('POP3 port must be between 1 and 65535')
   if (draft.newMailPopup !== undefined && typeof draft.newMailPopup !== 'boolean') {
-    throw new Error('新邮件弹窗开关必须为布尔值')
+    throw new Error('The new-mail popup switch must be true or false')
   }
   if (draft.trustedRecipientsYaml !== undefined) {
-    if (typeof draft.trustedRecipientsYaml !== 'string') throw new Error('可信收件人规则必须为文本')
+    if (typeof draft.trustedRecipientsYaml !== 'string') throw new Error('Trusted recipient rules must be a string')
     parseRecipientPolicies(draft.trustedRecipientsYaml)
   }
   if (draft.consumers !== undefined) normalizeMailConsumers(draft.consumers)
@@ -270,21 +270,21 @@ export function validateSettingsValue(value: EmailSettingsValue, extraProviders:
   const provider = draft.provider
   if (isSet(provider) && provider !== '' && !['agentmail', 'agentmail-eu', ...PROVIDER_NAMES].includes(provider) && !extraProviders.includes(provider)) {
     const names = [...PROVIDER_NAMES, ...extraProviders]
-    throw new Error('未知的邮箱服务商 ' + describeValue(provider) + '，可选：' + names.join('/') + '（或留空手填 IMAP/SMTP 主机）')
+    throw new Error('Unknown mail provider ' + describeValue(provider) + '; choose one of ' + names.join('/') + ' (or leave it blank and fill in the IMAP/SMTP hosts)')
   }
   const imapPort = endpointPort(draft.imap)
   if (portOutOfRange(imapPort)) {
-    throw new Error('IMAP 端口必须在 1-65535 之间，收到 ' + describeValue(imapPort))
+    throw new Error('IMAP port must be between 1 and 65535, got ' + describeValue(imapPort))
   }
   const smtpPort = endpointPort(draft.smtp)
   if (portOutOfRange(smtpPort)) {
-    throw new Error('SMTP 端口必须在 1-65535 之间，收到 ' + describeValue(smtpPort))
+    throw new Error('SMTP port must be between 1 and 65535, got ' + describeValue(smtpPort))
   }
   if (isSet(draft.maxBodyChars) && (draft.maxBodyChars < 1000 || draft.maxBodyChars > 200000)) {
-    throw new Error('正文截断上限必须在 1000-200000 之间，收到 ' + describeValue(draft.maxBodyChars))
+    throw new Error('Body truncation limit must be between 1000 and 200000, got ' + describeValue(draft.maxBodyChars))
   }
   const attachmentLimit = draft.maxAttachmentBytes
   if (attachmentLimit !== undefined && (!Number.isSafeInteger(attachmentLimit) || attachmentLimit < MIN_ATTACHMENT_BYTES || attachmentLimit > MAX_ATTACHMENT_BYTES)) {
-    throw new Error('附件大小上限必须在 1 KiB 到 512 MiB 之间 / The attachment size limit must be between 1 KiB and 512 MiB.')
+    throw new Error('The attachment size limit must be between 1 KiB and 512 MiB.')
   }
 }

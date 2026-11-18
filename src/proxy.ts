@@ -63,13 +63,13 @@ export function parseProxyUrl(value: string | null | undefined): URL | undefined
   try {
     url = new URL(text.includes('://') ? text : `http://${text}`)
   } catch {
-    throw new Error('代理地址无效（示例：http://127.0.0.1:7897 或 socks5://127.0.0.1:1080）。代理凭据不会回显。')
+    throw new Error('Invalid proxy address (example: http://127.0.0.1:7897 or socks5://127.0.0.1:1080). Proxy credentials are never echoed.')
   }
   const scheme = url.protocol.replace(/:$/, '')
   if (!(PROXY_SCHEMES as readonly string[]).includes(scheme)) {
-    throw new Error(`不支持的代理协议 "${scheme}"：可用 ${PROXY_SCHEMES.join(' / ')}`)
+    throw new Error(`Unsupported proxy scheme "${scheme}"; available: ${PROXY_SCHEMES.join(' / ')}`)
   }
-  if (url.hostname === '' || proxyPort(url) < 1 || url.search || url.hash || (url.pathname !== '' && url.pathname !== '/')) throw new Error('代理地址应只包含协议、登录凭据、主机与端口，不应包含路径或查询参数。')
+  if (url.hostname === '' || proxyPort(url) < 1 || url.search || url.hash || (url.pathname !== '' && url.pathname !== '/')) throw new Error('A proxy address should contain only the scheme, credentials, host and port, with no path or query parameters.')
   return url
 }
 
@@ -150,7 +150,7 @@ function connectToProxy(url: URL, timeoutMs: number, signal?: AbortSignal): Prom
       : connectTcp({ host, port })
     const event = url.protocol === 'https:' ? 'secureConnect' : 'connect'
     let settled = false
-    const timer = setTimeout(() => settle(proxyError(`连接代理 ${host}:${port} 超时`, 'PROXY_TIMEOUT')), timeoutMs)
+    const timer = setTimeout(() => settle(proxyError(`Connecting to proxy ${host}:${port} timed out`, 'PROXY_TIMEOUT')), timeoutMs)
     const settle = (error: Error | null): void => {
       if (settled) return
       settled = true
@@ -163,9 +163,9 @@ function connectToProxy(url: URL, timeoutMs: number, signal?: AbortSignal): Prom
       else { socket.destroy(); reject(error) }
     }
     const onConnect = (): void => settle(null)
-    const onError = (error: Error): void => settle(proxyError(`无法连接代理 ${host}:${port}：${error.message}`, 'PROXY_UNREACHABLE'))
-    const onClose = (): void => settle(proxyError('代理连接在协商前关闭', 'PROXY_CLOSED'))
-    const onAbort = (): void => settle(signal?.reason instanceof Error ? signal.reason : new Error('代理连接已取消'))
+    const onError = (error: Error): void => settle(proxyError(`Cannot connect to proxy ${host}:${port}: ${error.message}`, 'PROXY_UNREACHABLE'))
+    const onClose = (): void => settle(proxyError('Proxy connection closed before negotiation', 'PROXY_CLOSED'))
+    const onAbort = (): void => settle(signal?.reason instanceof Error ? signal.reason : new Error('Proxy connection cancelled'))
     socket.once(event, onConnect)
     socket.once('error', onError)
     socket.once('close', onClose)
@@ -200,14 +200,14 @@ async function connectHttpProxy(url: URL, host: string, port: number, timeoutMs:
       signal?.removeEventListener('abort', onAbort)
       if (error !== null) { socket.destroy(); reject(error) } else resolve(socket)
     }
-    const timer = setTimeout(() => finish(proxyError('代理 CONNECT 协商超时', 'PROXY_TIMEOUT')), timeoutMs)
-    const onError = (error: Error): void => finish(proxyError(`代理连接中断：${error.message}`, 'PROXY_UNREACHABLE'))
-    const onClose = (): void => finish(proxyError('代理在 CONNECT 响应前关闭了连接', 'PROXY_CLOSED'))
-    const onAbort = (): void => finish(signal?.reason instanceof Error ? signal.reason : new Error('代理连接已取消'))
+    const timer = setTimeout(() => finish(proxyError('Proxy CONNECT negotiation timed out', 'PROXY_TIMEOUT')), timeoutMs)
+    const onError = (error: Error): void => finish(proxyError(`Proxy connection interrupted: ${error.message}`, 'PROXY_UNREACHABLE'))
+    const onClose = (): void => finish(proxyError('Proxy closed the connection before a CONNECT response', 'PROXY_CLOSED'))
+    const onAbort = (): void => finish(signal?.reason instanceof Error ? signal.reason : new Error('Proxy connection cancelled'))
     const onData = (chunk: Buffer): void => {
       buffered = Buffer.concat([buffered, chunk])
       const end = buffered.indexOf('\r\n\r\n')
-      if ((end < 0 ? buffered.length : end + 4) > MAX_HEADER_BYTES) { finish(proxyError('代理 CONNECT 响应头过长', 'PROXY_BAD_RESPONSE')); return }
+      if ((end < 0 ? buffered.length : end + 4) > MAX_HEADER_BYTES) { finish(proxyError('Proxy CONNECT response headers are too long', 'PROXY_BAD_RESPONSE')); return }
       if (end < 0) return
       const head = buffered.subarray(0, end).toString('latin1')
       const status = Number(/^HTTP\/1\.[01] ([1-5]\d\d)(?:\s|$)/.exec(head)?.[1] ?? '0')
@@ -217,7 +217,7 @@ async function connectHttpProxy(url: URL, host: string, port: number, timeoutMs:
       if (rest.length > 0) socket.unshift(rest)
       if (status < 200 || status >= 300) {
         const line = head.split('\r\n')[0] ?? ''
-        finish(proxyError(`代理拒绝了 CONNECT ${authority(host, port)}：HTTP ${status} ${line}`.trim(), 'PROXY_CONNECT_REFUSED'))
+        finish(proxyError(`Proxy refused CONNECT ${authority(host, port)}: HTTP ${status} ${line}`.trim(), 'PROXY_CONNECT_REFUSED'))
         return
       }
       finish(null)
@@ -252,7 +252,7 @@ async function connectSocksProxy(url: URL, host: string, port: number, timeoutMs
     return socket
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
-    throw proxyError(`SOCKS 代理连接 ${authority(host, port)} 失败：${reason}`, 'PROXY_UNREACHABLE')
+    throw proxyError(`SOCKS proxy connection to ${authority(host, port)} failed: ${reason}`, 'PROXY_UNREACHABLE')
   }
 }
 
@@ -264,9 +264,9 @@ async function connectSocksProxy(url: URL, host: string, port: number, timeoutMs
  */
 export async function openProxiedSocket(proxy: string | URL, host: string, port: number, options: { timeoutMs?: number; signal?: AbortSignal } = {}): Promise<Socket> {
   options.signal?.throwIfAborted()
-  if (!host || /[\s\r\n\0]/.test(host) || !Number.isInteger(port) || port < 1 || port > 65535) throw proxyError('邮箱服务器或端口无效', 'PROXY_INVALID')
+  if (!host || /[\s\r\n\0]/.test(host) || !Number.isInteger(port) || port < 1 || port > 65535) throw proxyError('Invalid mail server or port', 'PROXY_INVALID')
   const url = proxy instanceof URL ? proxy : parseProxyUrl(proxy)
-  if (url === undefined) throw proxyError('代理地址为空', 'PROXY_INVALID')
+  if (url === undefined) throw proxyError('Proxy address is empty', 'PROXY_INVALID')
   const timeoutMs = Math.max(1000, options.timeoutMs ?? 30000)
   const pending = url.protocol === 'http:' || url.protocol === 'https:'
     ? connectHttpProxy(url, host, port, timeoutMs, options.signal)

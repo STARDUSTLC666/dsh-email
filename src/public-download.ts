@@ -27,42 +27,42 @@ export async function requestPinnedPublic(url: URL, records: readonly PublicAddr
 /** Dependency seams are for embedders/tests; HTTP callers cannot supply them. */
 export function createPublicDownloader(dependencies: PublicDownloadDependencies = {}) {
   return async (input: string, cap: number, signal?: AbortSignal): Promise<Buffer> => {
-    if (!Number.isSafeInteger(cap) || cap < 1) throw new PublicDownloadError('DOWNLOAD_LIMIT', '下载大小上限无效 / Invalid download limit')
+    if (!Number.isSafeInteger(cap) || cap < 1) throw new PublicDownloadError('DOWNLOAD_LIMIT', 'Invalid download limit')
     const active = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(30000)])
     async function download(target: string, redirects: number): Promise<Buffer> {
       active.throwIfAborted()
       let url: URL
-      try { url = new URL(target) } catch { throw new PublicDownloadError('DOWNLOAD_URL', '图片或附件下载地址无效 / Invalid public download URL') }
+      try { url = new URL(target) } catch { throw new PublicDownloadError('DOWNLOAD_URL', 'Invalid public download URL') }
       if (url.protocol !== 'https:' || url.username || url.password || (url.port && url.port !== '443') || redirects > 2)
-        throw new PublicDownloadError('DOWNLOAD_URL', '图片或附件下载地址不受支持 / Unsupported public download URL')
+        throw new PublicDownloadError('DOWNLOAD_URL', 'Unsupported public download URL')
       const host = url.hostname.replace(/^\[|\]$/g, '')
-      if (isIP(host) && !publicAddress(host)) throw new PublicDownloadError('PUBLIC_ADDRESS_REQUIRED', '图片或附件地址必须指向公网 HTTPS 服务 / A public HTTPS destination is required')
+      if (isIP(host) && !publicAddress(host)) throw new PublicDownloadError('PUBLIC_ADDRESS_REQUIRED', 'A public HTTPS destination is required')
       const resolved = await withAbort((dependencies.resolve ?? resolvePublicAddresses)(host, active), active)
-      if (!validPublicRecords(resolved)) throw new PublicDownloadError('PUBLIC_ADDRESS_REQUIRED', '图片或附件地址必须指向公网 HTTPS 服务 / A public HTTPS destination is required')
+      if (!validPublicRecords(resolved)) throw new PublicDownloadError('PUBLIC_ADDRESS_REQUIRED', 'A public HTTPS destination is required')
       const records = resolved.map(row => Object.freeze({ address: row.address, family: row.family }))
       let response: IncomingMessage
       try { response = await (dependencies.request ?? requestPinnedPublic)(url, records, active) }
-      catch { active.throwIfAborted(); throw new PublicDownloadError('DOWNLOAD_NETWORK', '公网图片或附件连接失败，请稍后重试 / Could not connect to the public download') }
+      catch { active.throwIfAborted(); throw new PublicDownloadError('DOWNLOAD_NETWORK', 'Could not connect to the public download; retry later') }
       try {
         if ([301, 302, 303, 307, 308].includes(response.statusCode ?? 0) && response.headers.location) {
           const next = new URL(response.headers.location, url).href
           response.destroy()
           return await download(next, redirects + 1)
         }
-        if (response.statusCode !== 200) throw new PublicDownloadError('DOWNLOAD_RESPONSE', '图片或附件下载失败，请稍后重试 / Public download failed')
-        if (Number(response.headers['content-length']) > cap) throw new PublicDownloadError('DOWNLOAD_TOO_LARGE', '图片或附件超过下载大小上限 / Public download exceeds the size limit')
+        if (response.statusCode !== 200) throw new PublicDownloadError('DOWNLOAD_RESPONSE', 'Public download failed; retry later')
+        if (Number(response.headers['content-length']) > cap) throw new PublicDownloadError('DOWNLOAD_TOO_LARGE', 'Public download exceeds the size limit')
         const chunks: Buffer[] = []; let size = 0
         for await (const chunk of response) {
           active.throwIfAborted()
           const bytes = Buffer.from(chunk); size += bytes.length
-          if (size > cap) throw new PublicDownloadError('DOWNLOAD_TOO_LARGE', '图片或附件超过下载大小上限 / Public download exceeds the size limit')
+          if (size > cap) throw new PublicDownloadError('DOWNLOAD_TOO_LARGE', 'Public download exceeds the size limit')
           chunks.push(bytes)
         }
         return Buffer.concat(chunks)
       } catch (error) {
         active.throwIfAborted()
         if (error instanceof PublicDownloadError) throw error
-        throw new PublicDownloadError('DOWNLOAD_NETWORK', '公网图片或附件连接中断，请稍后重试 / Public download connection was interrupted')
+        throw new PublicDownloadError('DOWNLOAD_NETWORK', 'The public download connection was interrupted; retry later')
       } finally { response.destroy() }
     }
     return download(input, 0)

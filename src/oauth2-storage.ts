@@ -7,8 +7,8 @@ import { dirname, join } from 'node:path'
 const MAX_STORE_BYTES = 1024 * 1024
 const PROTECTION = 'windows-dpapi-current-user'
 const ENTROPY = 'dsh-email/oauth2-tokens/v2'
-const STORAGE_MESSAGE = '无法读取或解锁 OAuth2 登录数据：Windows 加密文件需原 Windows 账号；损坏或换设备时请先保留并移走 oauth2-tokens.json，再重新登录。原文件未被覆盖。'
-const ENCRYPTION_MESSAGE = '无法安全保存 OAuth2 登录数据：Windows 用户加密不可用，请检查系统 PowerShell / DPAPI 后重试。未写入明文令牌。'
+const STORAGE_MESSAGE = 'Cannot read or unlock the OAuth2 login data: the Windows-encrypted file needs the original Windows account. If it is corrupt or the device changed, keep and move oauth2-tokens.json out of the way, then sign in again. The original file was not overwritten.'
+const ENCRYPTION_MESSAGE = 'Cannot save the OAuth2 login data safely: Windows user encryption is unavailable. Check the system PowerShell / DPAPI and retry. No plaintext token was written.'
 
 export class OAuth2StorageError extends Error {}
 
@@ -80,7 +80,7 @@ export function writeOAuth2Document(file: string, doc: unknown): void {
   }
   if (isProtected(existing)) readOAuth2Document(file)
   const plaintext = JSON.stringify(doc, null, 2) + '\n'
-  if (Buffer.byteLength(plaintext) > MAX_STORE_BYTES) throw new OAuth2StorageError('OAuth2 登录数据过大，原文件未被覆盖。')
+  if (Buffer.byteLength(plaintext) > MAX_STORE_BYTES) throw new OAuth2StorageError('The OAuth2 login data is too large; the original file was not overwritten.')
   const raw = process.platform === 'win32'
     ? JSON.stringify({ version: 2, protection: PROTECTION, ciphertext: dpapi('Protect', Buffer.from(plaintext)).toString('base64') }, null, 2) + '\n'
     : plaintext

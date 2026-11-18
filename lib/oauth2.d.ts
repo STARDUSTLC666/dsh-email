@@ -15,14 +15,14 @@ export declare const ACCESS_TOKEN_MARGIN_MS: number;
 /** Every request to the authority is bounded: a hung login must not hang a mail tool. */
 export declare const OAUTH2_REQUEST_TIMEOUT_MS = 15000;
 /** The one message every「no token yet」path reports, so the fix is always the same. */
-export declare const NOT_LOGGED_IN_MESSAGE = "\u5C1A\u672A\u767B\u5F55\uFF1A\u8BF7\u5148\u5728\u8BBE\u7F6E\u9875\u5B8C\u6210\u8BBE\u5907\u7801\u767B\u5F55";
+export declare const NOT_LOGGED_IN_MESSAGE = "Not signed in: complete device-code sign-in in Settings first";
 /**
  * Reported when an OAuth2 account has nothing to log in through. The packaged
  * build carries a community registration (OUTLOOK_OAUTH2_CLIENT_ID), so this
  * only surfaces in a build that blanks it, or on an account whose own id was
  * cleared while the built-in one is gone — it still says what to type.
  */
-export declare const NO_CLIENT_ID_MESSAGE = "\u5C1A\u672A\u914D\u7F6E OAuth2 \u5E94\u7528\uFF1A\u5F53\u524D\u6784\u5EFA\u6CA1\u6709\u5185\u7F6E\u516C\u5171\u5BA2\u6237\u7AEF ID\uFF0C\u8BF7\u5728\u8BBE\u7F6E\u9875\u8BE5\u8D26\u53F7\u7684\u300C\u5E94\u7528\uFF08\u5BA2\u6237\u7AEF\uFF09ID\u300D\u91CC\u586B\u5165\u4E00\u4E2A\uFF08\u514D\u8D39\u6CE8\u518C\uFF0C\u6B65\u9AA4\u89C1 README \u7684\u300COutlook OAuth2\u300D\u4E00\u8282\uFF09\uFF0C\u5426\u5219\u65E0\u6CD5\u5F00\u59CB\u8BBE\u5907\u7801\u767B\u5F55";
+export declare const NO_CLIENT_ID_MESSAGE = "No OAuth2 app is configured: this build has no built-in public client ID. Enter one in the App (client) ID field for this account in Settings (free to register; see the Outlook OAuth2 section of the README), otherwise device-code sign-in cannot start.";
 /** Where the refresh/access tokens live. Kept out of the settings namespace on purpose. */
 export declare function oauth2TokenFile(): string;
 export interface OAuth2TokenEntry {
@@ -66,7 +66,7 @@ export interface DeviceFlowStart {
     /** Seconds until the device code itself expires. */
     expiresIn: number;
 }
-/** The Chinese guidance for an AADSTS code, or undefined when it is not mapped. */
+/** The guidance for an AADSTS code, or undefined when it is not mapped. */
 export declare function mapAadstsMessage(code: string | number): string | undefined;
 interface OAuthFailure {
     /** authorization_pending / slow_down: keep polling. */
