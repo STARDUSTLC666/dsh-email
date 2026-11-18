@@ -35,7 +35,7 @@ test('oversized HTML conversion is omitted explicitly, keeps attachments, and ne
  const content=Buffer.from([0,128,255]),html=('<script>unclosed\r\n').repeat(130000)
  const raw=Buffer.from('From: sender@example.invalid\r\nSubject: Large HTML\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=h\r\n\r\n--h\r\nContent-Type: text/html; charset=utf-8\r\n\r\n'+html+'\r\n--h\r\nContent-Type: application/octet-stream\r\nContent-Disposition: attachment; filename=data.bin\r\nContent-Transfer-Encoding: base64\r\n\r\n'+content.toString('base64')+'\r\n--h--\r\n')
  const{client}=await fixture(t,{messages:[{uid:'large-html',raw}],fragment:false,deadline:10000}),list=await client.list('default','INBOX',1,0,false)
- const read=await client.read('default',list.messages[0].uid,'INBOX');assert.equal(read.truncated,true);assert.match(read.text,/HTML 正文超过 2 MiB/);assert.equal(read.attachments.length,1)
+ const read=await client.read('default',list.messages[0].uid,'INBOX');assert.equal(read.truncated,true);assert.match(read.text,/HTML body exceeds 2 MiB/);assert.equal(read.attachments.length,1)
  const workspace=await mkdtemp(join(tmpdir(),'pop3-large-html-'));t.after(()=>rm(workspace,{recursive:true,force:true}))
  const attachment=await client.downloadAttachment('default','INBOX',list.messages[0].uid,0,workspace);assert.deepEqual(await readFile(attachment.path),content)
  assert.equal((await client.search('default','未转换为文字','INBOX',20,0)).messages.length,0)
@@ -43,14 +43,14 @@ test('oversized HTML conversion is omitted explicitly, keeps attachments, and ne
 test('deeply nested HTML is bounded and its structural omission notice is excluded from search',async t=>{
  const raw=Buffer.from('From: sender@example.invalid\r\nSubject: Nested\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>Visible prefix</p>'+'<div>'.repeat(200)+'nestedneedle'+'</div>'.repeat(200)+'\r\n')
  const{client}=await fixture(t,{messages:[{uid:'nested',raw}]}),list=await client.list('default','INBOX',1,0,false)
- const read=await client.read('default',list.messages[0].uid,'INBOX');assert.match(read.text,/Visible prefix/);assert.equal(read.truncated,true);assert.match(read.text,/HTML 结构超过转换上限/)
+ const read=await client.read('default',list.messages[0].uid,'INBOX');assert.match(read.text,/Visible prefix/);assert.equal(read.truncated,true);assert.match(read.text,/HTML structure exceeded the conversion limit/)
  assert.equal((await client.search('default','结构超过转换上限','INBOX',20,0)).messages.length,0)
 })
 test('the POP3 HTML conversion limit counts UTF-8 bytes rather than characters',async t=>{
  const html=('鲸'.repeat(1000)+'\r\n').repeat(800);assert.ok(html.length<2*1024*1024);assert.ok(Buffer.byteLength(html)>2*1024*1024)
  const raw=Buffer.from('From: sender@example.invalid\r\nSubject: UTF-8 HTML\r\nContent-Type: text/html; charset=utf-8\r\n\r\n'+html)
  const{client}=await fixture(t,{messages:[{uid:'utf8-html',raw}],fragment:false}),list=await client.list('default','INBOX',1,0,false)
- const read=await client.read('default',list.messages[0].uid,'INBOX');assert.equal(read.truncated,true);assert.match(read.text,/HTML 正文超过 2 MiB/)
+ const read=await client.read('default',list.messages[0].uid,'INBOX');assert.equal(read.truncated,true);assert.match(read.text,/HTML body exceeds 2 MiB/)
 })
 test('TLS verifies certificates and succeeds with an explicit trusted CA',async t=>{
  const{client,settings}=await fixture(t,{tls:true});assert.equal((await client.test('default')).messages,2)
@@ -63,7 +63,7 @@ test('cancel, disposal and absolute deadline close stalled sessions',async t=>{
  const{client,peer}=await fixture(t,{hang:'UIDL',deadline:2000}),controller=new AbortController(),pending=client.test('default',controller.signal)
  setTimeout(()=>controller.abort(new Error('synthetic cancel')),40);await assert.rejects(pending,/synthetic cancel/)
  const second=await fixture(t,{hang:'UIDL',deadline:150});await assert.rejects(second.client.test('default'),/aborted|timeout/i)
- const third=await fixture(t,{hang:'UIDL'}),operation=third.client.test('default');setTimeout(()=>third.client.clear(),40);await assert.rejects(operation,/关闭/)
+ const third=await fixture(t,{hang:'UIDL'}),operation=third.client.test('default');setTimeout(()=>third.client.clear(),40);await assert.rejects(operation,/was updated or closed/)
  await new Promise(r=>setTimeout(r,20));assert.equal(peer.sockets.size,0)
 })
 test('oversized advertised messages are rejected before RETR',async t=>{

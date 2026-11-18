@@ -51,8 +51,8 @@ test('damaged or unsupported protected stores cannot be mistaken for logged-out 
   for (const doc of [{ version: 2, protection: 'windows-dpapi-current-user', ciphertext: 'AAAA' }, { version: 2, protection: 'unknown', ciphertext: 'AAAA' }, { version: 3, accounts: store.accounts }]) {
     seed(doc)
     const before = readFileSync(file)
-    assert.throws(() => readTokenStore(), /原文件未被覆盖/)
-    assert.throws(() => writeTokenStore(store), /原文件未被覆盖/)
+    assert.throws(() => readTokenStore(), /The original file was not overwritten/)
+    assert.throws(() => writeTokenStore(store), /The original file was not overwritten/)
     assert.deepEqual(readFileSync(file), before)
     assert.equal(readdirSync(dirname(file)).some(name => name.endsWith('.tmp')), false)
   }
@@ -61,8 +61,8 @@ test('damaged or unsupported protected stores cannot be mistaken for logged-out 
 test('truncated protected JSON is preserved on both read and write', () => {
   writeFileSync(file, '{"version":2,"protection":"windows-dpapi-current-user","ciphertext":', 'utf8')
   const before = readFileSync(file)
-  assert.throws(() => readTokenStore(), /原文件未被覆盖/)
-  assert.throws(() => writeTokenStore(store), /原文件未被覆盖/)
+  assert.throws(() => readTokenStore(), /The original file was not overwritten/)
+  assert.throws(() => writeTokenStore(store), /The original file was not overwritten/)
   assert.deepEqual(readFileSync(file), before)
 })
 
@@ -75,8 +75,8 @@ test('tampering with actual Windows DPAPI ciphertext fails integrity checks even
   doc.ciphertext = ciphertext.toString('base64')
   writeFileSync(file, JSON.stringify(doc), 'utf8')
   const before = readFileSync(file)
-  assert.throws(() => readTokenStore(), /原文件未被覆盖/)
-  assert.throws(() => writeTokenStore(store), /原文件未被覆盖/)
+  assert.throws(() => readTokenStore(), /The original file was not overwritten/)
+  assert.throws(() => writeTokenStore(store), /The original file was not overwritten/)
   assert.deepEqual(readFileSync(file), before)
 })
 
@@ -87,8 +87,8 @@ test('unavailable Windows encryption fails without plaintext fallback or destroy
   try {
     process.env.SystemRoot = join(home, 'missing-system-root')
     process.env.WINDIR = process.env.SystemRoot
-    assert.throws(() => writeTokenStore(store), /未写入明文令牌/)
-    assert.throws(() => readTokenStore(), /未写入明文令牌/)
+    assert.throws(() => writeTokenStore(store), /No plaintext token was written/)
+    assert.throws(() => readTokenStore(), /No plaintext token was written/)
     assert.deepEqual(readFileSync(file), before)
     assert.equal(readdirSync(dirname(file)).some(name => name.endsWith('.tmp')), false)
   } finally {

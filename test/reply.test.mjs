@@ -1,4 +1,4 @@
-import test from 'node:test'
+﻿import test from 'node:test'
 import assert from 'node:assert/strict'
 import { buildReplyMessage, extractMessageIds, MailError } from '../lib/index.js'
 
@@ -60,7 +60,7 @@ test('subject prefixes never stack', () => {
 test('forward needs an explicit recipient and embeds the original', () => {
   assert.throws(
     () => buildReplyMessage(original, 'forward', 'me@qq.com', 'x', ''),
-    err => err instanceof MailError && /to 参数/.test(err.message),
+    err => err instanceof MailError && /needs the to parameter/.test(err.message),
   )
   const built = buildReplyMessage(original, 'forward', 'me@qq.com', '看一下这个', 'boss@corp.com', {locale:'zh'})
   assert.equal(built.to, 'boss@corp.com')

@@ -1,4 +1,4 @@
-import test from 'node:test'
+﻿import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -83,34 +83,34 @@ test('every tool returns a config hint instead of throwing when unconfigured', a
   const ctx = fakeCtx()
   apply(ctx, {})
   const list = ctx.tools.defs.find(def => def.name === 'email_list')
-  await assert.rejects(() => list.execute({}), /邮件账号配置不完整/)
+  await assert.rejects(() => list.execute({}), /Mailbox account configuration is incomplete/)
   const folders = ctx.tools.defs.find(def => def.name === 'email_folders')
-  await assert.rejects(() => folders.execute({}), /邮件账号配置不完整/)
+  await assert.rejects(() => folders.execute({}), /Mailbox account configuration is incomplete/)
   const watch = ctx.tools.defs.find(def => def.name === 'email_watch')
-  await assert.rejects(() => watch.execute({}), /邮件账号配置不完整/)
+  await assert.rejects(() => watch.execute({}), /Mailbox account configuration is incomplete/)
   const mark = ctx.tools.defs.find(def => def.name === 'email_mark')
-  await assert.rejects(() => mark.execute({ uid: 1, action: 'read' }), /邮件账号配置不完整/)
+  await assert.rejects(() => mark.execute({ uid: 1, action: 'read' }), /Mailbox account configuration is incomplete/)
 })
 
 test('execute validates args without touching the network', async () => {
   const ctx = fakeCtx()
   apply(ctx, QQ)
   const read = ctx.tools.defs.find(def => def.name === 'email_read')
-  await assert.rejects(() => read.execute({ uid: -1 }), /uid 必须是正整数/)
+  await assert.rejects(() => read.execute({ uid: -1 }), /uid must be a positive integer/)
   const search = ctx.tools.defs.find(def => def.name === 'email_search')
-  await assert.rejects(() => search.execute({ query: '  ' }), /query 不能为空/)
+  await assert.rejects(() => search.execute({ query: '  ' }), /query must not be empty/)
   const attach = ctx.tools.defs.find(def => def.name === 'email_attachment')
-  await assert.rejects(() => attach.execute({ uid: 0 }), /uid 必须是正整数/)
+  await assert.rejects(() => attach.execute({ uid: 0 }), /uid must be a positive integer/)
   const mark = ctx.tools.defs.find(def => def.name === 'email_mark')
-  await assert.rejects(() => mark.execute({ uid: 0, action: 'read' }), /uid 必须是正整数/)
-  await assert.rejects(() => mark.execute({ uid: 3, action: 'burn' }), /action 必须是/)
+  await assert.rejects(() => mark.execute({ uid: 0, action: 'read' }), /uid must be a positive integer/)
+  await assert.rejects(() => mark.execute({ uid: 3, action: 'burn' }), /action must be one of/)
   await assert.rejects(() => mark.execute({ uid: 3, action: 'move' }), /toFolder/)
   await assert.rejects(() => mark.execute({ uid: 3, action: 'move', toFolder: '  ' }), /toFolder/)
   const reply = ctx.tools.defs.find(def => def.name === 'email_reply')
-  await assert.rejects(() => reply.execute({ uid: 0, text: 'hi' }), /uid 必须是正整数/)
-  await assert.rejects(() => reply.execute({ uid: 3, text: '   ' }), /text 或 html/)
-  await assert.rejects(() => reply.execute({ uid: 3, text: 'hi', mode: 'broadcast' }), /mode 必须是/)
-  await assert.rejects(() => reply.execute({ uid: 3, text: 'hi', mode: 'forward' }), /to 参数/)
+  await assert.rejects(() => reply.execute({ uid: 0, text: 'hi' }), /uid must be a positive integer/)
+  await assert.rejects(() => reply.execute({ uid: 3, text: '   ' }), /Provide a text or html body/)
+  await assert.rejects(() => reply.execute({ uid: 3, text: 'hi', mode: 'broadcast' }), /mode must be one of/)
+  await assert.rejects(() => reply.execute({ uid: 3, text: 'hi', mode: 'forward' }), /needs the to parameter/)
 })
 
 test('email_send runs the approval round-trip with recipient, subject and attachment count', async () => {
@@ -128,7 +128,7 @@ test('email_send runs the approval round-trip with recipient, subject and attach
   assert.equal(out, 'PASSED-THROUGH')
   assert.equal(seen.length, 1)
   assert.equal(seen[0].toolName, 'email_send')
-  assert.equal(seen[0].reason, '发送邮件给 boss@corp.com，主题「周报」，附件 2 个')
+  assert.equal(seen[0].reason, 'Send email to boss@corp.com, subject "周报", attachments: 2')
 })
 
 test('other tools pass through the gate untouched', async () => {
@@ -154,7 +154,7 @@ test('email_reply goes through the same approval gate with actual recipients and
   )
   assert.equal(out, 'PASSED-THROUGH')
   assert.equal(seen.length, 1)
-  assert.match(seen[0].reason, /转发邮件.*账号 default.*收件人 boss@corp.com.*fixture/)
+  assert.match(seen[0].reason, /Forward email.*account default.*to boss@corp.com.*fixture/)
   const denied = await gate.fn(
     { name: 'email_reply', arguments: { uid: 7, text: 'x' } },
     async () => 'PASSED-THROUGH',
@@ -203,15 +203,15 @@ test('validateAttachmentPaths stats files and enforces the total cap', async () 
     assert.equal(ok.length, 2)
     await assert.rejects(
       () => validateAttachmentPaths([join(dir, 'a.txt'), join(dir, 'b.bin')], 10),
-      err => err instanceof MailError && /总大小超过上限/.test(err.message),
+      err => err instanceof MailError && /Total attachment size exceeds the limit/.test(err.message),
     )
     await assert.rejects(
       () => validateAttachmentPaths([join(dir, 'missing.txt')], 1000),
-      err => err instanceof MailError && /不存在或不可读/.test(err.message),
+      err => err instanceof MailError && /does not exist or cannot be read/.test(err.message),
     )
       await assert.rejects(
         () => validateAttachmentPaths([42], 1000),
-        err => err instanceof MailError && /附件路径无效/.test(err.message),
+        err => err instanceof MailError && /Invalid attachment path/.test(err.message),
       )
   } finally {
     await rm(dir, { recursive: true, force: true })
@@ -229,7 +229,7 @@ test('approval "rejected" denies with an actionable message covering Full Access
   )
   assert.equal(decision.kind, 'deny')
   assert.match(decision.reason, /Full Access/)
-  assert.match(decision.reason, /草稿页.*手动发送/)
+  assert.match(decision.reason, /send manually from the Drafts page/)
 })
 
 test('reply denial explains the default-off trusted reply switch and offers Drafts', async t => {
@@ -240,8 +240,8 @@ test('reply denial explains the default-off trusted reply switch and offers Draf
   const gate = ctx.listeners.find(l => l.event === 'tools/pre-execute')
   const decision = await gate.fn({ name: 'email_reply', arguments: { uid: 1, text: 'fixture reply' } }, async () => assert.fail('must stay denied'))
   assert.equal(decision.kind, 'deny')
-  assert.match(decision.reason, /可信回复免审默认关闭/)
-  assert.match(decision.reason, /草稿页/)
+  assert.match(decision.reason, /Trusted-reply skip is off by default/)
+  assert.match(decision.reason, /Drafts page/)
 })
 
 test('approval "allowed-once" proceeds to the tool', async () => {
@@ -269,7 +269,7 @@ test('no approval channel denies with the headless hint', async () => {
   const gate = ctx.listeners.find(l => l.event === 'tools/pre-execute')
   const decision = await gate.fn({ name: 'email_send', arguments: { to: 'x@y.z', subject: 's' } }, async () => 'PASSED-THROUGH')
   assert.equal(decision.kind, 'deny')
-  assert.match(decision.reason, /headless|审批通道/)
+  assert.match(decision.reason, /headless|approval channel/)
 })
 
 

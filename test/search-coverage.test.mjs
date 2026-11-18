@@ -42,7 +42,7 @@ test('QQ empty SEARCH still finds header matches beyond the last 30 and 71 impor
     assert.equal(result.headerScan.scanned, 2268)
     assert.equal(result.headerScan.complete, true)
     assert.equal(result.headerScan.mailboxTotal, 2268)
-    assert.match(renderSearch(result)[0].text, /信封/)
+    assert.match(renderSearch(result)[0].text, /scanned envelopes/)
     assert.equal(result.bodyScan, undefined)
   }
   assert.ok(calls.filter(call => typeof call.range === 'string').length > 1, 'headers must be fetched in bounded batches')
@@ -57,7 +57,7 @@ test('bounded local search returns a continuation and never calls an unsearched 
   assert.equal(first.messages.length, 0)
   assert.equal(first.headerScan.complete, false)
   assert.equal(first.headerScan.nextScanOffset, 30)
-  assert.match(renderSearch(first)[0].text, /未覆盖全文件夹|未扫描完/)
+  assert.match(renderSearch(first)[0].text, /does not prove the whole mailbox has none/)
   const older = await pool.search(undefined, 'Needle', 'INBOX', 10, 0, undefined, undefined, undefined, { headerScanLimit: 30, headerScanOffset: 60 })
   assert.deepEqual(older.messages.map(message => message.uid), [127])
   assert.equal(older.headerScan.scanOffset, 60)

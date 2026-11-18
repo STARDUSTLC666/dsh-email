@@ -57,5 +57,5 @@ test('0.1.7 reads live Config references and writes the owning entry without res
   await backend.save({ accountsYaml: '' }, 6)
   assert.equal((await backend.snapshot()).accountsDetail.list.length, 0)
   assert.equal(value.password, '')
-  assert.throws(() => runtime.getEffectiveSettings(), /未配置|user|账号/)
+  assert.throws(() => runtime.getEffectiveSettings(), /configuration is incomplete|user/)
 })

@@ -21,7 +21,7 @@ function imap(uids = [1, 2]) {
 test('folder path and server special-use/ancestor protection apply below UI and tools', () => {
   for (const path of ['', ' ', 'a\r\nb', 'a\0b', 'a\tb', 'a'.repeat(1025)]) assert.throws(() => folderPath(path))
   const rows = [{ path: '[Gmail]', delimiter: '/' }, { path: '[Gmail]/Archive', specialUse: '\\All', delimiter: '/' }, { path: 'Custom' }]
-  for (const path of ['[Gmail]', '[Gmail]/Archive']) assert.throws(() => assertCustomFolder(path, rows), /protected/)
+  for (const path of ['[Gmail]', '[Gmail]/Archive']) assert.throws(() => assertCustomFolder(path, rows), /System folders and their parents cannot be renamed/)
   assertCustomFolder('Custom', rows)
   assert.throws(() => assertCustomFolder('Unknown', rows), /no longer exists/)
 })
@@ -43,7 +43,7 @@ test('changed UIDVALIDITY, cancellation and uncertain server results fail closed
   const ctrl = new AbortController(); ctrl.abort()
   await assert.rejects(previewFolderMutation(f.client, 'default', 'Work', 'purge', ctrl.signal), { name: 'AbortError' })
   f.client.mailbox.uidValidity = 12n; f.client.messageDelete = async () => false
-  await assert.rejects(purgeConfirmedFolder(f.client, preview), /outcome uncertain/)
+  await assert.rejects(purgeConfirmedFolder(f.client, preview), /Purge outcome is uncertain/)
 })
 test('only an empty leaf custom folder can be deleted; no implicit CLOSE expunge', async () => {
   const nonempty = imap()
@@ -58,7 +58,7 @@ test('only an empty leaf custom folder can be deleted; no implicit CLOSE expunge
 })
 test('POP3/AgentMail default accounts cannot fall through to IMAP mutations', async () => {
   const service = new EmailService(resolveEmailSettings({ accounts: { api: { provider: 'agentmail', apiKey: 'fixture-key', user: 'fixture@agentmail.to' } }, defaultAccount: 'api' }))
-  await assert.rejects(async () => service.createFolder('', 'Work'), /only available for IMAP/)
+  await assert.rejects(async () => service.createFolder('', 'Work'), /available for IMAP accounts only/)
   service.dispose()
 })
 function runtimeFixture() {

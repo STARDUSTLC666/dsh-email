@@ -47,7 +47,7 @@ test('refresh is single-flight, issuer-bound, preserves transient failures and c
  assert.deepEqual(await Promise.all([s.auth.accessToken('gmail',cfg),s.auth.accessToken('gmail',cfg)]),['new-access','new-access']);assert.equal(count,1)
  mode='transient';await assert.rejects(s.auth.accessToken('gmail',cfg,true),/stored login was kept/);assert.ok(s.store().accounts.gmail)
  mode='revoked';await assert.rejects(s.auth.accessToken('gmail',cfg,true),/sign in again/);assert.equal(s.store().accounts.gmail,undefined);assert.ok(s.store().accounts.other)
- s.set({version:1,accounts:{gmail:{...entry,provider:'microsoft'}}});await assert.rejects(s.auth.accessToken('gmail',cfg),/Sign in/)
+ s.set({version:1,accounts:{gmail:{...entry,provider:'microsoft'}}});await assert.rejects(s.auth.accessToken('gmail',cfg),/sign in again in Settings/)
 })
 
 test('logout during refresh cannot resurrect token data; malformed callback never consumes valid flow',async t=>{

@@ -46,9 +46,9 @@ test('missing mail credentials direct the settings user to the visible field and
   const { post } = mount(t, { config: {}, value: { provider: 'qq', user: 'ui-test@example.com', password: '' } })
   const result = await post({ action: 'test', value: { ...BASE, user: 'ui-test@example.com', password: '' } })
   assert.equal(result.body.ok, false)
-  assert.match(result.body.error.message, /授权码.*未填写/)
-  assert.match(result.body.error.message, /设置.*邮件/)
-  assert.doesNotMatch(result.body.error.message, /cordis\.patch|重启|tool-email/)
+  assert.match(result.body.error.message, /has no app password/)
+  assert.match(result.body.error.message, /Settings → Email/)
+  assert.doesNotMatch(result.body.error.message, /cordis\.patch|restart|tool-email/)
 })
 
 test('testing one account ignores incomplete neighboring account drafts', async t => {
@@ -70,8 +70,8 @@ test('the selected card reports its own missing password without using the envir
   const yaml = 'first: { provider: qq, user: first@example.com }\nsecond: { provider: qq, user: second@example.com }\n'
   const result = await post({ action: 'test', account: 'second', value: { ...BASE, accountsYaml: yaml, password: '' } })
   assert.equal(result.body.ok, false)
-  assert.match(result.body.error.message, /账号 "second".*授权码/)
-  assert.doesNotMatch(result.body.error.message, /账号 "first"/)
+  assert.match(result.body.error.message, /Account "second".*app password/)
+  assert.doesNotMatch(result.body.error.message, /Account "first"/)
 })
 
 /**
@@ -223,7 +223,7 @@ test('snapshot carries accountsDetail (raw/list/defaultAccount) and the builtin 
 
   // Two accounts with no defaultAccount: the snapshot reports it, list still built.
   assert.equal(value.accountsDetail.list.length, 2)
-  assert.match(value.accountsDetail.error, /请设置 defaultAccount/)
+  assert.match(value.accountsDetail.error, /set defaultAccount to choose the default/)
   const work = value.accountsDetail.list.find(card => card.name === 'work')
   assert.equal(work.provider, 'qq')
   assert.equal(work.user, 'w@qq.com')
@@ -272,7 +272,7 @@ test('snapshot exposes custom serverPresets and survives a broken preset list', 
   const broken = mount(t, { value: { accountsYaml: 'work: { user: w@corp.example }\n', serverPresets: 'corp: [unclosed' } })
   const degraded = (await broken.get()).body.value
   assert.deepEqual(degraded.presets.custom, {})
-  assert.match(degraded.presets.error, /不是合法的 YAML/)
+  assert.match(degraded.presets.error, /is not valid YAML/)
   assert.equal(degraded.presets.builtin.qq.imap.host, 'imap.qq.com', 'builtins survive a broken custom list')
   assert.equal(degraded.accountsDetail.list.length, 1, 'cards keep rendering so the user can fix the YAML')
 })
@@ -346,13 +346,13 @@ test('parseAccounts: valid YAML returns ok + list, and never 500s', async t => {
   assert.equal(body.value.list[0].imap.host, 'imap.qq.com')
 })
 
-test('parseAccounts: invalid YAML returns 200 with ok:false, a Chinese error and an empty list', async t => {
+test('parseAccounts: invalid YAML returns 200 with ok:false, an english error and an empty list', async t => {
   const { post } = mount(t)
   const { status, body } = await post({ action: 'parseAccounts', value: { accountsYaml: 'work: [unclosed' } })
   assert.equal(status, 200, 'a half-typed draft is a normal state, not an HTTP error')
   assert.equal(body.ok, true)
   assert.equal(body.value.ok, false)
-  assert.match(body.value.error, /不是合法的 YAML/)
+  assert.match(body.value.error, /is not valid YAML/)
   assert.deepEqual(body.value.list, [])
 })
 
@@ -361,7 +361,7 @@ test('parseAccounts: a non-object document is reported, not thrown', async t => 
   const { status, body } = await post({ action: 'parseAccounts', value: { accountsYaml: '- a\n- b\n' } })
   assert.equal(status, 200)
   assert.equal(body.value.ok, false)
-  assert.match(body.value.error, /对象映射/)
+  assert.match(body.value.error, /must be an object map/)
 })
 
 test('parseAccounts: a half-filled account still appears in the list', async t => {
@@ -397,7 +397,7 @@ test('parseAccounts: multiple accounts without defaultAccount reports the adjudi
   const yaml = 'a: { provider: qq, user: a@x.y }\nb: { provider: qq, user: b@x.y }\n'
   const { body } = await post({ action: 'parseAccounts', value: { accountsYaml: yaml } })
   assert.equal(body.value.ok, false)
-  assert.match(body.value.error, /请设置 defaultAccount/)
+  assert.match(body.value.error, /set defaultAccount to choose the default/)
   assert.equal(body.value.list.length, 2, 'both cards are still returned so the user can pick one')
 })
 
@@ -455,7 +455,7 @@ test('serializeAccounts: a custom-server card writes its endpoints and keeps unk
     }],
   })
   const out = body.value.accountsYaml
-  assert.equal(/provider/.test(out), false, 'provider "" would resolve as 「provider "" 未知」')
+  assert.equal(/provider/.test(out), false, 'provider "" would resolve as an unknown provider')
   assert.match(out, /socketTimeoutMs: 9000/, 'an advanced key must survive in place')
   // A provider-less account is the custom-server case: the card is the editor
   // for its endpoints, so the posted values are what gets stored.
@@ -705,7 +705,7 @@ test('serializeAccounts rejects a malformed card list with 400, not a corrupted 
     const { status, body } = await post({ action: 'serializeAccounts', accountsYaml: '', accounts })
     assert.equal(status, 400, `input ${JSON.stringify(accounts)} must be rejected`)
     assert.equal(body.ok, false)
-    assert.match(body.error.message, /账号|name|数组|对象/)
+    assert.match(body.error.message, /name|object/)
   }
   const reserved = await post({ action: 'serializeAccounts', accountsYaml: '', accounts: [{ name: 'defaultAccount' }] })
   assert.equal(reserved.status, 400)
@@ -723,7 +723,7 @@ test('test action: an unknown account name is a 400 that lists the available acc
   })
   assert.equal(status, 400)
   assert.equal(body.ok, false)
-  assert.match(body.error.message, /未知账号 "nope"/)
+  assert.match(body.error.message, /Unknown account "nope"/)
   assert.match(body.error.message, /work/)
   assert.match(body.error.message, /home/)
 })
@@ -739,7 +739,7 @@ test('test action: the requested account is validated before any connection is a
     value: { ...BASE, accountsYaml: 'solo: { provider: qq, user: s@qq.com, password: ps }\n' },
   })
   assert.equal(status, 400)
-  assert.match(body.error.message, /未知账号 "ghost"/)
+  assert.match(body.error.message, /Unknown account "ghost"/)
   assert.match(body.error.message, /solo/)
 })
 
@@ -875,13 +875,13 @@ test('a genuinely unknown provider still fails loud, with the value JSON-quoted'
 
   const word = await post({ action: 'test', account: 'work', value: value('hotdog') })
   assert.equal(word.status, 400)
-  assert.match(word.body.error.message, /未知的邮箱服务商 "hotdog"/, 'a string is still quoted')
+  assert.match(word.body.error.message, /Unknown mail provider "hotdog"/, 'a string is still quoted')
 
   // A non-string is reported as its JSON form, never concatenated into the sentence.
   const numbered = await post({ action: 'test', account: 'work', value: value(123) })
   assert.equal(numbered.status, 400)
-  assert.match(numbered.body.error.message, /未知的邮箱服务商 123/)
-  assert.equal(/服务商"?undefined/.test(numbered.body.error.message), false)
+  assert.match(numbered.body.error.message, /Unknown mail provider 123/)
+  assert.equal(/provider"?\s*undefined/.test(numbered.body.error.message), false)
 
   const empty = await post({ action: 'test', account: 'work', value: value('') })
   assert.equal(empty.status, 200, 'provider "" is 「自定义服务器」, not an unknown provider')
@@ -906,9 +906,9 @@ test('unset is unset: validateSettingsValue tolerates it and toEmailConfig omits
   }
   assert.doesNotThrow(() => validateSettingsValue({ ...BASE, imap: null }), 'a missing endpoint is not a port violation')
   assert.doesNotThrow(() => validateSettingsValue({ accountsYaml: NO_PROVIDER_VALUE }), 'a partial draft is a legal draft')
-  assert.throws(() => validateSettingsValue({ ...BASE, provider: 'hotdog' }), /未知的邮箱服务商 "hotdog"/)
-  assert.throws(() => validateSettingsValue({ ...BASE, provider: 123 }), /未知的邮箱服务商 123/)
-  assert.throws(() => validateSettingsValue({ ...BASE, imap: { ...BASE.imap, port: 0 } }), /IMAP 端口必须在 1-65535 之间/)
+  assert.throws(() => validateSettingsValue({ ...BASE, provider: 'hotdog' }), /Unknown mail provider "hotdog"/)
+  assert.throws(() => validateSettingsValue({ ...BASE, provider: 123 }), /Unknown mail provider 123/)
+  assert.throws(() => validateSettingsValue({ ...BASE, imap: { ...BASE.imap, port: 0 } }), /IMAP port must be between 1 and 65535/)
 
   // The projection is what actually spreads over the row config, so an absent
   // field must not appear as a key at all — `{...row, ...{provider: undefined}}`
@@ -1183,7 +1183,7 @@ test('serializeAccounts: only an own key of the provider table is ever persisted
   assert.equal('provider' in parseAccountsYaml(out).map.weird, false)
   // With no provider and no stored endpoint there is nothing left to resolve —
   // and that is the honest outcome: the card named no provider the table knows.
-  assert.throws(() => resolveEmailSettings({ accountsYaml: out }), /imap\.host 未填写/)
+  assert.throws(() => resolveEmailSettings({ accountsYaml: out }), /has no imap\.host/)
 })
 
 test('serializeAccounts keeps a hand-written custom provider as the provider id', async t => {
@@ -1462,7 +1462,7 @@ test('a preset deleted after saving makes the error name the built-ins and the r
   } catch (error) {
     message = error.message
   }
-  assert.match(message, /账号 "work" 的 provider "corp" 未知/)
+  assert.match(message, /account "work" has unknown provider "corp"/)
   for (const name of [...PROVIDER_NAMES, 'home']) assert.equal(message.includes(name), true, `must name ${name}`)
 })
 
@@ -1505,7 +1505,7 @@ test('save action: a value naming a custom preset in effect is accepted', async 
   const strict = mount(t, { revision: 7 })
   const rejected = await strict.post({ action: 'save', expectedRevision: 7, value: { ...BASE, provider: 'corp' } })
   assert.equal(rejected.status, 400)
-  assert.match(rejected.body.error.message, /未知的邮箱服务商 "corp"/)
+  assert.match(rejected.body.error.message, /Unknown mail provider "corp"/)
 })
 
 test('a provider-less custom-server account keeps its hand-written endpoints on save', async t => {
@@ -1642,7 +1642,7 @@ test('oauthLogin: a failure is a flat { ok:false, message }, never an HTTP error
   const { status, body } = await post({ action: 'oauthLogin', account: 'work' })
   assert.equal(status, 200, 'the page reads the message off the body, so this must not be an HTTP failure')
   assert.equal(body.ok, false)
-  assert.match(body.message, /允许公共客户端流/)
+  assert.match(body.message, /must allow public client flows/)
   assert.equal(body.status, undefined, 'there is no state to describe a login that never started')
 })
 
@@ -1653,18 +1653,18 @@ test('oauthLogin/oauthPoll: an unknown, missing or non-OAuth account is refused 
   const unknown = await post({ action: 'oauthLogin', account: 'nope' })
   assert.equal(unknown.status, 200)
   assert.equal(unknown.body.ok, false)
-  assert.match(unknown.body.message, /未知账号 "nope"/)
+  assert.match(unknown.body.message, /Unknown account "nope"/)
   assert.match(unknown.body.message, /work/, 'the message names what would have worked')
 
   const missing = await post({ action: 'oauthLogin', account: '   ' })
   assert.equal(missing.body.ok, false)
-  assert.match(missing.body.message, /account 参数/)
+  assert.match(missing.body.message, /needs the account parameter/)
 
   // A password account has no device code to hand out: reaching this means the
   // page is stale or the provider was just changed.
   const password = await post({ action: 'oauthLogin', account: 'home' })
   assert.equal(password.body.ok, false)
-  assert.match(password.body.message, /未选择 OAuth2/)
+  assert.match(password.body.message, /does not use OAuth2/)
   assert.match(password.body.message, /OAuth2/)
 })
 
@@ -1697,10 +1697,10 @@ test('oauthPoll: pending / ok / failure follow the frozen contract', async t => 
   await post({ action: 'oauthLogin', account: 'work' })
   const expired = await post({ action: 'oauthPoll', account: 'work' })
   assert.equal(expired.body.ok, false)
-  assert.match(expired.body.message, /设备码超时/)
+  assert.match(expired.body.message, /Device code timed out/)
   const after = await post({ action: 'oauthPoll', account: 'work' })
   assert.equal(after.body.ok, false)
-  assert.match(after.body.message, /尚未发起设备码登录/)
+  assert.match(after.body.message, /Device-code sign-in has not started/)
 })
 
 test('the card carries authKind/oauthState/oauthUser for an OAuth2 account', async t => {
@@ -1723,7 +1723,7 @@ test('the card carries authKind/oauthState/oauthUser for an OAuth2 account', asy
   assert.equal(loggedIn.oauthUser, 'w@outlook.com')
 })
 
-test('editing the address of a logged-in OAuth2 account makes the card say 未登录 again', async t => {
+test('editing the address of a logged-in OAuth2 account makes the card say not signed in again', async t => {
   clearTokens()
   storeToken('work')
   // The token belongs to w@outlook.com; the user has just retyped the address.
@@ -1900,8 +1900,8 @@ test('test action: an OAuth2 account with no token says to log in and never dial
   const { status, body } = await post({ action: 'test', account: 'work', value: { ...BASE, accountsYaml: OUTLOOK_YAML } })
   assert.equal(status, 400)
   assert.equal(body.ok, false)
-  assert.match(body.error.message, /尚未登录/)
-  assert.match(body.error.message, /设置页/)
+  assert.match(body.error.message, /Not signed in/)
+  assert.match(body.error.message, /Settings/)
   assert.equal(calls.length, 0, 'no token is a local fact, not a server round trip')
 })
 

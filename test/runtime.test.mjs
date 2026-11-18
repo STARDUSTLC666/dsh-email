@@ -97,7 +97,7 @@ test('live settings reuse the current pool, replace it on changes, and release i
   runtime.dispose()
   assert.equal(first.disposals, 1)
   assert.equal(second.disposals, 1)
-  assert.throws(() => runtime.getPool(), /已卸载/)
+  assert.throws(() => runtime.getPool(), /is unloaded/)
   assert.equal(state.pools.length, 2)
 })
 
@@ -258,7 +258,7 @@ test('a preset edit that an account does reference does reconnect it', (t) => {
 test('validateSettingsValue accepts the custom preset names in effect', async (t) => {
   const { validateSettingsValue } = await import('../lib/settings.js')
   const value = { ...account, provider: 'corp', serverPresets: CORP }
-  assert.throws(() => validateSettingsValue(value), /未知的邮箱服务商 "corp"/, 'without the table it is unknown')
+  assert.throws(() => validateSettingsValue(value), /Unknown mail provider "corp"/, 'without the table it is unknown')
   assert.doesNotThrow(() => validateSettingsValue(value, ['corp']))
   // The message still names everything that would be accepted.
   assert.throws(() => validateSettingsValue({ ...account, provider: 'nope' }, ['corp']), /corp/)

@@ -38,11 +38,11 @@ test('POP3 reply-all preserves Cc on the SMTP message', async t => {
 test('POP3 blocked recipients still stop SMTP and a disappeared original blocks a reply draft',async t=>{
  const{service,smtp,pop,uid}=await fixture(t,{trustedRecipientsYaml:'default:\n  denyAddresses: [sender@example.invalid]\n'})
  await assert.rejects(service.reply(undefined,'INBOX',uid,'reply','blocked','',undefined),/禁止|blocked/i);assert.equal(smtp.messages.length,0)
- pop.messages.length=0;await assert.rejects(service.sendPrepared('default','sender@example.invalid','Reply','text','',[],undefined,{uid,folder:'INBOX'}),/原邮件已不存在/)
+ pop.messages.length=0;await assert.rejects(service.sendPrepared('default','sender@example.invalid','Reply','text','',[],undefined,{uid,folder:'INBOX'}),/The original POP3 message no longer exists/)
 })
 test('receive-only POP3 configuration keeps mail readable and reports SMTP setup before sending',async t=>{
  const{service,smtp}=await fixture(t,{smtp:{}})
- await assert.rejects(service.sendPrepared('default','someone@example.invalid','Subject','body','',[]),/SMTP.*草稿仍保留/);assert.equal(smtp.messages.length,0)
+ await assert.rejects(service.sendPrepared('default','someone@example.invalid','Subject','body','',[]),/no SMTP sending server.*The draft is kept/);assert.equal(smtp.messages.length,0)
 })
 test('missing SMTP is caught at preview, keeping a receive-only account draft editable',async t=>{
  const settings=resolveEmailSettings({receiveProtocol:'pop3',user:'user@example.invalid',password:'fixture-secret',pop3:{host:'pop.example.invalid'}}),root=await mkdtemp(join(tmpdir(),'pop3-draft-'))

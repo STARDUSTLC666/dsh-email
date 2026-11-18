@@ -72,7 +72,7 @@ test('cancelling an active SMTP connection stops the local delivery', async t =>
   const pending = pool.send(undefined, 'recipient@example.com', 'fixture', 'local only', undefined, [], controller.signal)
   await connected
   controller.abort(reason)
-  await assert.rejects(pending, /SMTP发送已取消/)
+  await assert.rejects(pending, /SMTP send cancelled/)
   await Promise.race([socketClosed, new Promise((_, reject) => setTimeout(() => reject(new Error('SMTP socket remained open')), 1000))])
   assert.equal(socket.destroyed, true, 'cancelled SMTP socket must be closed')
 })

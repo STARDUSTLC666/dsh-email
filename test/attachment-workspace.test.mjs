@@ -61,6 +61,6 @@ test('absolute attachment paths remain exact and calls without a session retain 
 test('email_send rejects attachments above the combined cap before SMTP delivery', async t => {
   const x = await setup(t)
   await writeFile(join(x.workspace, 'large.txt'), Buffer.alloc(1024))
-  await assert.rejects(x.send.execute({ ...x.input, attachments: ['report.txt', 'large.txt'] }, x.exec), /附件总大小超过上限/)
+  await assert.rejects(x.send.execute({ ...x.input, attachments: ['report.txt', 'large.txt'] }, x.exec), /Total attachment size exceeds the limit/)
   assert.deepEqual(await x.delivered(), [])
 })

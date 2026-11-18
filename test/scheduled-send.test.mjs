@@ -26,11 +26,11 @@ test('scheduled delivery uses fixed attachment bytes and competing processes sub
 test('cancel, account edits and attachment tampering stop a schedule before submission',async t=>{
  const f=await fixture(t),cancel=await f.queue();await f.backend.action({action:'cancelSchedule',id:cancel.id,revision:cancel.revision});f.tick(60000);await f.backend.runScheduled();assert.equal(f.sends.length,0)
  const changed=await f.queue();f.config.user='other@example.test';f.tick(60000);await f.backend.runScheduled();assert.equal(f.sends.length,0);assert.equal((await f.backend.store.get(changed.id)).state,'draft')
- const file=join(f.home,'a.txt');await writeFile(file,'fixed');const tampered=await f.queue({attachments:[file]}),stored=await f.backend.store.get(tampered.id);await writeFile(stored.attachments[0].path,'tampered');f.tick(60000);await f.backend.runScheduled();assert.equal(f.sends.length,0);assert.match((await f.backend.store.get(tampered.id)).error,/附件/)
+ const file=join(f.home,'a.txt');await writeFile(file,'fixed');const tampered=await f.queue({attachments:[file]}),stored=await f.backend.store.get(tampered.id);await writeFile(stored.attachments[0].path,'tampered');f.tick(60000);await f.backend.runScheduled();assert.equal(f.sends.length,0);assert.match((await f.backend.store.get(tampered.id)).error,/scheduled attachment changed/)
 })
 test('a missed time while closed returns to draft and never sends on startup',async t=>{
  const f=await fixture(t),d=await f.queue();f.tick(60001);await f.backend.startScheduler()
- assert.equal(f.sends.length,0);const current=await f.backend.store.get(d.id);assert.equal(current.state,'draft');assert.match(current.error,/错过/)
+ assert.equal(f.sends.length,0);const current=await f.backend.store.get(d.id);assert.equal(current.state,'draft');assert.match(current.error,/DSH was closed during the scheduled time/)
 })
 test('an uncertain scheduled submission is persisted and never automatically retried',async t=>{
  const f=await fixture(t);f.runtime.getPool=()=>({sendPrepared:async()=>{f.sends.push('attempt');throw Error('connection closed without receipt')}})
@@ -40,9 +40,9 @@ test('schedule tool requires a one-use approval tied to the exact draft preview'
  const f=await fixture(t),draft=await f.backend.create({to:'target@example.test',subject:'Tool fixture',text:'Body'})
  let gate,decision='rejected';installScheduleApproval({on(_name,fn){gate=fn},get(){return{request:async()=>decision}}},f.backend)
  const tool=scheduleTool(f.backend),args=Object.freeze({action:'schedule',id:draft.id,sendAt:new Date(Date.now()+120000).toISOString()}),exec={name:'email_schedule',arguments:args}
- assert.equal((await gate(exec,async()=>({kind:'allow'}))).kind,'deny');await assert.rejects(tool.execute(args,exec),/确认/)
+ assert.equal((await gate(exec,async()=>({kind:'allow'}))).kind,'deny');await assert.rejects(tool.execute(args,exec),/Scheduling was not confirmed/)
  decision='allowed-once';assert.equal((await gate(exec,async()=>({kind:'allow'}))).kind,'allow');assert.equal((await tool.execute(args,exec)).draft.state,'scheduled')
- await assert.rejects(tool.execute(args,exec),/确认/);assert.equal(f.sends.length,0)
+ await assert.rejects(tool.execute(args,exec),/Scheduling was not confirmed/);assert.equal(f.sends.length,0)
 })
 test('ambiguous, invalid and immediate schedule times are rejected',()=>{
  for(const value of ['2026-11-06T09:00','2026-02-31T09:00:00Z','tomorrow','2026-11-06T09:00:00+99:99'])assert.throws(()=>scheduledTime(value))
@@ -50,5 +50,5 @@ test('ambiguous, invalid and immediate schedule times are rejected',()=>{
 })
 test('a proposed future time cannot accidentally be submitted as immediate mail',async t=>{
  const f=await fixture(t),d=await f.backend.create({to:'target@example.test',subject:'Future',text:'Body',sendAt:new Date(f.now()+60000).toISOString()}),p=await f.backend.action({action:'preview',id:d.id,revision:d.revision})
- await assert.rejects(f.backend.action({action:'send',id:d.id,preview:p.id,confirmed:true}),/定时时间/);assert.equal(f.sends.length,0)
+ await assert.rejects(f.backend.action({action:'send',id:d.id,preview:p.id,confirmed:true}),/has a scheduled time/);assert.equal(f.sends.length,0)
 })

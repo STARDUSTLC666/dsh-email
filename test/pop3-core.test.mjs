@@ -26,10 +26,10 @@ test('real fragmented POP3 list/read preserves dot-stuffing and opaque UIDL',asy
 test('UIDL resolves again after sequence numbers change and missing messages never select neighbours',async t=>{
  const{client,peer}=await fixture(t),list=await client.list('default','INBOX',20,0,false),uid=list.messages[0].uid
  peer.messages.shift();assert.equal((await client.read('default',uid,'INBOX')).subject,'Newest POP3');assert.ok(peer.commands.includes('RETR 1'))
- peer.messages.length=0;await assert.rejects(client.read('default',uid,'INBOX'),/原邮件已不存在/)
+ peer.messages.length=0;await assert.rejects(client.read('default',uid,'INBOX'),/The original POP3 message no longer exists/)
 })
 test('duplicate and missing UIDL fail rather than issuing unstable numeric message references',async t=>{
- const{client}=await fixture(t,{messages:[message('same'),message('same')]});await assert.rejects(client.list('default','INBOX',20,0,false),/标识重复/)
+ const{client}=await fixture(t,{messages:[message('same'),message('same')]});await assert.rejects(client.list('default','INBOX',20,0,false),/message ids are duplicated/)
  const second=await fixture(t,{noUidl:true});await assert.rejects(second.client.test('default'),/UIDL/)
 })
 test('TOP is optional; fallback RETR is bounded and leaves messages on server',async t=>{
@@ -37,12 +37,12 @@ test('TOP is optional; fallback RETR is bounded and leaves messages on server',a
 })
 test('empty mailbox remains empty and UIDL numeric text stays opaque',async t=>{
  const empty=await fixture(t,{messages:[]});assert.equal((await empty.client.list('default','INBOX',20,0,false)).count,0)
- const{client}=await fixture(t,{messages:[message('001')]});const list=await client.list('default','INBOX',20,0,false);assert.equal((await client.read('default',list.messages[0].uid,'INBOX')).subject,'Synthetic POP3');await assert.rejects(client.read('default',1,'INBOX'),/完整 uid/)
+ const{client}=await fixture(t,{messages:[message('001')]});const list=await client.list('default','INBOX',20,0,false);assert.equal((await client.read('default',list.messages[0].uid,'INBOX')).subject,'Synthetic POP3');await assert.rejects(client.read('default',1,'INBOX'),/Use the full uid from the POP3 list/)
 })
 test('unsupported flags/folders fail explicitly before a connection',async t=>{
  const{client,peer,settings}=await fixture(t),service=new EmailService(settings);t.after(()=>service.dispose())
- assert.throws(()=>client.list('default','INBOX',20,0,true),/不提供服务器/);assert.throws(()=>client.read('default','pop3:eA','Sent'),/只提供 INBOX/)
- assert.throws(()=>service.mark('default','INBOX','pop3:eA','read'),/不提供服务器/);assert.equal(peer.commands.length,0)
+ assert.throws(()=>client.list('default','INBOX',20,0,true),/POP3 provides no server-side/);assert.throws(()=>client.read('default','pop3:eA','Sent'),/POP3 only exposes the INBOX/)
+ assert.throws(()=>service.mark('default','INBOX','pop3:eA','read'),/POP3 provides no server-side/);assert.equal(peer.commands.length,0)
  assert.deepEqual((await service.folders('default',false)).folders.map(f=>f.path),['INBOX'])
 })
 test('search exposes header windows and next offset, and bounded body fallback',async t=>{

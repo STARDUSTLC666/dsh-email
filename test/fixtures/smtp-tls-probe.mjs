@@ -1,4 +1,4 @@
-import { createServer as createNetServer } from 'node:net'
+﻿import { createServer as createNetServer } from 'node:net'
 import { createServer as createTlsServer, TLSSocket, createSecureContext } from 'node:tls'
 import { readFileSync } from 'node:fs'
 import { EmailPool, resolveEmailSettings } from '../../lib/index.js'
@@ -111,7 +111,7 @@ async function sendCase(mode, cancel) {
       const result = await pending.then(() => ({ resolved: true }), error => ({ resolved: false, message: error.message }))
       await new Promise(resolve => setTimeout(resolve, 30))
       if (smtp.messages.length !== 0) throw new Error(`${mode}: canceled TLS send delivered a message`)
-      if (result.resolved || !/取消|停止/.test(result.message)) throw new Error(`${mode}: cancellation did not reject clearly`)
+      if (result.resolved || !/cancelled|stopped|aborted/i.test(result.message)) throw new Error(`${mode}: cancellation did not reject clearly`)
       return { mode, cancel, socketCountAfter: smtp.sockets.size, messages: smtp.messages.length, result }
     }
     const result = await pending

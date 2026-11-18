@@ -34,7 +34,7 @@ test('AgentMail uses separate credentials, fixed US/EU endpoints and never inher
       .senderName,
     '',
   )
-  assert.throws(() => settings({ apiKey: 'bad\tkey' }), /API Key/)
+  assert.throws(() => settings({ apiKey: 'bad\tkey' }), /API key/)
   assert.throws(
     () =>
       resolveEmailSettings({
@@ -43,7 +43,7 @@ test('AgentMail uses separate credentials, fixed US/EU endpoints and never inher
         password: 'qq-secret',
         accounts: { bot: { provider: 'agentmail', user: 'bot@agentmail.to' } },
       }),
-    /API Key/,
+    /API key/,
   )
 })
 test(
@@ -124,7 +124,7 @@ test('API identities cannot cross accounts or normalize path segments', async ()
   })
   await assert.rejects(malformed.read('default', '..', 'INBOX'), /message_id/)
   assert.equal(calls, 0)
-  await assert.rejects(malformed.read('default', '<id>', 'INBOX'), /其他邮箱/)
+  await assert.rejects(malformed.read('default', '<id>', 'INBOX'), /different mailbox/)
   const config = settings()
   config.accounts.get('default').apiBase = 'https://untrusted.invalid'
   await assert.rejects(
@@ -132,7 +132,7 @@ test('API identities cannot cross accounts or normalize path segments', async ()
       calls++
       throw Error('must not call')
     }).test('default'),
-    /区域/,
+    /region is invalid/,
   )
   assert.equal(calls, 1)
 })
@@ -156,7 +156,7 @@ test('AgentMail blocks denied recipients before POST, never retries a send and d
   })
   await assert.rejects(
     api.send('default', 'x@blocked.invalid', 'Hi', 'Body', '', []),
-    /禁止/,
+    /blocked by a deny rule/,
   )
   assert.equal(calls, 0)
   await assert.rejects(
@@ -207,15 +207,15 @@ test('AgentMail attachment bytes are bounded, filenames stay inside the owned do
       peer.messages[0].message_id,
       0,
     ),
-    /上限/,
+    /download size limit/,
   )
   await assert.rejects(
     downloadPublicBytes('https://127.0.0.1/private', 1024),
-    /公网/,
+    /public HTTPS destination/,
   )
   await assert.rejects(
     downloadPublicBytes('http://example.com/file', 1024),
-    /不受支持/,
+    /Unsupported public download URL/,
   )
 })
 test('new-mail polling drains a backlog without repeats; first call only establishes the baseline', async (t) => {
@@ -271,7 +271,7 @@ test('the mixed-account service preserves numeric IMAP UIDs and refuses API iden
   })
   const service = new EmailService(config)
   try {
-    assert.throws(() => service.read('qq', '<opaque@id>', 'INBOX'), /正整数/)
+    assert.throws(() => service.read('qq', '<opaque@id>', 'INBOX'), /positive integer/)
     let received
     service.imap.read = async (...args) => {
       received = args[1]

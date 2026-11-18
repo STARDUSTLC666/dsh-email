@@ -83,7 +83,7 @@ test('mark move validates the target folder and reports the new uid', async () =
   assert.deepEqual(state.calls.at(-1), ['move', 5, 'Archive'])
   await assert.rejects(
     () => pool.mark(undefined, '', 5, 'move', 'Nope'),
-    err => err instanceof MailError && /找不到目标文件夹/.test(err.message) && /Archive/.test(err.message),
+    err => err instanceof MailError && /Target folder .* not found/.test(err.message) && /Archive/.test(err.message),
   )
   await assert.rejects(
     () => pool.mark(undefined, '', 5, 'move', '  '),
@@ -95,7 +95,7 @@ test('mark move to the current folder is rejected without server traffic', async
   const { pool, state } = poolWithFakeImap()
   await assert.rejects(
     () => pool.mark(undefined, '', 5, 'move', 'INBOX'),
-    err => err instanceof MailError && /无需移动/.test(err.message),
+    err => err instanceof MailError && /already in folder/.test(err.message),
   )
   assert.equal(state.calls.some(c => c[0] === 'move'), false)
 })
@@ -122,7 +122,7 @@ test('mark on a missing uid reports the actionable hint', async () => {
   state.exists = false
   await assert.rejects(
     () => pool.mark(undefined, '', 5, 'read'),
-    err => err instanceof MailError && /找不到 uid=5/.test(err.message),
+    err => err instanceof MailError && /No message with uid=5/.test(err.message),
   )
 })
 

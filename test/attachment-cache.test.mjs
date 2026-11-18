@@ -114,7 +114,7 @@ test('UIDVALIDITY 变化后同一 uid 不再复用旧附件索引', async (t) =>
     return { uid, source: Buffer.from(plain, 'utf8'), bodyStructure: { childNodes: [{ part: '1', type: 'text/plain', size: 15 }] } }
   }
 
-  await assert.rejects(pool.downloadAttachment(undefined, '', 7, 0, ws), /该邮件没有附件/)
+  await assert.rejects(pool.downloadAttachment(undefined, '', 7, 0, ws), /This message has no attachments/)
   assert.equal(calls.filter(([kind]) => kind === 'fetchOne').length, 2, 'UIDVALIDITY 变了必须重新解析')
   assert.equal(calls.filter(([kind]) => kind === 'download').length, 0, '不能拿旧索引去下载')
 })

@@ -170,7 +170,7 @@ test('a custom POP3 account shows its POP3 endpoint in the card meta', () => {
 })
 
 test('the reserved custom-server name cannot be used as a preset name', () => {
-  assert.throws(() => parseServerPresets('__custom__:\n  imap: { host: imap.corp }\n  smtp: { host: smtp.corp }\n'), /保留名/)
+  assert.throws(() => parseServerPresets('__custom__:\n  imap: { host: imap.corp }\n  smtp: { host: smtp.corp }\n'), /reserved name/)
 })
 
 // ---------------------------------------------------------------------------
@@ -284,5 +284,5 @@ test('a bad custom-server port is rejected before anything is written', async ()
   assert.equal(response.status, 400)
   const body = await response.json()
   assert.equal(body.ok, false)
-  assert.match(body.error.message, /端口/)
+  assert.match(body.error.message, /port must be between 1 and 65535/)
 })

@@ -29,7 +29,7 @@ test('trusted and manually approved replies submit the pinned envelope even if t
 })
 test('account or policy changes invalidate a reply authorization before SMTP',async()=>{
  const f=fixture();await f.run();f.config.user='other@example.test'
- await assert.rejects(f.tool.execute(f.args,f.exec),/改变|过期/);assert.equal(f.counts().submissions.length,0)
+ await assert.rejects(f.tool.execute(f.args,f.exec),/rules changed, or the confirmation expired/);assert.equal(f.counts().submissions.length,0)
  const p=fixture();await p.run();p.value.trustedRecipientsYaml='work: { denyDomains: [example.test] }'
- await assert.rejects(p.tool.execute(p.args,p.exec),/改变|过期/);assert.equal(p.counts().submissions.length,0)
+ await assert.rejects(p.tool.execute(p.args,p.exec),/rules changed, or the confirmation expired/);assert.equal(p.counts().submissions.length,0)
 })

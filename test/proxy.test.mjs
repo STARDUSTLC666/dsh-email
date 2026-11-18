@@ -35,8 +35,8 @@ test('a bare host:port is read as an HTTP proxy, and bad input is rejected with 
   assert.equal(parseProxyUrl('127.0.0.1:7897').href, 'http://127.0.0.1:7897/')
   assert.equal(parseProxyUrl('socks5://127.0.0.1:1080').protocol, 'socks5:')
   assert.equal(parseProxyUrl('   '), undefined)
-  assert.throws(() => parseProxyUrl('ftp://127.0.0.1:21'), /不支持的代理协议/)
-  assert.throws(() => parseProxyUrl('http://'), /代理地址/)
+  assert.throws(() => parseProxyUrl('ftp://127.0.0.1:21'), /Unsupported proxy scheme/)
+  assert.throws(() => parseProxyUrl('http://'), /Invalid proxy address/)
 })
 
 test('the account proxy wins over the environment, which wins over a direct connection', () => {
@@ -88,7 +88,7 @@ test('a CONNECT proxy that refuses the tunnel fails with the proxy status, not a
 })
 
 test('an unreachable proxy reports itself instead of the mail host', async () => {
-  await assert.rejects(openProxiedSocket('http://127.0.0.1:1', 'smtp.example.test', 465), /无法连接代理/)
+  await assert.rejects(openProxiedSocket('http://127.0.0.1:1', 'smtp.example.test', 465), /Cannot connect to proxy/)
 })
 
 test('the proxy survives config resolution and is validated there', () => {
@@ -100,7 +100,7 @@ test('the proxy survives config resolution and is validated there', () => {
   assert.equal(named.accounts.get('work').proxy, 'http://127.0.0.1:7897')
   const overridden = resolveEmailSettings({ ...base, proxy: 'http://127.0.0.1:7897', accounts: { work: { user: 'work@gmail.com', password: 'fixture-only', provider: 'gmail', proxy: 'socks5://127.0.0.1:1080' } } })
   assert.equal(overridden.accounts.get('work').proxy, 'socks5://127.0.0.1:1080')
-  assert.throws(() => resolveEmailSettings({ ...base, proxy: 'ftp://127.0.0.1:21' }), /代理地址无效/)
+  assert.throws(() => resolveEmailSettings({ ...base, proxy: 'ftp://127.0.0.1:21' }), /has an invalid proxy address/)
   assert.equal(resolveEmailSettings(base).accounts.get('default').proxy, undefined)
 })
 
@@ -109,15 +109,15 @@ test('an HTTPS proxy must pass TLS certificate validation before CONNECT credent
   const server=tlsServer({key:readFileSync(new URL('./fixtures/smtp-test-key.pem',import.meta.url)),cert:readFileSync(new URL('./fixtures/smtp-test-ca.pem',import.meta.url))},socket=>socket.on('data',data=>received.push(data.toString())))
   server.on('connection',socket=>{sockets.add(socket);socket.on('error',()=>{});socket.on('close',()=>sockets.delete(socket))});server.on('tlsClientError',()=>{})
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>{for(const socket of sockets)socket.destroy();server.close()})
-  await assert.rejects(openProxiedSocket('https://fixture-user:fixture-password@127.0.0.1:'+server.address().port,'smtp.example.test',465),/certificate|self.signed|verify|证书/i)
+  await assert.rejects(openProxiedSocket('https://fixture-user:fixture-password@127.0.0.1:'+server.address().port,'smtp.example.test',465),/certificate|self.signed|verify/i)
   assert.equal(received.length,0)
 })
 
 test('direct mode ignores inherited environment proxies and proxy parse failures hide URL credentials', () => {
   assert.equal(resolveProxyUrl('direct',{HTTPS_PROXY:'http://env.test:8080'}),undefined);
   assert.throws(()=>parseProxyUrl('http://fixture-user:do-not-echo@bad host'),error=>!error.message.includes('fixture-user')&&!error.message.includes('do-not-echo'));
-  assert.throws(()=>parseProxyUrl('http://proxy.test:8080/unsupported-path'),/路径/);
-  assert.throws(()=>parseProxyUrl('http://proxy.test:0'),/端口/);
+  assert.throws(()=>parseProxyUrl('http://proxy.test:8080/unsupported-path'),/with no path or query parameters/);
+  assert.throws(()=>parseProxyUrl('http://proxy.test:0'),/host and port/);
   const cfg=resolveEmailSettings({provider:'gmail',user:'user@gmail.com',password:'fixture-only',proxy:'direct'});
   assert.equal(cfg.accounts.get('default').proxy,'direct');
 });

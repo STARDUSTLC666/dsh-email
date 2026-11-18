@@ -144,9 +144,9 @@ test('渲染时说明跳过了多少条', async () => {
   const { renderSearch } = await import('../lib/tool-contract.js')
   const block = { uid: 5, date: '', from: [], subject: 'x', seen: false, flagged: false, size: 1, hasAttachments: false }
   const paged = renderSearch({ account: 'a', query: '生日', count: 9, folder: 'INBOX', offset: 2, messages: [block] }).map(b => b.text).join('')
-  assert.match(paged, /跳过最新 2 条后展示 1 条/)
+  assert.match(paged, /newest 2 skipped, showing 1/)
   const fresh = renderSearch({ account: 'a', query: '生日', count: 9, folder: 'INBOX', offset: 0, messages: [block] }).map(b => b.text).join('')
-  assert.match(fresh, /展示最新 1 条/)
+  assert.match(fresh, /showing the newest 1/)
 })
 
 /** 信封 + bodyStructure + download 的假客户端：服务器只发请求过的东西，不再附带 source。 */
@@ -200,9 +200,9 @@ test('30 封全命中、limit=10 时，渲染不得把本页条数说成总匹�
   assert.equal(result.countKind, 'scanned', '回退扫描必须标明这是扫描口径')
   assert.equal(result.scannedLimit, 30, '渲染需要知道只扫描了最近多少封')
   const text = renderSearch(result).map(block => block.text).join('')
-  assert.doesNotMatch(text, /共 10 条匹配/)
-  assert.match(text, /本页 10 条/)
-  assert.match(text, /最近 30 封/)
+  assert.doesNotMatch(text, /10 matches in total/)
+  assert.match(text, /10 on this page/)
+  assert.match(text, /the newest 30 messages/)
 })
 
 test('正文分页只读 text/* 分段，查到下一封匹配后停止，最后一页不再提示下一页', async () => {

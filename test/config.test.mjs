@@ -65,7 +65,8 @@ test('resolveEmailConfig wrapper still returns the default account', () => {
 })
 
 test('unknown provider fails loud with the supported list', () => {
-  assert.throws(() => resolveEmailSettings({ provider: 'hotdog', user: 'x', password: 'y' }), /未知/)
+  assert.throws(() => resolveEmailSettings({ provider: 'hotdog', user: 'x', password: 'y' }), /unknown provider "hotdog"/)
+  assert.throws(() => resolveEmailSettings({ replyLocale: 'zh', provider: 'hotdog', user: 'x', password: 'y' }), /未知/)
   assert.ok(PROVIDER_NAMES.includes('qq'))
 })
 
@@ -76,9 +77,9 @@ test('missing user / password / hosts each produce an actionable error', () => {
   const saved = process.env[EMAIL_PASSWORD_ENV]
   delete process.env[EMAIL_PASSWORD_ENV]
   try {
-    assert.throws(() => resolveEmailSettings({}), /邮箱地址未填写/)
-    assert.throws(() => resolveEmailSettings({ provider: 'qq', user: 'a@b.c' }), /授权码.*未填写/)
-    assert.throws(() => resolveEmailSettings({ user: 'a@b.c', password: 'p' }), /imap.host 未填写/)
+    assert.throws(() => resolveEmailSettings({}), /has no mailbox address/)
+    assert.throws(() => resolveEmailSettings({ replyLocale: 'zh', provider: 'qq', user: 'a@b.c' }), /授权码.*未填写/)
+    assert.throws(() => resolveEmailSettings({ user: 'a@b.c', password: 'p' }), /has no imap\.host/)
   } finally {
     if (saved !== undefined) process.env[EMAIL_PASSWORD_ENV] = saved
   }
@@ -113,7 +114,7 @@ test('blank settings passwords use the environment in both draft tests and saved
     }
     assert.equal(resolveEmailSettings({ provider: 'qq', user: 'me@qq.com', password: 'explicit-secret' }).accounts.get('default').password, 'explicit-secret')
     delete process.env[EMAIL_PASSWORD_ENV]
-    assert.throws(() => resolveEmailSettings(toEmailConfig(draft, null)), /授权码.*未填写/)
+    assert.throws(() => resolveEmailSettings(toEmailConfig(draft, null)), /has no app password/)
   } finally {
     if (old === undefined) delete process.env[EMAIL_PASSWORD_ENV]
     else process.env[EMAIL_PASSWORD_ENV] = old
@@ -156,14 +157,14 @@ test('accounts map: per-account fields override the shared shorthand', () => {
 test('multiple accounts without defaultAccount fail loud', () => {
   assert.throws(
     () => resolveEmailSettings({ accounts: { a: { user: 'a@x.y', password: '1', provider: 'qq' }, b: { user: 'b@x.y', password: '2', provider: 'qq' } } }),
-    /请设置 defaultAccount/,
+    /set defaultAccount to choose the default/,
   )
 })
 
 test('defaultAccount must name an existing account', () => {
   assert.throws(
     () => resolveEmailSettings({ accounts: { a: { user: 'a@x.y', password: '1', provider: 'qq' } }, defaultAccount: 'nope' }),
-    /不存在/,
+    /does not exist/,
   )
 })
 
@@ -173,11 +174,11 @@ test('multi-account ignores the password env fallback', () => {
   try {
     assert.throws(
       () => resolveEmailSettings({ provider: 'qq', accounts: { a: { user: 'a@x.y' } } }),
-      /授权码.*未填写/,
+      /has no app password/,
     )
     assert.throws(
       () => resolveEmailSettings({ provider: 'qq', password: 'shared-secret', accounts: { a: { user: 'a@x.y', password: '' } } }),
-      /授权码.*未填写/,
+      /has no app password/,
     )
   } finally {
     if (old === undefined) delete process.env[EMAIL_PASSWORD_ENV]
@@ -281,9 +282,9 @@ test('accountsYaml parses the map, extracts defaultAccount, and wins over accoun
 
 test('accountsYaml rejects invalid YAML and non-object documents', async () => {
   const { resolveEmailSettings, parseAccountsYaml } = await import('../lib/index.js')
-  assert.throws(() => parseAccountsYaml('work: [unclosed'), /不是合法的 YAML/)
-  assert.throws(() => parseAccountsYaml('- a\n- b\n'), /对象映射/)
-  assert.throws(() => resolveEmailSettings({ accountsYaml: 'x: { provider: qq, user: a@b.c, password: p }\ny: { provider: qq, user: b@c.d, password: p }' }), /请设置 defaultAccount/)
+  assert.throws(() => parseAccountsYaml('work: [unclosed'), /is not valid YAML/)
+  assert.throws(() => parseAccountsYaml('- a\n- b\n'), /must be an object map/)
+  assert.throws(() => resolveEmailSettings({ accountsYaml: 'x: { provider: qq, user: a@b.c, password: p }\ny: { provider: qq, user: b@c.d, password: p }' }), /set defaultAccount to choose the default/)
 })
 
 test('empty accountsYaml leaves the row accounts untouched', async () => {
@@ -328,19 +329,19 @@ test('parseServerPresets: keeps host/port/secure/label and defaults the optional
 
 test('parseServerPresets: a preset without both hosts names the offender', async () => {
   const { parseServerPresets } = await import('../lib/index.js')
-  assert.throws(() => parseServerPresets('corp:\n  imap:\n    host: imap.corp\n'), /预设 "corp".*smtp/)
-  assert.throws(() => parseServerPresets('corp:\n  imap:\n    host: imap.corp\n  smtp: {}\n'), /预设 "corp".*smtp\.host/)
-  assert.throws(() => parseServerPresets('corp:\n  imap: { host: "" }\n  smtp: { host: smtp.corp }\n'), /预设 "corp".*imap\.host/)
-  assert.throws(() => parseServerPresets('corp:\n  imap: { host: imap.corp, port: 993, secure: maybe }\n  smtp: { host: smtp.corp }\n'), /预设 "corp".*imap\.secure/)
+  assert.throws(() => parseServerPresets('corp:\n  imap:\n    host: imap.corp\n'), /preset "corp".*smtp/)
+  assert.throws(() => parseServerPresets('corp:\n  imap:\n    host: imap.corp\n  smtp: {}\n'), /preset "corp".*smtp\.host/)
+  assert.throws(() => parseServerPresets('corp:\n  imap: { host: "" }\n  smtp: { host: smtp.corp }\n'), /preset "corp".*imap\.host/)
+  assert.throws(() => parseServerPresets('corp:\n  imap: { host: imap.corp, port: 993, secure: maybe }\n  smtp: { host: smtp.corp }\n'), /preset "corp".*imap\.secure/)
 })
 
 test('parseServerPresets: non-object documents fail loud in Chinese', async () => {
   const { parseServerPresets } = await import('../lib/index.js')
   for (const text of ['- a\n- b\n', 'just a scalar', 'null', '42']) {
-    assert.throws(() => parseServerPresets(text), /serverPresets 不是合法的对象映射/, `input: ${JSON.stringify(text)}`)
+    assert.throws(() => parseServerPresets(text), /serverPresets must be an object map/, `input: ${JSON.stringify(text)}`)
   }
-  assert.throws(() => parseServerPresets('corp: [unclosed'), /不是合法的 YAML/)
-  assert.throws(() => parseServerPresets('corp: 公司\n'), /必须是含 imap 与 smtp 的对象/)
+  assert.throws(() => parseServerPresets('corp: [unclosed'), /is not valid YAML/)
+  assert.throws(() => parseServerPresets('corp: 公司\n'), /must be an object with imap and smtp/)
 })
 
 test('serializeAccountsYaml: no accounts serializes to "", never "{}"', async () => {
@@ -351,7 +352,7 @@ test('serializeAccountsYaml: no accounts serializes to "", never "{}"', async ()
   // and then fails resolution with a nonsense "multiple accounts ()" error.
   const s = resolveEmailSettings({ accountsYaml: serializeAccountsYaml({}), accounts: { a: { provider: 'qq', user: 'a@b.c', password: 'p' } } })
   assert.deepEqual([...s.accounts.keys()], ['a'])
-  assert.throws(() => resolveEmailSettings({ accountsYaml: '{}' }), /配置了多个账号/)
+  assert.throws(() => resolveEmailSettings({ accountsYaml: '{}' }), /several accounts are configured/)
 })
 
 test('serializeAccountsYaml: an account that only inherits the shared shorthand survives', async () => {
@@ -369,7 +370,7 @@ test('serializeAccountsYaml: an account that only inherits the shared shorthand 
 test('serializeAccountsYaml: round-trips an account and omits an empty provider', async () => {
   const { serializeAccountsYaml, parseAccountsYaml } = await import('../lib/index.js')
   const text = serializeAccountsYaml({ work: { provider: '', user: 'a@b.c', password: 'p' } })
-  assert.equal(text.includes('provider'), false, 'provider "" would resolve as 「provider "" 未知」')
+  assert.equal(text.includes('provider'), false, 'provider "" would resolve as an unknown provider')
   const parsed = parseAccountsYaml(text)
   assert.deepEqual(Object.keys(parsed.map), ['work'])
   assert.equal(parsed.map.work.user, 'a@b.c')
@@ -485,10 +486,10 @@ test('serverPresets: a broken preset list degrades to "no custom presets" withou
   const ok = resolveEmailSettings({ serverPresets: broken, provider: 'qq', user: 'a@qq.com', password: 'p' })
   assert.equal(ok.accounts.get('default').imap.host, 'imap.qq.com')
   // The account-level reference still fails loud — the preset silently missing
-  // would only resurface as a baffling "imap.host 未填写".
+  // would only resurface as a baffling "no imap.host".
   assert.throws(
     () => resolveEmailSettings({ serverPresets: broken, provider: 'corp', user: 'a@b.c', password: 'p' }),
-    /账号 "default" 的 provider "corp" 未知/,
+    /account "default" has unknown provider "corp"/,
   )
 })
 
@@ -501,7 +502,7 @@ test('an unknown provider lists the 8 built-ins plus the custom preset names tha
   } catch (error) {
     message = error.message
   }
-  assert.match(message, /provider "nope" 未知/)
+  assert.match(message, /unknown provider "nope"/)
   for (const name of [...PROVIDER_NAMES, 'corp', 'home']) {
     assert.equal(message.includes(name), true, `the error must name ${name}`)
   }
@@ -512,7 +513,7 @@ test('an unknown provider lists the 8 built-ins plus the custom preset names tha
   } catch (error) {
     inherited = error.message
   }
-  assert.match(inherited, /provider "constructor" 未知/)
+  assert.match(inherited, /unknown provider "constructor"/)
 })
 
 test('serverPresets: editing an unreferenced preset never changes resolved settings', async () => {

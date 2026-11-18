@@ -49,7 +49,7 @@ test('model send and human-reviewed draft emit actual multipart alternatives wit
  assert.ok(preview.body.rich.nodes.length);assert.equal(f.smtp.messages.length,1)
  const sent=await f.backend.action({action:'send',id:d.id,preview:preview.id,confirmed:true});assert.equal(sent.draft.state,'sent')
  const second=await simpleParser(f.smtp.messages[1]);assert.equal(second.html,preview.body.html);assert.equal(second.text.trim(),preview.body.text.trim())
- await assert.rejects(f.backend.action({action:'send',id:d.id,preview:preview.id,confirmed:true}),/预览|已提交/);assert.equal(f.smtp.messages.length,2)
+ await assert.rejects(f.backend.action({action:'send',id:d.id,preview:preview.id,confirmed:true}),/Preview expired/);assert.equal(f.smtp.messages.length,2)
 })
 test('corporate mail preset and custom endpoint overrides resolve separately from personal QQ',()=>{
  const s=resolveEmailSettings({provider:'exmail',user:'user@company.example',password:'synthetic-enterprise'})

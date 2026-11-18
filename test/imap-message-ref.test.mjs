@@ -62,7 +62,7 @@ test('invalid and unsafe IMAP identifiers fail before opening any connection', a
       () => service.mark(undefined, 'INBOX', uid, 'read'),
       () => service.downloadAttachment(undefined, 'INBOX', uid, 0),
       () => service.reply(undefined, 'INBOX', uid, 'reply', 'Body', '', ''),
-    ]) await assert.rejects(async () => operation(), /IMAP uid.*正整数/)
+    ]) await assert.rejects(async () => operation(), /IMAP uid must be a positive integer/)
   }
   assert.equal(calls, 0)
 })

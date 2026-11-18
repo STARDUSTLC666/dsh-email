@@ -1,4 +1,4 @@
-import test from 'node:test'
+﻿import test from 'node:test'
 import assert from 'node:assert/strict'
 import { apply, parseEmailDay } from '../lib/index.js'
 
@@ -34,9 +34,9 @@ test('parseEmailDay endInclusive 返回次日零点（until 含当天）', () =>
   assert.equal(parseEmailDay('2026-08-26', 'until', true).toISOString(), '2026-08-27T00:00:00.000Z')
 })
 
-test('parseEmailDay 非法日期抛中文错误', () => {
-  assert.throws(() => parseEmailDay('昨天', 'since'), /since 不是有效日期/)
-  assert.throws(() => parseEmailDay('', 'until'), /until 不是有效日期/)
+test('parseEmailDay 非法日期报错', () => {
+  assert.throws(() => parseEmailDay('昨天', 'since'), /since is not a valid date/)
+  assert.throws(() => parseEmailDay('', 'until'), /until is not a valid date/)
 })
 
 test('email_list / email_search 参数包含 since 与 until', () => {

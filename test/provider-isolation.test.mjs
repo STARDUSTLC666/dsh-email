@@ -80,7 +80,7 @@ test('connection failures show the selected endpoint and scrub server-echoed cre
   const { runtime, backend } = modern(t, { accountsYaml: serializeAccountsYaml({ gmail: accounts.gmail }) })
   await assert.rejects(backend.test(runtime.getSettingsValue(), 'gmail'), error => {
     assert.match(error.message, /gmail.*imap\.gmail\.com:993/)
-    assert.match(error.message, /邮箱登录失败/)
+    assert.match(error.message, /mailbox sign-in failed/)
     assert.doesNotMatch(error.message, /fixture-app-password/)
     return true
   })

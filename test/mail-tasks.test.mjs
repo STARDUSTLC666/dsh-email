@@ -81,5 +81,5 @@ test('mail-task writes reject cross-origin requests and preserve corrupt storage
  const f=await setup(t)
  const request=new Request('http://localhost/api/dsh-email/tasks',{method:'POST',headers:{origin:'https://evil.example','content-type':'application/json','x-dsh-email-tasks':'1'},body:'{"action":"rotateKey","revision":2}'})
  assert.equal((await f.backend.fetch(request)).status,403)
- await writeFile(f.store.file,'{broken');await assert.rejects(f.backend.action({action:'rotateKey',revision:2}),/existing file kept/);assert.equal(await readFile(f.store.file,'utf8'),'{broken')
+ await writeFile(f.store.file,'{broken');await assert.rejects(f.backend.action({action:'rotateKey',revision:2}),/existing file was kept/);assert.equal(await readFile(f.store.file,'utf8'),'{broken')
 })

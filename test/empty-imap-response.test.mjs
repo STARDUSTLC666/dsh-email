@@ -11,10 +11,10 @@ function withClient(client) {
 for (const missing of [false, undefined]) {
   test(`messages removed during an IMAP request give a useful error (${String(missing)})`, async () => {
     const pool = withClient({ mailbox: { exists: 0 }, fetchOne: async () => missing })
-    await assert.rejects(pool.read(undefined, 42, 'INBOX'), /找不到 uid=42/)
-    await assert.rejects(pool.mark(undefined, 'INBOX', 42, 'read'), /找不到 uid=42/)
-    await assert.rejects(pool.reply(undefined, 'INBOX', 42, 'reply', 'fixture', '', undefined), /找不到 uid=42/)
-    await assert.rejects(pool.downloadAttachment(undefined, 'INBOX', 42, 0), /找不到 uid=42/)
+    await assert.rejects(pool.read(undefined, 42, 'INBOX'), /No message with uid=42/)
+    await assert.rejects(pool.mark(undefined, 'INBOX', 42, 'read'), /No message with uid=42/)
+    await assert.rejects(pool.reply(undefined, 'INBOX', 42, 'reply', 'fixture', '', undefined), /No message with uid=42/)
+    await assert.rejects(pool.downloadAttachment(undefined, 'INBOX', 42, 0), /No message with uid=42/)
   })
   test(`empty IMAP search results remain an empty list (${String(missing)})`, async () => {
     const pool = withClient({ mailbox: { exists: 0 }, search: async () => missing, fetchAll: async () => [] })
@@ -27,5 +27,5 @@ for (const missing of [false, undefined]) {
 test('an attachment removed between listing and download reports recovery without writing a file', async () => {
   const pool = withClient({ download: async () => ({}) })
   pool.attachmentIndexOf = async () => ({ attachments: [{ filename: 'fixture.txt', contentType: 'text/plain', size: 4 }], parts: [{ part: '2', filename: 'fixture.txt', contentType: 'text/plain', size: 4 }] })
-  await assert.rejects(pool.downloadAttachment(undefined, 'INBOX', 42, 0), /附件分段已不存在/)
+  await assert.rejects(pool.downloadAttachment(undefined, 'INBOX', 42, 0), /The attachment part no longer exists/)
 })

@@ -129,7 +129,7 @@ test('authKind can opt a custom host in, and an unknown value is reported', () =
 
   assert.throws(
     () => resolveEmailSettings({ accountsYaml: 'work: { provider: qq, user: w@qq.com, password: pw, authKind: magic }\n' }),
-    /authKind 只能是 oauth2 或 password/,
+    /authKind must be oauth2 or password/,
     'a typo must name the allowed values rather than silently deriving',
   )
 })
@@ -143,7 +143,7 @@ test('a server error quoted back to the user never carries the credential', () =
   const clean = redactCredentials(`Command failed; AUTHENTICATE XOAUTH2 ${blob}`)
   assert.equal(clean.includes(jwt), false, 'the access token must not survive')
   assert.equal(clean.includes(blob), false, 'nor the quoted authentication string')
-  assert.match(clean, /已隐去/)
+  assert.match(clean, /characters hidden/)
   assert.match(clean, /Command failed/, 'the diagnosable part is kept')
 
   // Ordinary text is left alone, or the message stops being useful.
@@ -156,9 +156,9 @@ test('incomplete-account guidance keeps provider choices through credential reda
   try { resolveEmailSettings({}) } catch (error) { failure = error }
   assert.ok(failure instanceof Error)
   const clean = redactCredentials(failure.message)
-  assert.match(clean, /provider 预设/)
+  assert.match(clean, /provider presets/)
   for (const provider of ['gmail', 'qq', 'outlook']) assert.ok(clean.includes(provider), provider)
-  assert.doesNotMatch(clean, /已隐去/)
+  assert.doesNotMatch(clean, /characters hidden/)
 })
 
 test('the top-level authKind shorthand reaches every account, and an account may override it', () => {

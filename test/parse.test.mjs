@@ -1,4 +1,4 @@
-import test from 'node:test'
+﻿import test from 'node:test'
 import assert from 'node:assert/strict'
 import { EmailPool, resolveEmailSettings, stripHtml, truncateText, flattenAddresses, sanitizeFilename, parseRawMessage } from '../lib/index.js'
 
@@ -23,7 +23,7 @@ test('truncateText keeps short text and hard-cuts long text without a break', ()
   const out = truncateText(long, 100)
   assert.equal(out.truncated, true)
   assert.equal(out.text.slice(0, 100), 'x'.repeat(100))
-  assert.ok(out.text.includes('已截断'))
+  assert.ok(out.text.includes('body too long, truncated'))
 })
 
 test('email_read 对无空格超长中文正文硬截断，正文可读且非空', async () => {
@@ -46,7 +46,7 @@ test('email_read 对无空格超长中文正文硬截断，正文可读且非空
   assert.equal(read.truncated, true)
   assert.ok(read.text.startsWith('中'.repeat(20000)), '截断处必须保留正文，不能只剩截断提示')
   assert.ok(read.text.length > 20000)
-  assert.ok(read.text.includes('已截断'))
+  assert.ok(read.text.includes('body too long, truncated'))
 })
 
 test('flattenAddresses accepts both array and {value} shapes', () => {

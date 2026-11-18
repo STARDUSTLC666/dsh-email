@@ -48,7 +48,7 @@ function widgetFixture(enabled = true, whale = {}) {
 test('popup preference defaults on and persists without replacing credentials or IMAP sessions', async t => {
   assert.equal(EmailSettingsSchema({}).newMailPopup, true)
   assert.equal(EmailSettingsSchema(toSettingsBase({ newMailPopup: false })).newMailPopup, false)
-  assert.throws(() => validateSettingsValue({ newMailPopup: 'false' }), /布尔/)
+  assert.throws(() => validateSettingsValue({ newMailPopup: 'false' }), /must be true or false/)
   let value = { provider: 'qq', user: 'me@example.test', password: 'fixture-secret', newMailPopup: true }, revision = 1
   const refs = Object.fromEntries(Object.keys(value).map(key => [key, { get: () => value[key] }]))
   const ctx = { fiber: { entry: { options: { id: 'email' } } }, settings: {

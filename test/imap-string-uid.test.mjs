@@ -27,7 +27,7 @@ test('#26 non-decimal, unsafe and empty IMAP identifiers fail before touching tr
   const mail = service()
   try {
     mail.imap.read = () => { throw new Error('transport must not run') }
-    for (const id of ['', '0', '-1', '2.3', '1e3', '0x10', ' 23 ', '9007199254740992', '<api-id>']) assert.throws(() => mail.read('qq', id, 'INBOX'), /正整数/)
+    for (const id of ['', '0', '-1', '2.3', '1e3', '0x10', ' 23 ', '9007199254740992', '<api-id>']) assert.throws(() => mail.read('qq', id, 'INBOX'), /must be a positive integer/)
     mail.api.read = async (_account, uid) => ({ uid })
     assert.equal((await mail.read('api', '001', 'INBOX')).uid, '001')
     assert.equal((await mail.read('api', '<opaque@id>', 'INBOX')).uid, '<opaque@id>')

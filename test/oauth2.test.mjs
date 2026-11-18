@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Outlook OAuth2 (device-code flow) backend.
  *
  * Every fetch is mocked and every token file is written into a temporary
@@ -113,8 +113,12 @@ test('an outlook account resolves without a password, a password account still r
 
   // Every other provider is untouched: the password is still mandatory.
   assert.throws(
-    () => resolveEmailSettings({ accountsYaml: 'work: { provider: qq, user: w@qq.com }\n' }),
+    () => resolveEmailSettings({ replyLocale: 'zh', accountsYaml: 'work: { provider: qq, user: w@qq.com }\n' }),
     /授权码.*未填写/,
+  )
+  assert.throws(
+    () => resolveEmailSettings({ accountsYaml: 'work: { provider: qq, user: w@qq.com }\n' }),
+    /has no app password/,
   )
   const qq = resolveEmailSettings({ accountsYaml: 'work: { provider: qq, user: w@qq.com, password: pw }\n' })
   assert.equal(qq.accounts.get('work').authKind, 'password')
@@ -245,13 +249,13 @@ test('device flow: an expired device code reports the actionable Chinese message
     ? jsonResponse(DEVICE_OK)
     : jsonResponse({ error: 'expired_token', error_description: 'Device code expired' }, 400))
   await startDeviceFlow('work', OAUTH_ACCOUNT)
-  await assert.rejects(pollDeviceFlow('work'), /设备码超时，请重新发起登录/)
+  await assert.rejects(pollDeviceFlow('work'), /Device code timed out; start sign-in again/)
   assert.deepEqual(oauth2StateOf('work'), { state: 'none' }, 'the dead flow must not keep the card pending')
 })
 
 test('device flow: polling without a started flow is refused, and a code is single-use per flow', async t => {
   writeTokens({})
-  await assert.rejects(pollDeviceFlow('never-started'), /尚未发起设备码登录/)
+  await assert.rejects(pollDeviceFlow('never-started'), /Device-code sign-in has not started/)
   assert.equal(oauth2StateOf('never-started').state, 'none')
 })
 
@@ -263,7 +267,7 @@ test('device flow: AADSTS 7000218 names the public-client-flow switch', async t 
     error_codes: [7000218],
   }, 400))
   await assert.rejects(startDeviceFlow('work', OAUTH_ACCOUNT), error => {
-    assert.match(error.message, /允许公共客户端流/)
+    assert.match(error.message, /must allow public client flows/)
     assert.match(error.message, /Entra/)
     assert.match(error.message, /AADSTS7000218/)
     return true
@@ -277,13 +281,13 @@ test('device flow: AADSTS 65001 reports the missing permission grant', async t =
     error_description: 'AADSTS65001: The user or administrator has not consented to use the application.',
     error_codes: [65001],
   }, 400))
-  await assert.rejects(startDeviceFlow('work', OAUTH_ACCOUNT), /权限未授予/)
+  await assert.rejects(startDeviceFlow('work', OAUTH_ACCOUNT), /Permission not granted/)
 })
 
 test('device flow: a network failure is reported as one, not as a login rejection', async t => {
   writeTokens({})
   t.mock.method(globalThis, 'fetch', async () => { throw new TypeError('fetch failed') })
-  await assert.rejects(startDeviceFlow('work', OAUTH_ACCOUNT), /无法连接微软登录服务/)
+  await assert.rejects(startDeviceFlow('work', OAUTH_ACCOUNT), /Cannot reach the Microsoft sign-in service/)
 })
 
 test('startDeviceFlow is single-flight per account and keeps the newest code', async t => {
@@ -383,8 +387,8 @@ test('an account with no stored token reports the settings-page instruction', as
   const calls = mockFetch(t, () => jsonResponse(tokenPayload()))
   await assert.rejects(getFreshAccessToken('work', OAUTH_ACCOUNT), error => {
     assert.equal(error.message, NOT_LOGGED_IN_MESSAGE)
-    assert.match(error.message, /设置页/)
-    assert.match(error.message, /设备码/)
+    assert.match(error.message, /Settings/)
+    assert.match(error.message, /device-code/)
     return true
   })
   assert.equal(calls.length, 0, 'a missing token is answered without a network round trip')
@@ -401,7 +405,7 @@ test('a token issued for another address is refused, and an expired one is repor
   })
   await assert.rejects(
     getFreshAccessToken('moved', { user: 'new@outlook.com', clientId: 'client-1' }),
-    /账号地址已改为 new@outlook\.com/,
+    /the account address changed to new@outlook\.com/,
   )
   // The card must not claim a login the tools will refuse either: the verdict
   // is「none」so the user is sent through the flow again.
@@ -417,7 +421,7 @@ test('a token issued for another address is refused, and an expired one is repor
     },
   })
   mockFetch(t, () => jsonResponse({ error: 'invalid_grant', error_description: 'AADSTS70008: The refresh token has expired.' }, 400))
-  await assert.rejects(getFreshAccessToken('work', OAUTH_ACCOUNT), /重新登录/)
+  await assert.rejects(getFreshAccessToken('work', OAUTH_ACCOUNT), /sign in again in Settings/)
   assert.equal(readTokenStore().accounts.work, undefined, 'a dead refresh token is dropped, not retried forever')
 })
 
@@ -435,12 +439,12 @@ test('a transient refresh failure keeps the stored token so the user is not logg
 
 // --- error mapping table --------------------------------------------------------
 
-test('AADSTS codes map to the actionable Chinese table', () => {
-  assert.match(mapAadstsMessage(7000218), /允许公共客户端流/)
-  assert.match(mapAadstsMessage('7000218'), /Entra → 应用注册 → 身份验证/)
-  assert.match(mapAadstsMessage(65001), /权限未授予/)
-  assert.match(mapAadstsMessage(70008), /重新登录/)
-  assert.match(mapAadstsMessage(53003), /条件访问/)
+test('AADSTS codes map to the actionable English table', () => {
+  assert.match(mapAadstsMessage(7000218), /must allow public client flows/)
+  assert.match(mapAadstsMessage('7000218'), /Entra → App registrations → Authentication/)
+  assert.match(mapAadstsMessage(65001), /Permission not granted/)
+  assert.match(mapAadstsMessage(70008), /sign in again in Settings/)
+  assert.match(mapAadstsMessage(53003), /conditional access policy/)
   assert.equal(mapAadstsMessage(999999), undefined)
   assert.equal(mapAadstsMessage(''), undefined)
 })
@@ -456,11 +460,11 @@ test('classifyOAuthFailure separates「keep polling」from「tell the user」', 
 
   const expired = classifyOAuthFailure({ error: 'expired_token' })
   assert.equal(expired.pending, false)
-  assert.match(expired.message, /设备码超时/)
+  assert.match(expired.message, /Device code timed out/)
 
   const invalid = classifyOAuthFailure({ error: 'invalid_grant', error_codes: [70008] })
   assert.equal(invalid.clearToken, true, 'invalid_grant is the one case that drops the token')
-  assert.match(invalid.message, /重新登录/)
+  assert.match(invalid.message, /sign in again in Settings/)
 
   // A non-JSON or empty body still yields a message, never a crash.
   assert.equal(typeof classifyOAuthFailure(undefined, 500).message, 'string')
@@ -474,8 +478,8 @@ test('the token store tolerates a missing file and malformed entries, but preser
   assert.deepEqual(readTokenStore(), { version: 1, accounts: {} })
 
   writeFileSync(tokenFile(), 'not json at all', 'utf8')
-  assert.throws(() => readTokenStore(), /原文件未被覆盖/)
-  assert.throws(() => writeTokens({}), /原文件未被覆盖/)
+  assert.throws(() => readTokenStore(), /The original file was not overwritten/)
+  assert.throws(() => writeTokens({}), /The original file was not overwritten/)
   assert.equal(readFileSync(tokenFile(), 'utf8'), 'not json at all')
 
   writeFileSync(tokenFile(), JSON.stringify({ version: 1, accounts: { a: { refreshToken: '' }, b: 'nope', c: null } }), 'utf8')
@@ -527,12 +531,12 @@ test('an OAuth2 account without a token fails with the settings-page message and
   const calls = mockFetch(t, () => jsonResponse(tokenPayload()))
   await assert.rejects(pool.withImap('work', null, async () => 'never'), error => {
     // The token store's own message survives the IMAP error normalizer intact:
-    //「尚未登录」is more accurate than「登录失败」for an account that never
+    // 'not signed in' is more accurate than 'sign-in failed' for an account that never
     // logged in, and it is the one the settings page acts on.
     assert.equal(error.message, NOT_LOGGED_IN_MESSAGE)
-    assert.match(error.message, /设置页/)
-    assert.match(error.message, /设备码/)
-    assert.equal(/授权码|password/.test(error.message), false, 'an OAuth2 account has no 授权码 to blame')
+    assert.match(error.message, /Settings/)
+    assert.match(error.message, /device-code/)
+    assert.equal(/授权码|app password/.test(error.message), false, 'an OAuth2 account has no app password to blame')
     return true
   })
   assert.equal(dialled, false, 'no token means there is nothing to authenticate with')
@@ -610,7 +614,7 @@ test('an OAuth2 account whose refresh token is dead reports the re-login message
   })
   mockFetch(t, () => jsonResponse({ error: 'invalid_grant', error_description: 'AADSTS700082: refresh token expired' }, 400))
   await assert.rejects(pool.withImap('work', null, async () => 'never'), error => {
-    assert.match(error.message, /设置页重新登录/)
+    assert.match(error.message, /sign in again in Settings/)
     return true
   })
   pool.dispose()
@@ -728,11 +732,11 @@ test('a non-auth SMTP failure is reported as itself and is not retried', async t
   pool.dispose()
 })
 
-test('the re-login message is the one the tools surface, and it says not to look for an 授权码', () => {
-  assert.match(OAUTH2_RELOGIN_MESSAGE, /设置页重新登录/)
-  assert.match(OAUTH2_RELOGIN_MESSAGE, /设备码登录/)
-  assert.match(OAUTH2_RELOGIN_MESSAGE, /不使用授权码/, 'the password hint must never be given to an OAuth2 account')
-  assert.match(NOT_LOGGED_IN_MESSAGE, /设置页/)
+test('the re-login message is the one the tools surface, and it says not to look for an app password', () => {
+  assert.match(OAUTH2_RELOGIN_MESSAGE, /sign in again in Settings/)
+  assert.match(OAUTH2_RELOGIN_MESSAGE, /device-code flow/)
+  assert.match(OAUTH2_RELOGIN_MESSAGE, /not an app password/, 'the password hint must never be given to an OAuth2 account')
+  assert.match(NOT_LOGGED_IN_MESSAGE, /in Settings first/)
 })
 
 test('the built-in community application is the default, and an account can override it', async t => {

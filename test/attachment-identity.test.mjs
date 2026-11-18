@@ -47,7 +47,7 @@ test('legacy inline image indexes resolve the Content-ID among same-named MIME p
   assert.deepEqual(bytes, Buffer.from('image'))
   await assert.rejects(
     pool.readInlineAttachment('default', 'INBOX', 7, { ...attachment, contentId: 'missing@fixture' }, undefined, 1024),
-    /无法定位内嵌图片/,
+    /Cannot locate the inline image/,
   )
   assert.deepEqual(calls, ['3'])
 })

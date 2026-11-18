@@ -161,7 +161,7 @@ test('reply buttons create editable drafts without sending; confirmation retains
       ...draft,
       account: 'other',
     }),
-    /原发件账号/,
+    /keep the original sending account/,
   )
   const preview = await f.drafts.action({
     action: 'preview',
@@ -227,7 +227,7 @@ test('AgentMail draft attachments fail before preview or submission at the API l
   assert.equal(listing.attachmentLimits.default, 4 * 1024 * 1024)
   await assert.rejects(
     f.drafts.create({ ...draft, attachments: [file] }),
-    /附件/,
+    /exceeds the draft attachment limit/,
   )
   assert.equal(f.calls.length, 0)
 })

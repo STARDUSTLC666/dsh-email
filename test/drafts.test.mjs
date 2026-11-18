@@ -29,13 +29,13 @@ test('drafts persist across backend restarts and remain usable before mailbox co
 test('draft tool rejects eleven attachments before reading files or sending', async t => {
   const x = await setup(t)
   const tool = buildEmailTools({ getPool() { throw Error('SMTP must not run') }, getEffectiveSettings() { throw Error('not configured') }, watch() {} }, { create: (body, signal) => x.backend.create(body, signal) }).find(def => def.name === 'email_draft')
-  await assert.rejects(tool.execute({ ...x.fields, attachments: Array.from({ length: 11 }, (_, i) => join(x.home, 'absent-' + i + '.txt')) }), /最多 10/)
+  await assert.rejects(tool.execute({ ...x.fields, attachments: Array.from({ length: 11 }, (_, i) => join(x.home, 'absent-' + i + '.txt')) }), /at most 10 local files/)
   assert.equal((await x.store.list()).length, 0)
   assert.equal(x.sends.length, 0)
 })
 test('corrupt local data is preserved rather than silently replaced', async t => {
   const x = await setup(t), file = join(x.home, 'data/dsh-email/drafts-v1.json'); await mkdir(dirname(file), { recursive: true }); await writeFile(file, '{broken')
-  await assert.rejects(x.store.create(x.fields), /已保留原文件/); assert.equal(await readFile(file, 'utf8'), '{broken')
+  await assert.rejects(x.store.create(x.fields), /the original file was kept/); assert.equal(await readFile(file, 'utf8'), '{broken')
 })
 test('separate stores serialize writes and stale revisions cannot overwrite user edits', async t => {
   const x = await setup(t), other = new DraftStore(x.home)
@@ -61,16 +61,16 @@ test('the draft tool persists recipients and the original reference together on 
   assert.equal(saved.cc, x.fields.cc)
   assert.deepEqual(saved.reply, reply)
 
-  await assert.rejects(x.store.create(x.fields, [], undefined, { ...reply, uidValidity: 0 }), /原邮件编号/)
+  await assert.rejects(x.store.create(x.fields, [], undefined, { ...reply, uidValidity: 0 }), /invalid original uid or folder/)
   assert.equal((await x.store.list()).length, 1, 'a rejected reference does not leave a standalone draft')
   assert.equal(x.sends.length, 0)
 })
 test('editing, cancellation and unconfirmed sends perform zero SMTP submissions', async t => {
   const x = await setup(t), draft = await x.backend.create(x.fields), edited = await x.backend.action({ ...x.fields, action: 'update', id: draft.id, revision: 1, text: '编辑后的正文' })
   const plan = await x.backend.action({ action: 'preview', id: draft.id, revision: edited.revision })
-  await assert.rejects(x.backend.action({ action: 'send', id: draft.id, preview: plan.id }), /明确确认/)
+  await assert.rejects(x.backend.action({ action: 'send', id: draft.id, preview: plan.id }), /confirm sending explicitly/)
   await x.backend.action({ action: 'cancelPreview', id: draft.id })
-  await assert.rejects(x.backend.action({ action: 'send', id: draft.id, preview: plan.id, confirmed: true }), /预览已过期/)
+  await assert.rejects(x.backend.action({ action: 'send', id: draft.id, preview: plan.id, confirmed: true }), /Preview expired/)
   assert.equal(x.sends.length, 0); assert.equal((await x.store.get(draft.id)).state, 'draft')
 })
 test('blocked recipients remain visible in review and a confirmed API send leaves a draft with zero submissions', async t => {
@@ -123,8 +123,8 @@ test('SMTP uncertainty is persisted, never auto-retried and recoverable only as 
   const x = await setup(t, async () => { throw new Error('transport lost after DATA') }), draft = await x.backend.create(x.fields), plan = await x.backend.action({ action: 'preview', id: draft.id, revision: 1 })
   const result = await x.backend.action({ action: 'send', id: draft.id, preview: plan.id, confirmed: true })
   assert.equal(result.draft.state, 'uncertain'); await x.backend.action({ action: 'list' }); assert.equal(x.sends.length, 1)
-  await assert.rejects(x.backend.action({ action: 'preview', id: draft.id, revision: result.draft.revision }), /不能再次发送/)
-  await assert.rejects(x.backend.action({ action: 'copy', id: draft.id, revision: result.draft.revision }), /核对邮箱/)
+  await assert.rejects(x.backend.action({ action: 'preview', id: draft.id, revision: result.draft.revision }), /cannot be sent again/)
+  await assert.rejects(x.backend.action({ action: 'copy', id: draft.id, revision: result.draft.revision }), /Check the mailbox first/)
   const copied = await x.backend.action({ action: 'copy', id: draft.id, revision: result.draft.revision, confirmed: true }); assert.notEqual(copied.id, draft.id); assert.equal(copied.state, 'draft'); assert.equal(x.sends.length, 1)
 })
 test('a process crash leaves an uncertain record after the lock is free, never a fresh sendable draft', async t => {
@@ -154,9 +154,9 @@ test('configured attachment caps and the 50-draft limit stop excessive data', as
   const x = await setup(t), path = join(x.home, 'large.txt'); await writeFile(path, '1234567890'); x.config.maxAttachmentBytes = 5
   // The existing resolver clamps the cap to at least 1024 bytes.
   await writeFile(path, Buffer.alloc(2048)); x.config.maxAttachmentBytes = 1024
-  await assert.rejects(x.backend.create({ ...x.fields, attachments: [path] }), /附件.*上限/)
+  await assert.rejects(x.backend.create({ ...x.fields, attachments: [path] }), /exceeds the draft attachment limit/)
   for (let i = 0; i < 50; i++) await x.store.create(x.fields)
-  await assert.rejects(x.store.create(x.fields), /50 份草稿/)
+  await assert.rejects(x.store.create(x.fields), /already 50 drafts/)
 })
 test('the authenticated carrier route rejects CSRF, missing custom headers and unknown download handles', async t => {
   const x = await setup(t)

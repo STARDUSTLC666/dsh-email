@@ -1,4 +1,4 @@
-import test from 'node:test'
+﻿import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
@@ -113,21 +113,21 @@ test('POP3 CID image delivery fetches the original UIDL only once, without savin
 test('Trash preview and cancel are read-only; bulk move and one-use Undo preserve mail', {timeout:20000},async t=>{
   const f=await fixture(t),preview=await f.backend.action({action:'trashPreview',account:'default',folder:'INBOX',uids:[7,8],uidValidity:11});assert.equal(preview.target,'Trash');assert.equal(preview.messages.length,2);assert.equal(f.peer.folders.get('INBOX').messages.length,2);assert.ok(!f.peer.commands.some(command=>/MOVE|STORE|EXPUNGE/.test(command)));assert.ok(f.peer.commands.some(command=>/^EXAMINE/.test(command)));
   const moved=await f.backend.action({action:'trashConfirm',account:'default',folder:'INBOX',receipt:preview.id,confirmed:true});assert.equal(moved.count,2);assert.ok(moved.undo);assert.equal(f.peer.folders.get('INBOX').messages.length,0);assert.equal(f.peer.folders.get('Trash').messages.length,2);
-  await assert.rejects(f.backend.action({action:'trashConfirm',account:'default',folder:'INBOX',receipt:preview.id,confirmed:true}),/过期/);
-  await f.backend.action({action:'undoTrash',account:'default',folder:'Trash',receipt:moved.undo,confirmed:true});assert.equal(f.peer.folders.get('INBOX').messages.length,2);assert.equal(f.peer.folders.get('Trash').messages.length,0);await assert.rejects(f.backend.action({action:'undoTrash',account:'default',folder:'Trash',receipt:moved.undo,confirmed:true}),/过期/);assert.ok(!f.peer.commands.some(command=>/^(?:UID )?EXPUNGE/.test(command)))
+  await assert.rejects(f.backend.action({action:'trashConfirm',account:'default',folder:'INBOX',receipt:preview.id,confirmed:true}),/Confirmation expired/);
+  await f.backend.action({action:'undoTrash',account:'default',folder:'Trash',receipt:moved.undo,confirmed:true});assert.equal(f.peer.folders.get('INBOX').messages.length,2);assert.equal(f.peer.folders.get('Trash').messages.length,0);await assert.rejects(f.backend.action({action:'undoTrash',account:'default',folder:'Trash',receipt:moved.undo,confirmed:true}),/Confirmation expired/);assert.ok(!f.peer.commands.some(command=>/^(?:UID )?EXPUNGE/.test(command)))
 })
 test('Trash confirmation rejects UIDVALIDITY changes, expired previews and account reconfiguration', {timeout:20000},async t=>{
   const f=await fixture(t),args={action:'trashPreview',account:'default',folder:'INBOX',uids:[7]},confirm=receipt=>f.backend.action({action:'trashConfirm',account:'default',folder:'INBOX',receipt,confirmed:true});
   let p=await f.backend.action(args);f.peer.folders.get('INBOX').validity=99;f.pool.dispose();await assert.rejects(confirm(p.id),/UIDVALIDITY/);assert.equal(f.peer.folders.get('INBOX').messages.length,2);
-  p=await f.backend.action(args);f.backend.moves.get(p.id).expires=Date.now()-1;await assert.rejects(confirm(p.id),/过期/);
-  p=await f.backend.action(args);f.settings.accounts.get('default').password='changed';await assert.rejects(confirm(p.id),/改变/);assert.equal(f.peer.folders.get('INBOX').messages.length,2)
+  p=await f.backend.action(args);f.backend.moves.get(p.id).expires=Date.now()-1;await assert.rejects(confirm(p.id),/Confirmation expired/);
+  p=await f.backend.action(args);f.settings.accounts.get('default').password='changed';await assert.rejects(confirm(p.id),/account changed/);assert.equal(f.peer.folders.get('INBOX').messages.length,2)
 })
 test('Trash enforces valid UID sets, existing destination and safe server capabilities before writes',async()=>{
   const calls=[],client={mailbox:{uidValidity:1},capabilities:new Set(),list:async()=>[{path:'INBOX'},{path:'Trash',specialUse:'\\Trash',flags:new Set()}],fetchOne:async uid=>({uid}),messageMove:async()=>{calls.push('move')}};
-  await assert.rejects(previewImapTrash(client,'default','INBOX',[7]),/MOVE\/UIDPLUS/);client.capabilities.add('MOVE');await assert.rejects(previewImapTrash(client,'default','INBOX',[7,7]),/编号/);await assert.rejects(previewImapTrash(client,'default','INBOX',Array.from({length:21},(_,i)=>i+1)),/1–20/);await assert.rejects(moveImapMessages(client,'INBOX',[7],'Missing',1),/不存在/);assert.deepEqual(calls,[])
+  await assert.rejects(previewImapTrash(client,'default','INBOX',[7]),/MOVE and UIDPLUS/);client.capabilities.add('MOVE');await assert.rejects(previewImapTrash(client,'default','INBOX',[7,7]),/Invalid UIDs/);await assert.rejects(previewImapTrash(client,'default','INBOX',Array.from({length:21},(_,i)=>i+1)),/1–20/);await assert.rejects(moveImapMessages(client,'INBOX',[7],'Missing',1),/does not exist/);assert.deepEqual(calls,[])
 })
 test('server without destination mapping offers no unreliable Undo and uncertain moves demand refresh',async()=>{
-  const client={mailbox:{uidValidity:1},capabilities:new Set(['MOVE']),list:async()=>[{path:'Trash',flags:new Set()}],fetchOne:async uid=>({uid}),messageMove:async()=>({})};assert.deepEqual(await moveImapMessages(client,'INBOX',[7],'Trash',1),{count:1});client.messageMove=async()=>{throw Error('connection lost')};await assert.rejects(moveImapMessages(client,'INBOX',[7],'Trash',1),/核对/)
+  const client={mailbox:{uidValidity:1},capabilities:new Set(['MOVE']),list:async()=>[{path:'Trash',flags:new Set()}],fetchOne:async uid=>({uid}),messageMove:async()=>({})};assert.deepEqual(await moveImapMessages(client,'INBOX',[7],'Trash',1),{count:1});client.messageMove=async()=>{throw Error('connection lost')};await assert.rejects(moveImapMessages(client,'INBOX',[7],'Trash',1),/refresh both folders and check/)
 })
 test('draft attachments follow the configured 30 and 40 MiB limits through upload, review and SMTP', { timeout: 30000 }, async t => {
   const f = await fixture(t)
@@ -213,14 +213,14 @@ test('reply quote preserves ordinary long bodies but keeps an explicit 20k ceili
 })
 test('inline download enforces its own byte cap and checks UIDVALIDITY under the attachment lock', {timeout:20000},async t=>{
   const f=await fixture(t);await f.pool.read('default',7,'INBOX');
-  const before=f.peer.commands.length;await assert.rejects(f.pool.downloadAttachment('default','INBOX',7,0,undefined,undefined,10,11),/超过/);assert.ok(!f.peer.commands.slice(before).some(c=>/BODY\.PEEK\[3\]/.test(c)));
+  const before=f.peer.commands.length;await assert.rejects(f.pool.downloadAttachment('default','INBOX',7,0,undefined,undefined,10,11),/over the limit/);assert.ok(!f.peer.commands.slice(before).some(c=>/BODY\.PEEK\[3\]/.test(c)));
   await assert.rejects(f.pool.downloadAttachment('default','INBOX',7,0,undefined,undefined,2*1024*1024,999),/UIDVALIDITY/)
 })
 test('missing Trash requires a deliberate folder choice, and a vanished bulk member prevents all moves',async()=>{
   const calls=[],rows=[{path:'INBOX',flags:new Set()},{path:'Archive',flags:new Set()}],client={mailbox:{uidValidity:5},capabilities:new Set(['MOVE']),list:async()=>rows,fetchOne:async uid=>uid===8?false:{uid,envelope:{subject:'Keep'}},messageMove:async()=>{calls.push('move')}};
-  await assert.rejects(previewImapTrash(client,'default','INBOX',[7]),/選|选择/);assert.equal((await previewImapTrash(client,'default','INBOX',[7],'Archive')).target,'Archive');await assert.rejects(moveImapMessages(client,'INBOX',[7,8],'Archive',5),/改变/);assert.deepEqual(calls,[])
+  await assert.rejects(previewImapTrash(client,'default','INBOX',[7]),/choose an existing target folder/);assert.equal((await previewImapTrash(client,'default','INBOX',[7],'Archive')).target,'Archive');await assert.rejects(moveImapMessages(client,'INBOX',[7,8],'Archive',5),/messages changed/);assert.deepEqual(calls,[])
 })
 test('account changes while a preview or body is loading never bind old message IDs to the new account', {timeout:20000},async t=>{
-  const f=await fixture(t),preview=f.pool.previewTrash.bind(f.pool),read=f.pool.read.bind(f.pool);f.pool.previewTrash=async(...args)=>{const value=await preview(...args);f.settings.accounts.get('default').password='reconfigured';return value};await assert.rejects(f.backend.action({action:'trashPreview',account:'default',folder:'INBOX',uids:[7]}),/账号设置已改变/);assert.equal(f.backend.moves.size,0);
-  f.pool.read=async(...args)=>{const value=await read(...args);f.settings.accounts.get('default').password='reconfigured-again';return value};await assert.rejects(f.backend.action({action:'read',account:'default',folder:'INBOX',uid:7}),/账号设置已改变/);assert.equal(f.backend.images.size,0)
+  const f=await fixture(t),preview=f.pool.previewTrash.bind(f.pool),read=f.pool.read.bind(f.pool);f.pool.previewTrash=async(...args)=>{const value=await preview(...args);f.settings.accounts.get('default').password='reconfigured';return value};await assert.rejects(f.backend.action({action:'trashPreview',account:'default',folder:'INBOX',uids:[7]}),/Account settings changed/);assert.equal(f.backend.moves.size,0);
+  f.pool.read=async(...args)=>{const value=await read(...args);f.settings.accounts.get('default').password='reconfigured-again';return value};await assert.rejects(f.backend.action({action:'read',account:'default',folder:'INBOX',uid:7}),/Account settings changed/);assert.equal(f.backend.images.size,0)
 })
