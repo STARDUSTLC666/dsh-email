@@ -49,15 +49,17 @@ For the web profile, replace `desktop` with `web`. Restart that DSH profile afte
 
 ## Start using it
 
-1. Open Email account settings and configure your own IMAP/SMTP, OAuth or AgentMail account.
-2. Test the connection, select an account and browse Inbox and Sent in the mail workbench.
-3. Search and open a message, inspect its body and attachments, then ask for a reply draft without sending.
-4. Edit, save and preview the draft; verify To/Cc, attachments and sending account before confirming.
-5. Verify the result in Sent or the original thread. Recipient deny rules continue to take precedence.
+**Human-in-the-loop workflow: Connect mailbox → Filter & read in Workbench → 1-click copy AI prompt to draft/summarize → Review & send**
 
-Example request：
+1. **Connect mailbox**: Open **Email → Accounts**, choose your IMAP/POP3/SMTP provider, Google/Outlook OAuth, AgentMail, or a custom server, sign in or paste an app password, and click **Test connection**.
+2. **Filter & read in Workbench**: Switch to **Mailbox**, narrow down with folder navigation, **Unread only**, **With attachments on this page**, or search, and inspect formatted messages safely (external tracking images stay blocked until you opt in per message).
+3. **1-click copy AI prompt to draft or summarize**: Expand **AI mail workflow & quick prompts** at the top of the Mailbox panel and click **Summarize unread & tasks**, **Draft a polite reply**, or **Extract key points & asks**. When a message is open, the copied prompt automatically includes its account, folder, UID, subject, and sender—paste straight into DSH Chat so the assistant prepares a draft or summary without sending anything prematurely.
+4. **Review & send**: Open **Drafts** to edit and preview HTML/plain text, verify To/Cc, attachments, and sending account, then confirm **immediate** or **scheduled** delivery. Recipient block rules always take precedence.
 
-> Read this message and prepare a reply draft. Do not send it yet.
+You can also ask directly in Chat:
+
+- > Summarize important unread emails in my work account and list the replies needed without sending anything.
+- > Draft a polite, concise reply to the open message in Drafts so I can review it before sending.
 
 ## Before you start
 

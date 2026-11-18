@@ -1,5 +1,10 @@
 # 更新记录
 
+## 0.28.3 (2026-11-18)
+
+- 收件箱工作台顶部新增覆盖 8 种语言的可折叠四步邮件协同指引与上下文感知指令按钮（自动携带当前选中邮件或文件夹信息，一键复制汇总待办、起草回复或提炼要点指令），并完善双语人类使用流程说明。
+- Add an 8-locale collapsible 4-step mail workflow bar with context-aware 1-click AI prompt chips (scoping to the open message or active folder for triage, polite replies, and action extraction) and refined human workflow docs.
+
 ## 0.28.2 (2026-11-18)
 
 - 更新区底部新增克制、无打扰的 GitHub 点赞与问题反馈快捷链接，并完善中英文检索关键词。

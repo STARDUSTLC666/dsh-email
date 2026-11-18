@@ -73,14 +73,24 @@ function loadClient({ withPrimitives = false, throwStorage = false } = {}) {
     useCallback: fn => fn,
   }
 
+  let lastClipboardText = ''
+  const fakeNavigator = {
+    clipboard: {
+      async writeText(text) {
+        lastClipboardText = String(text)
+      },
+    },
+  }
+
   const probeSource = BUNDLE.replace(
     'return module.exports;',
-    'module.exports.__uiProbe = { W, EMAIL_CSS, uiCss, mailCss, draftCss, settingsCss }; return module.exports;',
+    'module.exports.__uiProbe = { W, EMAIL_CSS, uiCss, mailCss, draftCss, settingsCss, MailWorkflowBar }; return module.exports;',
   )
 
   let client
   runInNewContext(probeSource, {
     window: Object.assign(fakeWindow, {
+      navigator: fakeNavigator,
       __ModuleLoader__: {
         load({ factory }) {
           client = factory(name => {
@@ -96,8 +106,11 @@ function loadClient({ withPrimitives = false, throwStorage = false } = {}) {
         },
       },
     }),
+    navigator: fakeNavigator,
     document: fakeWindow.document,
     CustomEvent: FakeCustomEvent,
+    setTimeout,
+    clearTimeout,
   })
 
   return {
@@ -107,6 +120,7 @@ function loadClient({ withPrimitives = false, throwStorage = false } = {}) {
     dispatched,
     syncedNodes,
     fakeWindow,
+    getCopiedText: () => lastClipboardText,
     ...client.__uiProbe,
   }
 }
@@ -260,4 +274,44 @@ test('interactive button press physics, icon micro-animations, and prefers-reduc
   // Dialog @starting-style & reduced-motion compliance
   assert.match(EMAIL_CSS, /@starting-style/)
   assert.match(EMAIL_CSS, /@media\s*\(prefers-reduced-motion:\s*reduce\)/)
+})
+
+test('collapsible MailWorkflowBar uses accessible <details>/<summary> and copies context-aware AI prompts', async () => {
+  const { react, MailWorkflowBar, EMAIL_CSS, getCopiedText } = loadClient()
+  assert.match(EMAIL_CSS, /content:\s*"(?:▸|\\25b8)";\s*content:\s*"(?:▸|\\25b8)"\s*\/\s*""/i)
+  assert.match(EMAIL_CSS, /@media\s*\(prefers-reduced-motion:\s*no-preference\)/)
+
+  const who = list => (list || []).map(a => a.name ? `${a.name} <${a.address}>` : a.address).join(', ')
+  const tree = renderTree(
+    react.createElement(MailWorkflowBar, {
+      account: 'work',
+      folder: 'INBOX',
+      selected: 42,
+      detail: {
+        subject: 'Q4 合同评审确认',
+        from: [{ name: 'Alice', address: 'alice@example.com' }],
+      },
+      currentRow: null,
+      who,
+    }),
+  )
+
+  assert.equal(tree.type, 'details')
+  const summaries = findNodes(tree, n => n.type === 'summary')
+  assert.equal(summaries.length, 1)
+  const headingsInSummary = findNodes(summaries[0], n => /^h[1-6]$/.test(String(n.type)))
+  assert.equal(headingsInSummary.length, 0, '<summary> must never wrap heading elements')
+
+  const buttons = findNodes(tree, n => n.type === 'button')
+  assert.equal(buttons.length, 3)
+  // Second chip drafts a polite reply with selected message subject, sender, and UID
+  await buttons[1].props.onClick()
+  const copied = getCopiedText()
+  assert.match(copied, /Q4 合同评审确认/)
+  assert.match(copied, /Alice <alice@example\.com>/)
+  assert.match(copied, /UID: 42/)
+
+  // Live status region is outside buttons
+  const liveRegions = findNodes(tree, n => n.props?.role === 'status')
+  assert.equal(liveRegions.length, 1)
 })

@@ -355,6 +355,125 @@ async function mailboxApi(action, payload = {}, signal) {
   return result.value;
 }
 
+async function writeClipboardText(text) {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Fall back to synchronous textarea selection when Clipboard API is blocked.
+  }
+  if (typeof document === 'undefined' || typeof document.createElement !== 'function') return false;
+  const field = document.createElement('textarea');
+  field.value = text;
+  field.setAttribute('readonly', '');
+  field.style.cssText = 'position:fixed;inset-block-start:0;opacity:0;pointer-events:none';
+  document.body?.appendChild?.(field);
+  field.select?.();
+  try {
+    return typeof document.execCommand === 'function' && document.execCommand('copy');
+  } catch {
+    return false;
+  } finally {
+    field.remove?.();
+  }
+}
+
+function MailWorkflowBar({ account, folder, selected, detail, currentRow, who }) {
+  const [copiedId, setCopiedId] = useState('');
+  const [failedId, setFailedId] = useState('');
+  const [announcement, setAnnouncement] = useState('');
+  const timerRef = useRef(0);
+  const lastAnnouncedRef = useRef('');
+
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+  }, []);
+
+  const hasSelection = selected !== null && Boolean(detail || currentRow);
+  const activeSubject = (detail?.subject ?? currentRow?.subject) || dt('（无主题）', '(No subject)');
+  const activeSender = who(detail?.from ?? currentRow?.from);
+  const scopePrefix = account ? '[' + dt('账号', 'Account') + ': ' + account + (folder ? ' / ' + folder : '') + '] ' : '';
+  const selectedContext = hasSelection
+    ? '\n' + dt('目标邮件：', 'Selected mail: ') + dt('主题：', 'Subject: ') + activeSubject +
+      (activeSender ? ' · ' + dt('发件人：', 'From: ') + activeSender : '') +
+      ' (UID: ' + selected + (account ? ', ' + account + (folder ? '/' + folder : '') : '') + ')'
+    : '';
+
+  const chips = [
+    {
+      id: 'unread-summary',
+      label: dt('汇总未读与待办', 'Summarize unread & tasks'),
+      prompt: scopePrefix + dt('汇总未读重要邮件并列出待回复事项，先不要发送任何邮件。', 'Summarize important unread mail and list replies needed (do not send).'),
+    },
+    {
+      id: 'polite-reply',
+      label: dt('起草得体回复草稿', 'Draft a polite reply'),
+      prompt: hasSelection
+        ? dt('帮我针对当前选中的邮件起草一封得体的回复草稿，保存在草稿箱让我核对，先不要发送。', 'Draft a polite reply to the selected email in Drafts without sending.') + selectedContext
+        : scopePrefix + dt('帮我查看最新待处理的邮件并起草一封得体的回复草稿，先不要发送。', 'Check the latest email needing a reply and save a polite draft only.'),
+    },
+    {
+      id: 'extract-asks',
+      label: dt('提炼要点与待确认项', 'Extract key points & asks'),
+      prompt: hasSelection
+        ? dt('帮我提炼这封邮件的核心诉求、截止时间与待确认事项。', 'Extract the core requests, deadlines, and open questions from this mail.') + selectedContext
+        : scopePrefix + dt('帮我梳理当前文件夹近期邮件的核心事项与截止时间。', 'Summarize key requests and deadlines from recent mail in this folder.'),
+    },
+  ];
+
+  async function handleCopy(id, promptText) {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setCopiedId('');
+    setFailedId('');
+    const ok = await writeClipboardText(promptText);
+    let message = ok
+      ? dt('已复制指令，粘贴到对话即可运行', 'Prompt copied — paste in Chat')
+      : dt('复制失败，请检查剪贴板权限', 'Copy failed — check clipboard');
+    if (message === lastAnnouncedRef.current) message += '\u00A0';
+    lastAnnouncedRef.current = message;
+    setCopiedId(ok ? id : '');
+    setFailedId(ok ? '' : id);
+    setAnnouncement(message);
+    timerRef.current = setTimeout(() => {
+      setCopiedId('');
+      setFailedId('');
+      setAnnouncement('');
+    }, 2200);
+  }
+
+  return h('details', { className: mailCss.workflow },
+    h('summary', { className: mailCss.workflowSummary },
+      h(W.Icon, { name: 'sparkles', size: 14 }),
+      h('span', { className: mailCss.workflowTitle }, dt('AI 邮件助手工作流与快捷指令', 'AI mail workflow & quick prompts')),
+      h('span', { className: mailCss.workflowBadge, 'data-linked': hasSelection ? 'true' : undefined },
+        hasSelection
+          ? dt('已关联当前打开邮件', 'Linked to open message') + ' · ' + activeSubject
+          : dt('点开一键复制对话指令', 'Expand for 1-click chat prompts'))),
+    h('div', { className: mailCss.workflowBody },
+      h('p', { className: mailCss.workflowSteps },
+        dt('1. 连接账号 → 2. 筛选点开邮件 → 3. 复制下方指令发给助手 → 4. 在草稿页核对后发送', '1. Connect → 2. Filter mail → 3. Copy prompt → 4. Review & send')),
+      h('div', { className: mailCss.workflowChips },
+        chips.map(chip => h(W.Button, {
+          key: chip.id,
+          type: 'button',
+          variant: 'outline',
+          icon: copiedId === chip.id ? 'check' : 'copy',
+          className: mailCss.workflowChip,
+          'data-copied': copiedId === chip.id ? 'true' : undefined,
+          'data-failed': failedId === chip.id ? 'true' : undefined,
+          onClick: () => { void handleCopy(chip.id, chip.prompt); },
+        }, chip.label)),
+        h('span', {
+          className: mailCss.workflowStatus,
+          role: 'status',
+          'aria-live': 'polite',
+          'data-visible': announcement ? 'true' : undefined,
+          'data-tone': failedId ? 'error' : undefined,
+        }, announcement))));
+}
+
 function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
   const [accountsLoading, setAccountsLoading] = useState(true);
   const [accountReload, setAccountReload] = useState(0);
@@ -582,6 +701,7 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
 
   return h('section', { className: mailCss.mailbox, 'aria-label': dt('邮箱工作台','Mailbox workbench') },
     error ? h('div', { className: mailCss.alert }, errorBanner) : null,
+    h(MailWorkflowBar, { account, folder, selected, detail, currentRow, who }),
     moved ? h('div', { className: mailCss.moveNotice, role: 'status', 'data-window-drag-exclude': '' },
       h('span', null, dt('已移动 ', 'Moved ') + moved.count + dt(' 封至 ', ' messages to ') + moved.target,
         !moved.undo ? h('p', { className: mailCss.listNote }, dt('如需恢复，请在邮箱客户端移回原文件夹。', 'To restore, move the messages back in your mail client.')) : null),
