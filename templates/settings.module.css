@@ -278,15 +278,20 @@
   width: min(300px, calc(100dvw - 32px));
   max-height: calc(100vh - 32px);
   max-height: calc(100dvh - 32px);
-  border: 0;
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: var(--dsw-radius-md, 12px);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   overflow: clip;
   box-shadow: var(--dsw-elevation-prominent);
+  transform: perspective(720px) rotateX(var(--whale-rx, 0deg)) rotateY(var(--whale-ry, 0deg));
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms ease;
+  animation: whaleCardIn 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
 }
 
 .whaleImg {
+  order: 1;
   display: block;
   flex: 0 1 auto;
   min-height: 0;
@@ -298,13 +303,41 @@
   object-position: center;
   border-block-end: 0.5px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-2);
+  cursor: pointer;
+  user-select: none;
+  transform-origin: center 75%;
+  animation: whaleFloat 4.2s ease-in-out infinite;
+  transition: filter 180ms ease;
 }
 
 .whaleImg[data-whale-skin="false"] {
-  background: #fff;
+  background: #fcfaf2;
+}
+
+.whaleCard[data-whale-patting="true"] .whaleImg {
+  animation: whalePatBounce 560ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.whaleCard[data-whale-mood="check"] .whaleImg {
+  animation: whaleCheckBob 1.4s ease-in-out infinite;
+}
+
+.whaleBubble {
+  order: 2;
+  margin: 8px 10px 0;
+  padding: 6px 10px;
+  border-radius: var(--dsw-radius-sm, 8px);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 17px;
+  overflow-wrap: anywhere;
+  animation: whaleBubblePop 200ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .whaleBody {
+  order: 3;
   flex: 0 0 auto;
   display: grid;
   min-width: 0;
@@ -329,15 +362,103 @@
   line-height: 17px;
 }
 
+.whaleItem[data-whale-clickable="true"] {
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 1px 4px;
+  margin-inline: -4px;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.whaleItem[data-whale-clickable="true"]:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
 .whaleCredit {
   font-size: 10px;
   line-height: 14px;
+}
+
+.whaleControls {
+  order: 4;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 10px 10px;
+}
+
+.whaleAction {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 26px;
+  padding: 3px 9px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font-size: 11.5px;
+  font-weight: 550;
+  line-height: 16px;
+  cursor: pointer;
+  transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1), background-color 140ms ease, border-color 140ms ease;
+}
+
+.whaleAction:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  transform: translateY(-1px);
+}
+
+.whaleAction:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.whaleAction:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.whalePatBadge {
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline-start: 8px;
+  z-index: 2;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  pointer-events: none;
+  box-shadow: var(--dsw-elevation-subtle, 0 1px 3px rgb(0 0 0 / 0.08));
+}
+
+.whaleParticles {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.whaleParticle {
+  position: absolute;
+  font-size: 14px;
+  line-height: 1;
+  user-select: none;
+  animation: whaleParticleFloat 920ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .whaleClose {
   position: absolute;
   inset-block-start: 6px;
   inset-inline-end: 6px;
+  z-index: 4;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -351,6 +472,53 @@
   color: var(--dsw-alias-label-primary);
   line-height: 1;
   cursor: pointer;
+}
+
+@keyframes whaleCardIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes whaleFloat {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-2.5px); }
+}
+
+@keyframes whalePatBounce {
+  0% { transform: scale(1) rotate(0deg); }
+  25% { transform: scale(1.045, 0.945) rotate(-2.2deg); }
+  55% { transform: scale(0.98, 1.035) rotate(2deg); }
+  80% { transform: scale(1.015, 0.99) rotate(-0.8deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+@keyframes whaleCheckBob {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  35% { transform: translateX(-2px) rotate(-1.2deg); }
+  70% { transform: translateX(2px) rotate(1.2deg); }
+}
+
+@keyframes whaleBubblePop {
+  from { opacity: 0; transform: translateY(4px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes whaleParticleFloat {
+  0% { opacity: 0; transform: translate3d(0, 6px, 0) scale(0.6); }
+  20% { opacity: 1; transform: translate3d(0, 0, 0) scale(1.08); }
+  100% { opacity: 0; transform: translate3d(var(--wp-dx, 8px), -34px, 0) scale(0.85); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .whaleCard,
+  .whaleImg,
+  .whaleBubble,
+  .whaleAction,
+  .whaleParticle {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
 }
 
 @media (hover: hover) {

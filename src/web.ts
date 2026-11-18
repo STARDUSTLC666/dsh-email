@@ -67,8 +67,29 @@ const SKIN_PACKAGES = [
 
 const WHALE_CREDIT = '鲸鱼娘：一创 上善（pixiv 62155430）· 二创 Small-tailqwq / dsh-deep-whale · CC BY-NC-SA 4.0（非商业）'
 
-/** Credit shown with the bundled fallback artwork (community fan character). */
-const FALLBACK_CREDIT = '鲸鱼娘：社区同人形象，版权归原作者，仅供个人非商业使用；如有异议请提 Issue 移除'
+/** Built-in original whale-maid courier artwork needs no third-party credit line. */
+const FALLBACK_CREDIT = ''
+
+export type WhaleMood = 'deliver' | 'happy' | 'check'
+
+const WHALE_MOOD_FILES: Record<WhaleMood, string> = {
+  deliver: 'whale-fallback.png',
+  happy: 'whale-happy.png',
+  check: 'whale-check.png',
+}
+
+export function parseWhaleMood(rawUrl?: unknown): WhaleMood {
+  if (typeof rawUrl !== 'string' || !rawUrl) return 'deliver'
+  try {
+    const parsed = new URL(rawUrl, 'http://localhost')
+    const mood = parsed.searchParams.get('mood')
+    if (mood === 'happy' || mood === 'check') return mood
+  } catch {
+    const match = /[?&]mood=(happy|check)\b/.exec(rawUrl)
+    if (match?.[1] === 'happy' || match?.[1] === 'check') return match[1]
+  }
+  return 'deliver'
+}
 
 /**
  * One account as the settings page renders it: resolved connection parameters
@@ -918,7 +939,7 @@ function serializeAccountsDraft(
   return { accountsYaml: String(doc) }
 }
 
-let whaleCache: WhaleAsset | null | undefined
+const whaleCache = new Map<WhaleMood, WhaleAsset | null>()
 
 function pickFromDir(dir: string): string | null {
   let names: string[] = []
@@ -943,13 +964,11 @@ function contentTypeOf(file: string): string {
  * Locate the whale-girl artwork at runtime. Skin art is never bundled: it is
  * CC BY-NC-SA 4.0, so dsh-email only serves it from the user's own installed
  * dsh-deep-whale skin package (with the attribution chain shown in the
- * widget). Without the skin, a bundled community whale-girl artwork is
- * served with its own credit line (copyright stays with the original author;
- * personal non-commercial use, removed on request via issue).
+ * widget). Without the skin, the built-in original whale-maid courier sprite
+ * for the requested mood (`deliver` | `happy` | `check`) is served.
  */
-function findWhaleAsset(): WhaleAsset | null {
-  if (whaleCache !== undefined) return whaleCache
-  whaleCache = null
+function findWhaleAsset(mood: WhaleMood = 'deliver'): WhaleAsset | null {
+  if (whaleCache.has(mood)) return whaleCache.get(mood) ?? null
   const packageDir = dirname(dirname(fileURLToPath(import.meta.url)))
   const roots = [process.cwd(), dirname(packageDir)]
   for (const root of roots) {
@@ -957,18 +976,20 @@ function findWhaleAsset(): WhaleAsset | null {
       for (const base of [join(root, 'node_modules', pkg, 'assets'), join(root, pkg, 'assets')]) {
         const file = pickFromDir(base)
         if (file !== null) {
-          whaleCache = { file, contentType: contentTypeOf(file), skin: true, credit: WHALE_CREDIT }
-          return whaleCache
+          const asset: WhaleAsset = { file, contentType: contentTypeOf(file), skin: true, credit: WHALE_CREDIT }
+          whaleCache.set(mood, asset)
+          return asset
         }
       }
     }
   }
-  const fallback = join(packageDir, 'assets', 'whale-fallback.png')
-  if (existsSync(fallback)) {
-    whaleCache = { file: fallback, contentType: 'image/png', skin: false, credit: FALLBACK_CREDIT }
-    return whaleCache
-  }
-  return whaleCache
+  const assetsDir = join(packageDir, 'assets')
+  const preferred = join(assetsDir, WHALE_MOOD_FILES[mood])
+  const fallback = join(assetsDir, WHALE_MOOD_FILES.deliver)
+  const file = existsSync(preferred) ? preferred : (existsSync(fallback) ? fallback : null)
+  const asset: WhaleAsset | null = file ? { file, contentType: 'image/png', skin: false, credit: FALLBACK_CREDIT } : null
+  whaleCache.set(mood, asset)
+  return asset
 }
 
 /**
@@ -1377,6 +1398,7 @@ export class EmailSettingsBackend {
     request.signal.throwIfAborted()
     const req: any = request.body ? Readable.fromWeb(request.body as any) : Readable.from([])
     req.method = request.method
+    req.url = request.url
     req.headers = Object.fromEntries(request.headers)
     const headers = new Headers()
     let status = 200, bytes: Buffer = Buffer.alloc(0)
@@ -1542,7 +1564,7 @@ export class EmailSettingsBackend {
       this.responseJson(res, 405, { ok: false, error: { code: 'method-not-allowed', message: 'Use GET' } })
       return
     }
-    const asset = findWhaleAsset()
+    const asset = findWhaleAsset(parseWhaleMood(req.url))
     if (asset === null) {
       this.responseJson(res, 404, { ok: false, error: { code: 'not-found', message: 'no whale asset available' } })
       return

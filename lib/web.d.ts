@@ -8,6 +8,8 @@ export declare const SETTINGS_API_ROUTE = "/api/dsh-email/settings";
 export declare const WHALE_API_ROUTE = "/api/dsh-email/whale";
 /** Same-origin route serving the whale-girl courier image to the widget. */
 export declare const WHALE_ASSET_ROUTE = "/_dsh/dsh-email/assets/whale";
+export type WhaleMood = 'deliver' | 'happy' | 'check';
+export declare function parseWhaleMood(rawUrl?: unknown): WhaleMood;
 /**
  * One account as the settings page renders it: resolved connection parameters
  * plus whether a password exists. Passwords themselves never cross this

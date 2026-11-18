@@ -116,7 +116,7 @@ test('whale popup fits portrait fallback and skin artwork without cropping, expo
   assert.match(imgCss, /object-position:center/)
   assert.doesNotMatch(imgCss, /object-fit:cover/)
   assert.doesNotMatch(imgCss, /(?:^|;)height:120px(?:;|$)/)
-  assert.match(fallbackImgCss, /background:#fff/)
+  assert.match(fallbackImgCss, /background:#fcfaf2/)
 
   await settle() // Baseline poll.
   await f.poll() // Second poll surfaces the popup.
@@ -135,8 +135,8 @@ test('whale popup fits portrait fallback and skin artwork without cropping, expo
   assert.equal(img.tag, 'img')
   assert.equal(img.getAttribute('data-whale'), 'image')
   assert.equal(img.getAttribute('data-whale-skin'), 'false')
-  assert.equal(img.getAttribute('width'), '288')
-  assert.equal(img.getAttribute('height'), '512')
+  assert.equal(img.getAttribute('width'), '800')
+  assert.equal(img.getAttribute('height'), '597')
   assert.equal(img.src, '_dsh/dsh-email/assets/whale')
 
   assert.equal(body.getAttribute('data-whale'), 'body')

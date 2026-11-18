@@ -402,6 +402,25 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "whale.row": "{who} · {subject}",
                 "whale.more": "…其余 {count} 封，用 email_watch / email_read 查看",
                 "whale.close": "关闭",
+                "whale.summon": "信使",
+                "whale.pat": "摸摸头",
+                "whale.check": "查收新信",
+                "whale.checking": "正在查信…",
+                "whale.open": "打开邮箱",
+                "whale.summonedTitle": "鲸鱼娘随时待命 ♪",
+                "whale.idleSubtitle": "点击头像摸摸头，或随时点下方按钮查收新邮件。",
+                "whale.checkEmpty": "暂无新邮件，信箱一切正常 ♪",
+                "whale.checkFound": "刚刚发现 {count} 封新邮件！",
+                "whale.checkError": "暂时没连上邮箱：{message}",
+                "whale.checkNoAccount": "还没有配置邮箱账号，先去「邮箱账号」页设置吧。",
+                "whale.patCount": "摸头 ×{count}",
+                "whale.imageAlt": "鲸鱼娘信使（点击摸摸头）",
+                "whale.pat1": "呜哇～好温暖！谢谢主人的摸摸头 ♪",
+                "whale.pat2": "海风带来新信件啦，请查收！",
+                "whale.pat3": "今天也在认真守望你的收件箱哦～",
+                "whale.pat4": "诶嘿嘿，尾巴都要摇起来了 ✨",
+                "whale.pat5": "有重要的邮件时，我会第一时间飞奔过来的！",
+                "whale.pat6": "要来一杯热茶，再一起整理邮件吗？",
             },
             // 与 zh 逐键对照。技术名词（IMAP/SMTP/OAuth2/INBOX/SSL/YAML、键名与预设名）原样保留；
             // 占位符逐键与 zh 相同，语序按英文自己排。
@@ -589,6 +608,25 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "whale.row": "{who} · {subject}",
                 "whale.more": "…and {count} more; use email_watch / email_read to see them",
                 "whale.close": "Close",
+                "whale.summon": "Courier",
+                "whale.pat": "Pat",
+                "whale.check": "Check mail",
+                "whale.checking": "Checking…",
+                "whale.open": "Open mailbox",
+                "whale.summonedTitle": "Whale courier at your service ♪",
+                "whale.idleSubtitle": "Click to pat her head, or check for new mail anytime.",
+                "whale.checkEmpty": "No new mail — inbox is all clear ♪",
+                "whale.checkFound": "Found {count} new message(s)!",
+                "whale.checkError": "Couldn't check mail: {message}",
+                "whale.checkNoAccount": "No mailbox configured yet — set one up in Accounts.",
+                "whale.patCount": "Pats ×{count}",
+                "whale.imageAlt": "Whale-girl courier (click to pat)",
+                "whale.pat1": "Whoa~ so warm! Thank you for the headpat ♪",
+                "whale.pat2": "Fresh mail carried in on the ocean breeze!",
+                "whale.pat3": "Keeping close watch on your inbox today too~",
+                "whale.pat4": "Hehe, my tail is practically wagging ✨",
+                "whale.pat5": "Whenever important mail arrives, I'll dash right over!",
+                "whale.pat6": "Care for warm tea while we sort your inbox together?",
             },
         };
         // Supported host locales receive a complete table. Overrides keep the most
@@ -602,6 +640,14 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "oauth.signIn.outlook": "Iniciar sesión con Microsoft", "oauth.signIn.generic": "Iniciar sesión en {provider}", "oauth.requestingCode": "Solicitando código…", "oauth.signingIn": "Iniciando sesión…", "oauth.reLogin": "Iniciar sesión de nuevo", "oauth.pendingHint": "Abre la dirección en el navegador e introduce el código:", "oauth.loggedInAs": "Sesión iniciada: {user}", "oauth.loginOk": "Sesión iniciada.", "oauth.loginFailed": "Error al iniciar sesión",
                 "preset.sectionTitle": "Preajustes de servidor", "preset.add": "+ Añadir preajuste", "preset.empty": "Todavía no hay preajustes personalizados.", "preset.nameLabel": "Nombre del preajuste", "preset.imapHostLabel": "Servidor IMAP", "preset.imapPortLabel": "Puerto IMAP", "preset.smtpHostLabel": "Servidor SMTP", "preset.smtpPortLabel": "Puerto SMTP", "preset.imapSsl": "SSL de IMAP", "preset.smtpSsl": "SSL de SMTP", "preset.yamlParseFailed": "No se pudo analizar serverPresets: {error}",
                 "whale.title": "Mensajero: {count} mensajes nuevos", "whale.unknownSender": "(desconocido)", "whale.noSubject": "(sin asunto)", "whale.close": "Cerrar",
+                "whale.summon": "Mensajera", "whale.pat": "Acariciar", "whale.check": "Buscar correo", "whale.checking": "Comprobando…", "whale.open": "Abrir buzón",
+                "whale.summonedTitle": "Mensajera lista para ayudar ♪", "whale.idleSubtitle": "Haz clic en ella para acariciarla o busca correo nuevo.",
+                "whale.checkEmpty": "No hay correo nuevo — todo al día ♪", "whale.checkFound": "¡Se encontraron {count} mensaje(s) nuevos!",
+                "whale.checkError": "No se pudo comprobar el correo: {message}", "whale.checkNoAccount": "Configura primero una cuenta en Cuentas.",
+                "whale.patCount": "Caricias ×{count}", "whale.imageAlt": "Mensajera ballena (clic para acariciar)",
+                "whale.pat1": "¡Qué cálido! Gracias por la caricia ♪", "whale.pat2": "¡La brisa marina trae cartas nuevas!",
+                "whale.pat3": "Vigilando tu bandeja de entrada hoy también~", "whale.pat4": "Jeje, mi cola casi no deja de moverse ✨",
+                "whale.pat5": "Si llega algo importante, vendré corriendo!", "whale.pat6": "¿Tomamos un té caliente mientras ordenamos el buzón?",
             },
             fr: {
                 "common.cancel": "Annuler", "common.retry": "Réessayer", "common.delete": "Supprimer", "common.edit": "Modifier", "common.collapse": "Réduire", "common.loading": "Chargement…",
@@ -611,6 +657,14 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "oauth.signIn.outlook": "Se connecter avec Microsoft", "oauth.signIn.generic": "Se connecter à {provider}", "oauth.requestingCode": "Demande de code…", "oauth.signingIn": "Connexion…", "oauth.reLogin": "Se reconnecter", "oauth.pendingHint": "Ouvrez l’adresse dans votre navigateur et saisissez le code :", "oauth.loggedInAs": "Connecté : {user}", "oauth.loginOk": "Connecté.", "oauth.loginFailed": "Échec de la connexion",
                 "preset.sectionTitle": "Préréglages serveur", "preset.add": "+ Ajouter un préréglage", "preset.empty": "Aucun préréglage personnalisé.", "preset.nameLabel": "Nom du préréglage", "preset.imapHostLabel": "Serveur IMAP", "preset.imapPortLabel": "Port IMAP", "preset.smtpHostLabel": "Serveur SMTP", "preset.smtpPortLabel": "Port SMTP", "preset.imapSsl": "SSL IMAP", "preset.smtpSsl": "SSL SMTP", "preset.yamlParseFailed": "Échec de l’analyse de serverPresets : {error}",
                 "whale.title": "Courrier : {count} nouveaux messages", "whale.unknownSender": "(inconnu)", "whale.noSubject": "(sans objet)", "whale.close": "Fermer",
+                "whale.summon": "Messagère", "whale.pat": "Caresser", "whale.check": "Vérifier", "whale.checking": "Vérification…", "whale.open": "Ouvrir la boîte",
+                "whale.summonedTitle": "Messagère prête à vous aider ♪", "whale.idleSubtitle": "Cliquez pour la caresser ou vérifiez les nouveaux messages.",
+                "whale.checkEmpty": "Aucun nouveau message — tout est calme ♪", "whale.checkFound": "{count} nouveau(x) message(s) trouvé(s) !",
+                "whale.checkError": "Impossible de vérifier : {message}", "whale.checkNoAccount": "Configurez d’abord un compte dans Comptes.",
+                "whale.patCount": "Caresses ×{count}", "whale.imageAlt": "Messagère baleine (cliquer pour caresser)",
+                "whale.pat1": "Oh~ c’est tout doux ! Merci pour la caresse ♪", "whale.pat2": "La brise marine apporte du courrier frais !",
+                "whale.pat3": "Je veille attentivement sur votre boîte aujourd’hui~", "whale.pat4": "Héhé, ma queue remue toute seule ✨",
+                "whale.pat5": "Dès qu’un message important arrive, j’accours !", "whale.pat6": "Un thé chaud pendant qu’on trie les messages ?",
             },
             de: {
                 "common.cancel": "Abbrechen", "common.retry": "Erneut versuchen", "common.delete": "Löschen", "common.edit": "Bearbeiten", "common.collapse": "Einklappen", "common.loading": "Wird geladen…",
@@ -620,6 +674,14 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "oauth.signIn.outlook": "Mit Microsoft anmelden", "oauth.signIn.generic": "Bei {provider} anmelden", "oauth.requestingCode": "Code wird angefordert…", "oauth.signingIn": "Anmeldung…", "oauth.reLogin": "Erneut anmelden", "oauth.pendingHint": "Öffne die Adresse im Browser und gib den Code ein:", "oauth.loggedInAs": "Angemeldet: {user}", "oauth.loginOk": "Angemeldet.", "oauth.loginFailed": "Anmeldung fehlgeschlagen",
                 "preset.sectionTitle": "Servervoreinstellungen", "preset.add": "+ Voreinstellung hinzufügen", "preset.empty": "Noch keine benutzerdefinierten Servervoreinstellungen.", "preset.nameLabel": "Name der Voreinstellung", "preset.imapHostLabel": "IMAP-Server", "preset.imapPortLabel": "IMAP-Port", "preset.smtpHostLabel": "SMTP-Server", "preset.smtpPortLabel": "SMTP-Port", "preset.imapSsl": "IMAP-SSL", "preset.smtpSsl": "SMTP-SSL", "preset.yamlParseFailed": "serverPresets konnte nicht gelesen werden: {error}",
                 "whale.title": "Briefdienst: {count} neue Nachrichten", "whale.unknownSender": "(unbekannt)", "whale.noSubject": "(kein Betreff)", "whale.close": "Schließen",
+                "whale.summon": "Botin", "whale.pat": "Streicheln", "whale.check": "Prüfen", "whale.checking": "Prüfe…", "whale.open": "Postfach öffnen",
+                "whale.summonedTitle": "Wal-Botin jederzeit bereit ♪", "whale.idleSubtitle": "Klicke zum Streicheln oder prüfe jederzeit auf neue Mails.",
+                "whale.checkEmpty": "Keine neuen Nachrichten — alles ruhig ♪", "whale.checkFound": "{count} neue Nachricht(en) gefunden!",
+                "whale.checkError": "Prüfung fehlgeschlagen: {message}", "whale.checkNoAccount": "Bitte zuerst unter Konten ein Postfach einrichten.",
+                "whale.patCount": "Streichler ×{count}", "whale.imageAlt": "Wal-Botin (klicken zum Streicheln)",
+                "whale.pat1": "Oh~ wie schön warm! Danke fürs Streicheln ♪", "whale.pat2": "Frische Post mit der Meeresbrise!",
+                "whale.pat3": "Ich passe heute auch gut auf dein Postfach auf~", "whale.pat4": "Hihi, meine Flosse wedelt schon ✨",
+                "whale.pat5": "Bei wichtigen Mails sause ich sofort herbei!", "whale.pat6": "Eine Tasse Tee, während wir die Mails sortieren?",
             },
             ja: {
                 "common.cancel": "キャンセル", "common.retry": "再試行", "common.delete": "削除", "common.edit": "編集", "common.collapse": "折りたたむ", "common.loading": "読み込み中…",
@@ -629,6 +691,14 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "oauth.signIn.outlook": "Microsoft でログイン", "oauth.signIn.generic": "{provider} にログイン", "oauth.requestingCode": "コードを取得中…", "oauth.signingIn": "ログイン中…", "oauth.reLogin": "再ログイン", "oauth.pendingHint": "ブラウザーでアドレスを開き、コードを入力してください:", "oauth.loggedInAs": "ログイン済み: {user}", "oauth.loginOk": "ログインしました。", "oauth.loginFailed": "ログインに失敗しました",
                 "preset.sectionTitle": "サーバープリセット", "preset.add": "+ プリセットを追加", "preset.empty": "カスタムプリセットはまだありません。", "preset.nameLabel": "プリセット名", "preset.imapHostLabel": "IMAP ホスト", "preset.imapPortLabel": "IMAP ポート", "preset.smtpHostLabel": "SMTP ホスト", "preset.smtpPortLabel": "SMTP ポート", "preset.imapSsl": "IMAP SSL", "preset.smtpSsl": "SMTP SSL", "preset.yamlParseFailed": "serverPresets の解析に失敗しました: {error}",
                 "whale.title": "メール便: 新着 {count} 件", "whale.unknownSender": "(不明)", "whale.noSubject": "(件名なし)", "whale.close": "閉じる",
+                "whale.summon": "メッセンジャー", "whale.pat": "なでなで", "whale.check": "新着確認", "whale.checking": "確認中…", "whale.open": "受信トレイ",
+                "whale.summonedTitle": "くじらちゃん待機中 ♪", "whale.idleSubtitle": "タップしてなでるか、下のボタンで新着メールを確認できます。",
+                "whale.checkEmpty": "新着メールはありません ♪", "whale.checkFound": "{count} 件の新着メールが見つかりました！",
+                "whale.checkError": "確認に失敗しました：{message}", "whale.checkNoAccount": "まず「アカウント」でメールを設定してください。",
+                "whale.patCount": "なでなで ×{count}", "whale.imageAlt": "くじらメッセンジャー（クリックでなでる）",
+                "whale.pat1": "わぁ〜あったかい！なでなでありがとう ♪", "whale.pat2": "海風と一緒に新しいお便りが届いたよ！",
+                "whale.pat3": "今日も受信トレイをしっかり見守ってるよ〜", "whale.pat4": "えへへ、しっぽまで揺れちゃう ✨",
+                "whale.pat5": "大事なメールが来たら、いちばんに駆けつけるね！", "whale.pat6": "温かいお茶でも飲みながらメール整理する？",
             },
             pt: {
                 "common.cancel": "Cancelar", "common.retry": "Tentar novamente", "common.delete": "Excluir", "common.edit": "Editar", "common.collapse": "Recolher", "common.loading": "Carregando…",
@@ -638,6 +708,14 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "oauth.signIn.outlook": "Entrar com a Microsoft", "oauth.signIn.generic": "Entrar em {provider}", "oauth.requestingCode": "Solicitando código…", "oauth.signingIn": "Entrando…", "oauth.reLogin": "Entrar novamente", "oauth.pendingHint": "Abra o endereço no navegador e informe o código:", "oauth.loggedInAs": "Conectado: {user}", "oauth.loginOk": "Conectado.", "oauth.loginFailed": "Falha ao entrar",
                 "preset.sectionTitle": "Predefinições de servidor", "preset.add": "+ Adicionar predefinição", "preset.empty": "Ainda não há predefinições personalizadas.", "preset.nameLabel": "Nome da predefinição", "preset.imapHostLabel": "Servidor IMAP", "preset.imapPortLabel": "Porta IMAP", "preset.smtpHostLabel": "Servidor SMTP", "preset.smtpPortLabel": "Porta SMTP", "preset.imapSsl": "SSL do IMAP", "preset.smtpSsl": "SSL do SMTP", "preset.yamlParseFailed": "Falha ao analisar serverPresets: {error}",
                 "whale.title": "Correio: {count} novas mensagens", "whale.unknownSender": "(desconhecido)", "whale.noSubject": "(sem assunto)", "whale.close": "Fechar",
+                "whale.summon": "Mensageira", "whale.pat": "Carinho", "whale.check": "Verificar", "whale.checking": "Verificando…", "whale.open": "Abrir caixa",
+                "whale.summonedTitle": "Mensageira baleia pronta ♪", "whale.idleSubtitle": "Clique nela para fazer carinho ou confira novas mensagens.",
+                "whale.checkEmpty": "Nenhuma nova mensagem — tudo em ordem ♪", "whale.checkFound": "{count} nova(s) mensagem(ns) encontrada(s)!",
+                "whale.checkError": "Erro ao verificar: {message}", "whale.checkNoAccount": "Configure primeiro uma conta em Contas.",
+                "whale.patCount": "Carinhos ×{count}", "whale.imageAlt": "Mensageira baleia (clique para fazer carinho)",
+                "whale.pat1": "Ah~ que quentinho! Obrigada pelo carinho ♪", "whale.pat2": "A brisa do mar trouxe novas cartas!",
+                "whale.pat3": "Cuidando da sua caixa de entrada hoje também~", "whale.pat4": "Hehe, minha cauda até balança ✨",
+                "whale.pat5": "Se chegar algo importante, venho correndo!", "whale.pat6": "Que tal um chá quentinho enquanto organizamos tudo?",
             },
             ru: {
                 "common.cancel": "Отмена", "common.retry": "Повторить", "common.delete": "Удалить", "common.edit": "Изменить", "common.collapse": "Свернуть", "common.loading": "Загрузка…",
@@ -647,6 +725,14 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "oauth.signIn.outlook": "Войти через Microsoft", "oauth.signIn.generic": "Войти в {provider}", "oauth.requestingCode": "Запрос кода…", "oauth.signingIn": "Выполняется вход…", "oauth.reLogin": "Войти снова", "oauth.pendingHint": "Откройте адрес в браузере и введите код:", "oauth.loggedInAs": "Выполнен вход: {user}", "oauth.loginOk": "Вход выполнен.", "oauth.loginFailed": "Не удалось войти",
                 "preset.sectionTitle": "Предустановки сервера", "preset.add": "+ Добавить предустановку", "preset.empty": "Пользовательских предустановок пока нет.", "preset.nameLabel": "Название предустановки", "preset.imapHostLabel": "Сервер IMAP", "preset.imapPortLabel": "Порт IMAP", "preset.smtpHostLabel": "Сервер SMTP", "preset.smtpPortLabel": "Порт SMTP", "preset.imapSsl": "SSL IMAP", "preset.smtpSsl": "SSL SMTP", "preset.yamlParseFailed": "Не удалось разобрать serverPresets: {error}",
                 "whale.title": "Почтовый курьер: новых сообщений — {count}", "whale.unknownSender": "(неизвестно)", "whale.noSubject": "(без темы)", "whale.close": "Закрыть",
+                "whale.summon": "Курьер", "whale.pat": "Погладить", "whale.check": "Проверить", "whale.checking": "Проверка…", "whale.open": "Открыть почту",
+                "whale.summonedTitle": "Китёнок-курьер на связи ♪", "whale.idleSubtitle": "Нажмите, чтобы погладить, или проверьте новые письма.",
+                "whale.checkEmpty": "Новых писем нет — во входящих спокойно ♪", "whale.checkFound": "Найдено новых писем: {count}!",
+                "whale.checkError": "Не удалось проверить: {message}", "whale.checkNoAccount": "Сначала настройте аккаунт во вкладке «Аккаунты».",
+                "whale.patCount": "Погладили ×{count}", "whale.imageAlt": "Китёнок-курьер (нажмите, чтобы погладить)",
+                "whale.pat1": "Ух ты~ как тепло! Спасибо за поглаживание ♪", "whale.pat2": "Морской бриз принёс свежую почту!",
+                "whale.pat3": "Сегодня тоже внимательно слежу за входящими~", "whale.pat4": "Хе-хе, хвостик сам виляет ✨",
+                "whale.pat5": "Как только придёт важное письмо, сразу примчусь!", "whale.pat6": "Может, выпьем тёплого чаю, пока разбираем почту?",
             },
         };
         // The 104 keys the first-pass override tables did not cover, reviewed per
@@ -5376,10 +5462,18 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                 role: "tabpanel", id: tabId + "-panel-" + value, "aria-labelledby": tabId + "-tab-" + value,
                 hidden: tab !== value, className: uiCss.panel,
             });
+            useEffect(() => {
+                openEmailInbox = () => setTab("mailbox");
+                return () => { if (openEmailInbox) openEmailInbox = null; };
+            }, []);
             return h(W.Page, { workbench, lang: uiLanguage(), title: dt("邮件", "Email"), className: settingsCss.root, showUpdates: tab === "accounts",
                 navigation: h(W.Tabs, { id: tabId, label: dt("邮件功能", "Email features"), value: tab, onChange: setTab, items: tabs }),
-                actions: h(W.Button, { variant: "primary", icon: "edit", disabled: !!composeRequest,
-                    onClick: () => setComposeRequest({ id: ++requestId.current, account: accounts.includes(composeAccount) ? composeAccount : defaultAccount }) }, dt("写邮件", "Compose")),
+                actions: [
+                    h(W.Button, { key: "courier", variant: "outline", icon: "star", "data-whale-trigger": "true",
+                        onClick: () => { void toggleWhaleWidget?.(); } }, t("whale.summon")),
+                    h(W.Button, { key: "compose", variant: "primary", icon: "edit", disabled: !!composeRequest,
+                        onClick: () => setComposeRequest({ id: ++requestId.current, account: accounts.includes(composeAccount) ? composeAccount : defaultAccount }) }, dt("写邮件", "Compose")),
+                ],
             },
                 h("div", panel("mailbox"), h(MailboxWorkbench, { active: tab === "mailbox", onConfigure: () => setTab("accounts"), onDraft: openMailboxDraft, onAccountChange: setComposeAccount })),
                 h("div", panel("drafts"), h(DraftWorkbench, { active: tab === "drafts", defaultAccount, composeRequest, onComposeFinished: finishCompose })),
@@ -5465,6 +5559,8 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
         // (skin artwork is served from the user's local dsh-deep-whale install with
         // its CC BY-NC-SA attribution chain; otherwise a built-in fallback is used).
         let updateWhalePreference = null;
+        let toggleWhaleWidget = null;
+        let openEmailInbox = null;
         function startWhaleWidget() {
             if (document.querySelector("#dsh-email-whale-root"))
                 return () => { };
@@ -5476,6 +5572,9 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
             document.body.appendChild(root);
             let pollTimer = 0;
             let hideTimer = 0;
+            let patTimer = 0;
+            let moodTimer = 0;
+            const particleTimers = new Set();
             let whaleUrl = "";
             let whaleCredit = "";
             let whaleSkin = false;
@@ -5486,44 +5585,91 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
             let generation = 0;
             let seedBaseline = true;
             let watchAbort = null;
+            let patCount = 0;
+            let patIndex = 0;
+            let activeMood = "deliver";
+            let lastBubbleText = "";
             /** 当前弹窗的数据。语言切了就靠它原样重画一遍，无需再拉一次接口。 */
             let current = null;
+            const clearInteractiveTimers = () => {
+                if (patTimer) {
+                    clearTimeout(patTimer);
+                    patTimer = 0;
+                }
+                if (moodTimer) {
+                    clearTimeout(moodTimer);
+                    moodTimer = 0;
+                }
+                particleTimers.forEach((id) => clearTimeout(id));
+                particleTimers.clear();
+            };
             const closePopup = () => {
                 if (hideTimer) {
                     clearTimeout(hideTimer);
                     hideTimer = 0;
                 }
+                clearInteractiveTimers();
                 root.replaceChildren();
                 current = null;
+                activeMood = "deliver";
             };
-            const showPopup = (value) => {
+            const moodSrc = (mood) => {
+                if (!whaleUrl || whaleSkin || mood === "deliver")
+                    return whaleUrl;
+                return whaleUrl + (whaleUrl.includes("?") ? "&" : "?") + "mood=" + mood;
+            };
+            const jumpToMailbox = () => {
+                openEmailInbox?.();
+                if (typeof emailWorkspace?.openPlugin === "function")
+                    emailWorkspace.openPlugin("dsh-email.workbench");
+                else if (typeof emailWorkspace?.openWorkbench === "function")
+                    emailWorkspace.openWorkbench("dsh-email.workbench");
+            };
+            const showPopup = (value, opts = {}) => {
+                const keepBubble = opts.preserveInteraction ? lastBubbleText : "";
+                const keepMood = opts.preserveInteraction ? activeMood : "deliver";
                 closePopup();
-                if (disposed || !enabled)
+                if (disposed || (!enabled && !opts.force))
                     return;
                 current = value;
+                activeMood = keepMood;
+                lastBubbleText = keepBubble;
+                if (whaleUrl && !whaleSkin && typeof Image === "function") {
+                    ["happy", "check"].forEach((m) => {
+                        const pre = new Image();
+                        pre.src = moodSrc(m);
+                    });
+                }
                 const card = document.createElement("div");
                 card.className = settingsCss.whaleCard;
                 card.setAttribute("data-whale", "card");
                 card.setAttribute("data-whale-skin", String(whaleSkin));
+                card.setAttribute("data-whale-mood", activeMood);
                 card.setAttribute("data-dsh-style", W.readStyle());
                 card.setAttribute("data-dsh-portal-synced", "true");
                 card.setAttribute("data-window-drag-exclude", "");
                 card.setAttribute("role", "region");
                 card.setAttribute("aria-labelledby", "dsh-email-whale-title");
+
+                let imgEl = null;
                 if (whaleUrl) {
                     const img = document.createElement("img");
                     img.className = settingsCss.whaleImg;
                     img.setAttribute("data-whale", "image");
                     img.setAttribute("data-whale-skin", String(whaleSkin));
                     if (!whaleSkin) {
-                        img.setAttribute("width", "288");
-                        img.setAttribute("height", "512");
+                        img.setAttribute("width", "800");
+                        img.setAttribute("height", "597");
                     }
-                    img.src = whaleUrl;
-                    img.alt = "";
+                    img.src = moodSrc(activeMood);
+                    img.alt = t("whale.imageAlt");
+                    img.setAttribute("role", "button");
+                    img.setAttribute("tabindex", "0");
                     img.onerror = () => { img.remove(); };
+                    imgEl = img;
                     card.appendChild(img);
                 }
+
                 const body = document.createElement("div");
                 body.className = settingsCss.whaleBody;
                 body.setAttribute("data-whale", "body");
@@ -5531,14 +5677,18 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                 title.id = "dsh-email-whale-title";
                 title.className = settingsCss.whaleTitle;
                 title.setAttribute("data-whale", "title");
-                title.textContent = t("whale.title", { count: value.newCount });
+                title.textContent = value.newCount > 0
+                    ? t("whale.title", { count: value.newCount })
+                    : t("whale.summonedTitle");
                 body.appendChild(title);
                 (value.messages || []).slice(0, 3).forEach((m) => {
                     const row = document.createElement("div");
                     row.className = settingsCss.whaleItem;
                     row.setAttribute("data-whale", "item");
+                    row.setAttribute("data-whale-clickable", "true");
                     const who = (m.from || []).map((a) => a.name || a.address).filter(Boolean).join(", ") || t("whale.unknownSender");
                     row.textContent = t("whale.row", { who, subject: m.subject || t("whale.noSubject") });
+                    row.onclick = () => jumpToMailbox();
                     body.appendChild(row);
                 });
                 if (value.newCount > 3) {
@@ -5556,6 +5706,7 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                     body.appendChild(credit);
                 }
                 card.appendChild(body);
+
                 const closeBtn = document.createElement("button");
                 closeBtn.type = "button";
                 closeBtn.className = settingsCss.whaleClose;
@@ -5564,7 +5715,99 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                 closeBtn.setAttribute("aria-label", t("whale.close"));
                 closeBtn.onclick = closePopup;
                 card.appendChild(closeBtn);
-                root.appendChild(card);
+
+                const bubble = document.createElement("div");
+                bubble.className = settingsCss.whaleBubble;
+                bubble.setAttribute("data-whale", "bubble");
+                bubble.setAttribute("role", "status");
+                const initialBubble = lastBubbleText || (value.manual ? t("whale.idleSubtitle") : "");
+                if (initialBubble) {
+                    bubble.textContent = initialBubble;
+                } else {
+                    bubble.setAttribute("hidden", "");
+                }
+                card.appendChild(bubble);
+
+                const patBadge = document.createElement("div");
+                patBadge.className = settingsCss.whalePatBadge;
+                patBadge.setAttribute("data-whale", "pat-badge");
+                if (patCount > 0) {
+                    patBadge.textContent = "\u2665 " + t("whale.patCount", { count: patCount });
+                } else {
+                    patBadge.setAttribute("hidden", "");
+                }
+                card.appendChild(patBadge);
+
+                const particles = document.createElement("div");
+                particles.className = settingsCss.whaleParticles;
+                particles.setAttribute("data-whale", "particles");
+                particles.setAttribute("aria-hidden", "true");
+                card.appendChild(particles);
+
+                const controls = document.createElement("div");
+                controls.className = settingsCss.whaleControls;
+                controls.setAttribute("data-whale", "controls");
+
+                const patBtn = document.createElement("button");
+                patBtn.type = "button";
+                patBtn.className = settingsCss.whaleAction;
+                patBtn.setAttribute("data-whale", "pat");
+                patBtn.textContent = "\u2661 " + t("whale.pat");
+
+                const checkBtn = document.createElement("button");
+                checkBtn.type = "button";
+                checkBtn.className = settingsCss.whaleAction;
+                checkBtn.setAttribute("data-whale", "check");
+                checkBtn.textContent = "\uD83D\uDD0D " + t("whale.check");
+
+                const openBtn = document.createElement("button");
+                openBtn.type = "button";
+                openBtn.className = settingsCss.whaleAction;
+                openBtn.setAttribute("data-whale", "open");
+                openBtn.textContent = "\u2709 " + t("whale.open");
+                openBtn.onclick = () => jumpToMailbox();
+
+                controls.appendChild(patBtn);
+                controls.appendChild(checkBtn);
+                controls.appendChild(openBtn);
+                card.appendChild(controls);
+
+                const setMood = (mood) => {
+                    activeMood = mood;
+                    card.setAttribute("data-whale-mood", mood);
+                    if (imgEl && whaleUrl)
+                        imgEl.src = moodSrc(mood);
+                };
+                const setBubble = (text) => {
+                    lastBubbleText = text;
+                    if (text) {
+                        bubble.textContent = text;
+                        bubble.removeAttribute?.("hidden");
+                        if (!bubble.removeAttribute) bubble.attributes?.delete?.("hidden");
+                    } else {
+                        bubble.textContent = "";
+                        bubble.setAttribute("hidden", "");
+                    }
+                };
+                const spawnParticles = () => {
+                    const glyphs = ["\u2665", "\u2728", "\u266A", "\u2B50", "\u2661"];
+                    for (let i = 0; i < 5; i++) {
+                        const p = document.createElement("span");
+                        p.className = settingsCss.whaleParticle;
+                        p.setAttribute("data-whale", "particle");
+                        p.textContent = glyphs[(patCount + i) % glyphs.length];
+                        p.style?.setProperty?.("left", (24 + ((i * 13 + patCount * 7) % 52)) + "%");
+                        p.style?.setProperty?.("top", (18 + ((i * 11) % 30)) + "%");
+                        p.style?.setProperty?.("--wp-dx", ((i - 2) * 10) + "px");
+                        particles.appendChild(p);
+                        const tid = setTimeout(() => {
+                            particleTimers.delete(tid);
+                            p.remove?.();
+                        }, 940);
+                        particleTimers.add(tid);
+                    }
+                };
+                const dismissMs = value.manual ? 25000 : 12000;
                 const armDismiss = () => {
                     if (hideTimer)
                         clearTimeout(hideTimer);
@@ -5574,9 +5817,120 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                             return;
                         }
                         closePopup();
-                    }, 12000);
+                    }, dismissMs);
                 };
+                const triggerPat = () => {
+                    if (disposed) return;
+                    patCount++;
+                    patIndex = ((patIndex % 6) + 1);
+                    patBadge.textContent = "\u2665 " + t("whale.patCount", { count: patCount });
+                    patBadge.removeAttribute?.("hidden");
+                    if (!patBadge.removeAttribute) patBadge.attributes?.delete?.("hidden");
+                    setBubble(t("whale.pat" + patIndex));
+                    setMood("happy");
+                    card.setAttribute("data-whale-patting", "true");
+                    spawnParticles();
+                    if (patTimer) clearTimeout(patTimer);
+                    patTimer = setTimeout(() => {
+                        patTimer = 0;
+                        card.setAttribute("data-whale-patting", "false");
+                    }, 580);
+                    if (moodTimer) clearTimeout(moodTimer);
+                    moodTimer = setTimeout(() => {
+                        moodTimer = 0;
+                        if (activeMood === "happy") setMood("deliver");
+                    }, 2800);
+                    armDismiss();
+                };
+                const triggerCheckMail = async () => {
+                    if (disposed || checkBtn.disabled) return;
+                    if (moodTimer) { clearTimeout(moodTimer); moodTimer = 0; }
+                    checkBtn.disabled = true;
+                    checkBtn.textContent = t("whale.checking");
+                    setMood("check");
+                    armDismiss();
+                    try {
+                        const snap = await api();
+                        if (disposed) return;
+                        if (snap?.whale) {
+                            whaleUrl = (snap.whale.url || "").replace(/^\/_dsh\//, "_dsh/");
+                            whaleCredit = snap.whale.credit || "";
+                            whaleSkin = Boolean(snap.whale.skin);
+                        }
+                        if (!snap?.accounts?.length) {
+                            setBubble(t("whale.checkNoAccount"));
+                            moodTimer = setTimeout(() => { moodTimer = 0; if (activeMood === "check") setMood("deliver"); }, 2400);
+                            return;
+                        }
+                        const res = await api("watch", { limit: 5 });
+                        if (disposed) return;
+                        if (res && res.newCount > 0) {
+                            const foundText = t("whale.checkFound", { count: res.newCount });
+                            lastBubbleText = foundText;
+                            activeMood = "deliver";
+                            showPopup({ ...res, manual: value.manual }, { force: Boolean(opts.force), preserveInteraction: true });
+                            return;
+                        }
+                        setBubble(t("whale.checkEmpty"));
+                        moodTimer = setTimeout(() => { moodTimer = 0; if (activeMood === "check") setMood("deliver"); }, 2400);
+                    } catch (err) {
+                        if (!disposed) {
+                            setBubble(t("whale.checkError", { message: err?.message || String(err || "unknown") }));
+                            moodTimer = setTimeout(() => { moodTimer = 0; if (activeMood === "check") setMood("deliver"); }, 2400);
+                        }
+                    } finally {
+                        if (!disposed) {
+                            checkBtn.disabled = false;
+                            checkBtn.textContent = "\uD83D\uDD0D " + t("whale.check");
+                        }
+                    }
+                };
+                if (imgEl) {
+                    imgEl.onclick = triggerPat;
+                    imgEl.onkeydown = (e) => {
+                        if (e?.key === "Enter" || e?.key === " ") {
+                            e.preventDefault?.();
+                            triggerPat();
+                        }
+                    };
+                }
+                patBtn.onclick = triggerPat;
+                checkBtn.onclick = () => { void triggerCheckMail(); };
+                card.onpointermove = (e) => {
+                    const rect = card.getBoundingClientRect?.();
+                    if (!rect || !rect.width || !rect.height) return;
+                    const nx = ((e.clientX - rect.left) / rect.width) - 0.5;
+                    const ny = ((e.clientY - rect.top) / rect.height) - 0.5;
+                    card.style?.setProperty?.("--whale-ry", (nx * 6).toFixed(2) + "deg");
+                    card.style?.setProperty?.("--whale-rx", (-ny * 6).toFixed(2) + "deg");
+                };
+                card.onpointerleave = () => {
+                    card.style?.setProperty?.("--whale-rx", "0deg");
+                    card.style?.setProperty?.("--whale-ry", "0deg");
+                };
+
+                root.appendChild(card);
                 armDismiss();
+            };
+            toggleWhaleWidget = async () => {
+                if (disposed) return;
+                if (root.childElementCount > 0) {
+                    closePopup();
+                    return;
+                }
+                if (!whaleUrl) {
+                    try {
+                        const snap = await api();
+                        if (disposed) return;
+                        if (snap?.whale) {
+                            whaleUrl = (snap.whale.url || "").replace(/^\/_dsh\//, "_dsh/");
+                            whaleCredit = snap.whale.credit || "";
+                            whaleSkin = Boolean(snap.whale.skin);
+                        }
+                    } catch { /* fallback to card without image if offline */ }
+                }
+                if (disposed) return;
+                showPopup({ newCount: 0, messages: [], manual: true }, { force: true });
             };
             // 轮询策略：页面不可见时完全不打扰邮箱服务器；失败指数退避（上限 10 分钟），
             // 成功立刻回到 30s；本地设置快照同样刷新，以便跨页面的通知开关生效。
@@ -5662,7 +6016,7 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
             void tick().then(schedule);
             // 弹窗是命令式 DOM，没有 React 那层重渲染：语言切换后自己重画一次（开着的才重画）。
             relocalize = () => { if (current !== null && root.childElementCount > 0)
-                showPopup(current); };
+                showPopup(current, { force: Boolean(current?.manual), preserveInteraction: true }); };
             return () => {
                 disposed = true;
                 generation++;
@@ -5672,8 +6026,10 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                 offStyle();
                 if (hideTimer)
                     clearTimeout(hideTimer);
+                clearInteractiveTimers();
                 relocalize = null;
                 updateWhalePreference = null;
+                toggleWhaleWidget = null;
                 root.remove();
             };
         }
