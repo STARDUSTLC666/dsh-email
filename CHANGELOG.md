@@ -7,11 +7,6 @@
 - **UI v3 Upgrade**: add 13 curated light presets (including `glass`, `eink`, `blueprint`, `risograph`, `win98`, `songhui`, `frutiger`, and `gazette`) and 8 independent dual-layer Chinese + Latin font pairings (defaulting to `arcade` YouYuan Mono alongside `auto`, `songkai`, `fangsong`, `poster`, `retro98`, `serif`, and `modern`).
 - Unify the 48px single-row header, sliding tab indicator, resizable split panes, theme-tinted shimmer skeletons, row hover quick actions, `[data-dsh-serif]` titles, and live theme/font syncing for Whale-Girl Courier and CoachmarkTour; fix `EmailSettingsSection` hook ordering and `useId()` tour selector escaping.
 
-## 0.28.8 (2026-11-18)
-
-- 升级共享更新组件至 `@stardustlc/dsh-updates@0.2.5`：独立安装插件详情页底栏去重（保留组合包组件委派与对话页热更新卡片），补齐 `bundle-in-use` 组合包占用提示说明，并在检查结果过期或远端版本变更时自动刷新元数据，彻底消除 `check-first` 卡顿。
-- Upgrade `@stardustlc/dsh-updates` to `0.2.5`: deduplicate standalone native plugin detail footers while keeping Suite delegation and in-chat reminder cards, surface clear `bundle-in-use` guidance, and automatically refresh expired update checks without `check-first` stalls.
-
 ## Unreleased
 
 - 修复设置页与侧边栏工作台首次打开即崩溃：`EmailSettingsSection` 在加载态的提前 return 之后才声明 `useEffect`，快照到达的那一轮 hook 数量变化触发 React #310，`settings.section` 与 `main` 两个槽位一起被错误边界卸载（issue #56）。
@@ -20,6 +15,11 @@
 - Fix the settings page and the sidebar workbench crashing on first open: `EmailSettingsSection` declared a `useEffect` after the loading early return, so the render that delivered the settings snapshot changed the hook count and React threw #310, taking the `settings.section` and `main` slots down with it (issue #56).
 - Fix the coachmark selector crash: the tour built `React.useId()` values (for example `:r2o:`) into `#id` selectors, so `querySelector` threw `SyntaxError` and the sidebar workbench went blank once the tour auto-opened; selectors now use `[id="…"]`.
 - Default the interface to English and add the `uiLocale` setting (`auto` follows DSH; `en/zh/es/fr/de/ja/pt/ru` pin a language), so a missing or unusable host locale no longer falls back to Chinese. All eight dictionaries, including `zh`, stay as they are.
+
+## 0.28.8 (2026-11-18)
+
+- 升级共享更新组件至 `@stardustlc/dsh-updates@0.2.5`：独立安装插件详情页底栏去重（保留组合包组件委派与对话页热更新卡片），补齐 `bundle-in-use` 组合包占用提示说明，并在检查结果过期或远端版本变更时自动刷新元数据，彻底消除 `check-first` 卡顿。
+- Upgrade `@stardustlc/dsh-updates` to `0.2.5`: deduplicate standalone native plugin detail footers while keeping Suite delegation and in-chat reminder cards, surface clear `bundle-in-use` guidance, and automatically refresh expired update checks without `check-first` stalls.
 
 ## 0.28.7 (2026-11-18)
 
