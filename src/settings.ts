@@ -34,7 +34,7 @@ export const EmailSettingsSchema: z = z.object({
   replyTimeZone: z.string().default(''),
   // English by default so an English DSH never opens a Chinese workbench when
   // the host locale snapshot is missing or unusable; `auto` follows the host.
-  uiLocale: z.union([...UI_LOCALES]).default('en'),
+  uiLocale: z.string().default('en'),
   newMailPopup: z.boolean().default(true),
   trustedRecipientsYaml: z.string().default(''),
   maxBodyChars: z.number().default(20000),
@@ -197,6 +197,7 @@ export function toEmailConfig(value: EmailSettingsValue, user?: Partial<EmailSet
   if (has('allowTrustedReply')) set('allowTrustedReply', draft.allowTrustedReply)
   if (has('replyLocale')) set('replyLocale', draft.replyLocale)
   if (has('replyTimeZone')) set('replyTimeZone', draft.replyTimeZone)
+  if (has('uiLocale')) set('uiLocale', draft.uiLocale)
   if (has('trustedRecipientsYaml')) set('trustedRecipientsYaml', draft.trustedRecipientsYaml)
   if (has('maxBodyChars')) set('maxBodyChars', draft.maxBodyChars)
   if (has('maxAttachmentBytes')) set('maxAttachmentBytes', draft.maxAttachmentBytes)
@@ -268,7 +269,7 @@ export function validateSettingsValue(value: EmailSettingsValue, extraProviders:
   const draft = (value ?? {}) as Partial<EmailSettingsValue>
   if(draft.allowTrustedReply!==undefined&&typeof draft.allowTrustedReply!=='boolean')throw new Error('可信回复免审开关必须为布尔值')
   if(draft.replyLocale!==undefined&&(typeof draft.replyLocale!=='string'||!/^(?:auto|(?:zh|en|fr)(?:-[a-z0-9]{1,8})*)$/i.test(draft.replyLocale)))throw new Error('回复引用语言请选择 auto、zh、en 或 fr')
-  if(draft.uiLocale!==undefined&&!UI_LOCALES.includes(draft.uiLocale as UiLocale))throw new Error('界面语言只能是 ' + UI_LOCALES.join('、'))
+  if(draft.uiLocale!==undefined&&(typeof draft.uiLocale!=='string'||!UI_LOCALES.includes(draft.uiLocale as UiLocale)))throw new Error('uiLocale must be one of: ' + UI_LOCALES.join(', '))
   if(draft.replyTimeZone!==undefined){if(typeof draft.replyTimeZone!=='string')throw new Error('时区必须为文本');if(draft.replyTimeZone.trim())try{new Intl.DateTimeFormat('en',{timeZone:draft.replyTimeZone.trim()})}catch{throw new Error('引用日期时区无效，请填写 Asia/Shanghai、Europe/Paris 等 IANA 时区')}}
   if (draft.receiveProtocol !== undefined && !['imap', 'pop3'].includes(draft.receiveProtocol)) throw new Error('收信协议只能是 IMAP 或 POP3')
   if (portOutOfRange(endpointPort(draft.pop3))) throw new Error('POP3 端口必须在 1-65535 之间')
