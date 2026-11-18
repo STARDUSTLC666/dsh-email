@@ -7,11 +7,19 @@ function createWorkbenchUI(React, require) {
     DSH_STYLES,
     DSH_STYLE_STORAGE_KEY,
     DSH_STYLE_EVENT,
+    DSH_FONTS,
+    DSH_DEFAULT_FONT,
+    DSH_FONT_STORAGE_KEY,
+    DSH_FONT_EVENT,
     DSH_ICON_PATHS,
     useDshStyle,
     readDshStyle,
     writeDshStyle,
     subscribeDshStyle,
+    useDshFont,
+    readDshFont,
+    writeDshFont,
+    subscribeDshFont,
     createOverlaySyncRef,
     resolveHostPrimitives,
     createStyleSwitcherComponent,
@@ -55,7 +63,7 @@ function createWorkbenchUI(React, require) {
   function Button({ children, icon, variant = 'outline', className, size = 'sm', ...props }) {
     return h(primitives().Button, {
       variant: variant === 'danger' ? 'ghost' : variant, size, ...props,
-      className: clsx(ui.button, variant === 'primary' && ui.primary, variant === 'outline' && ui.outline, variant === 'danger' && ui.danger, className),
+      className: clsx(ui.button, variant === 'primary' && clsx(ui.primary, 'dsh-btn-primary'), variant === 'outline' && ui.outline, variant === 'danger' && ui.danger, className),
       icon: icon ? h(Icon, { name: icon }) : undefined,
     }, children);
   }
@@ -145,7 +153,7 @@ function createWorkbenchUI(React, require) {
       arrowY: Math.round(Math.max(18, Math.min(ch - 18, centerY - top))),
     };
   }
-  function CoachmarkTour({ rootRef, steps = [], step = 0, manual = false, style = 'harness', lang = 'zh', layout: rawLayout, setLayout, onStep, onClose, onCopyPrompt }) {
+  function CoachmarkTour({ rootRef, steps = [], step = 0, manual = false, style = 'harness', font = DSH_DEFAULT_FONT, lang = 'zh', layout: rawLayout, setLayout, onStep, onClose, onCopyPrompt }) {
     const layerRef = React.useRef ? React.useRef(null) : { current: null };
     const cardRef = React.useRef ? React.useRef(null) : { current: null };
     const nextBtnRef = React.useRef ? React.useRef(null) : { current: null };
@@ -169,12 +177,18 @@ function createWorkbenchUI(React, require) {
     }, []);
 
     React.useEffect?.(() => {
+      function safeQuery(scope, selector) {
+        if (!selector || typeof scope.querySelector !== 'function') return null;
+        if (selector.startsWith('#') && !/[\s>+~[\].,()]/.test(selector.slice(1))) {
+          const id = selector.slice(1).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+          try { return scope.querySelector('[id="' + id + '"]'); } catch { /* ignore */ }
+        }
+        try { return scope.querySelector(selector); } catch { return null; }
+      }
       function measure() {
         const scope = rootRef?.current || (typeof document !== 'undefined' ? document : null);
         if (!scope || typeof scope.querySelector !== 'function') return;
-        const target = (current.selector && scope.querySelector(current.selector))
-          || (current.fallback && scope.querySelector(current.fallback))
-          || null;
+        const target = safeQuery(scope, current.selector) || safeQuery(scope, current.fallback) || null;
         setLayout?.(computeTourLayout(target, current.side, cardRef.current));
       }
       measure();
@@ -217,6 +231,7 @@ function createWorkbenchUI(React, require) {
       ref: layerRef,
       className: ui.tourLayer,
       'data-dsh-style': style,
+      'data-dsh-font': font,
       'data-email-tour': current.id || String(step),
       'data-window-drag-exclude': '',
     },
@@ -281,6 +296,7 @@ function createWorkbenchUI(React, require) {
   }
   function Page({ title, navigation, actions, children, workbench = false, showUpdates = false, className, lang = 'zh', tourSteps = null, tourStorageKey = 'dsh-email.tour.v1', onTourCopyPrompt }) {
     const [style, setStyle] = useDshStyle(React);
+    const [font, setFont] = useDshFont(React);
     const rootRef = React.useRef ? React.useRef(null) : { current: null };
     const triggerRef = React.useRef ? React.useRef(null) : { current: null };
     const [tour, setTour] = useState({ open: false, step: 0, manual: false });
@@ -304,11 +320,13 @@ function createWorkbenchUI(React, require) {
       if (restoreFocus) setTimeout(() => triggerRef.current?.focus?.(), 0);
     }
 
-    return h('section', { ref: rootRef, className: clsx(ui.page, !workbench && ui.embedded, className), 'data-dsh-style': style },
-      h('header', { className: ui.pageHeader },
-        h('h1', { className: ui.title }, h('span', { className: ui.brand }, h(Icon, { name: 'mail' })), title),
-        navigation,
-        h('div', { className: ui.headerActions },
+    return h('section', { ref: rootRef, className: clsx(ui.page, !workbench && ui.embedded, className), 'data-dsh-style': style, 'data-dsh-font': font },
+      h('header', { className: clsx(ui.pageHeader, 'dsh-header'), 'data-dsh-header': '' },
+        h('div', { className: 'dsh-header-leading' },
+          h('div', { className: 'dsh-header-brand' },
+            h('h1', { className: clsx(ui.title, 'dsh-header-title') }, h('span', { className: clsx(ui.brand, 'dsh-header-badge') }, h(Icon, { name: 'mail', size: 15 })), title)),
+          navigation ? h('div', { className: 'dsh-header-tabs' }, navigation) : null),
+        h('div', { className: clsx(ui.headerActions, 'dsh-header-actions') },
           hasTour ? h(Button, {
             ref: triggerRef,
             variant: 'ghost',
@@ -319,7 +337,7 @@ function createWorkbenchUI(React, require) {
             title: isEn ? 'Interactive guide' : '使用引导',
             onClick: () => setTour({ open: true, step: 0, manual: true }),
           }, isEn ? '? Tour' : '? 引导') : null,
-          h(StyleSwitcher, { style, onChange: setStyle, lang, compact: true }),
+          h(StyleSwitcher, { style, font, onChange: setStyle, onFontChange: setFont, lang, compact: true }),
           actions)),
       h('div', { className: ui.pageBody, 'data-show-updates': showUpdates }, children),
       hasTour && tour.open ? h(CoachmarkTour, {
@@ -328,6 +346,7 @@ function createWorkbenchUI(React, require) {
         step: tour.step,
         manual: tour.manual,
         style,
+        font,
         lang,
         layout: tourLayout,
         setLayout: setTourLayout,
@@ -337,6 +356,7 @@ function createWorkbenchUI(React, require) {
       }) : null);
   }
   function Tabs({ items, value, onChange, label, id }) {
+    const indicator = styleKit.useSlidingTabIndicator(React, value, { deps: [items.length] });
     function onKeyDown(event, index) {
       if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
@@ -345,10 +365,12 @@ function createWorkbenchUI(React, require) {
       onChange(items[next].id);
       event.currentTarget.parentElement?.querySelectorAll('[role=tab]')[next]?.focus();
     }
-    return h('div', { className: ui.tabs, role: 'tablist', 'aria-label': label }, items.map((item, index) =>
-      h(Button, { variant: 'ghost', key: item.id, className: ui.tab, role: 'tab', id: id + '-tab-' + item.id,
-        'aria-controls': id + '-panel-' + item.id, 'aria-selected': item.id === value, tabIndex: item.id === value ? 0 : -1,
-        onClick: () => onChange(item.id), onKeyDown: event => onKeyDown(event, index) }, item.label)));
+    return h('div', { className: clsx(ui.tabs, 'dsh-tablist', 'dsh-tablist-pill'), role: 'tablist', 'aria-label': label, ...indicator.tablistProps },
+      items.map((item, index) =>
+        h(Button, { variant: 'ghost', key: item.id, className: ui.tab, role: 'tab', id: id + '-tab-' + item.id,
+          'aria-controls': id + '-panel-' + item.id, 'aria-selected': item.id === value, tabIndex: item.id === value ? 0 : -1,
+          onClick: () => onChange(item.id), onKeyDown: event => onKeyDown(event, index) }, item.label)),
+      h('span', indicator.indicatorProps));
   }
   function Status({ children, tone = 'info', className }) {
     if (!children) return null;
@@ -365,10 +387,11 @@ function createWorkbenchUI(React, require) {
   function ChoiceMenu({ label, id, value, items, onChange, disabled, children, className, align }) {
     const [open, setOpen] = useState(false);
     const [style] = useDshStyle(React);
+    const [font] = useDshFont(React);
     const P = primitives();
     const selected = items.find(item => item.id === value);
     return h(P.Menu, {
-      open: open && !disabled, selectedId: value, dshStyle: style, items, align, portal: !P.isFallback, autoFocus: true, minWidthFromAnchor: true,
+      open: open && !disabled, selectedId: value, dshStyle: style, dshFont: font, items, align, portal: !P.isFallback, autoFocus: true, minWidthFromAnchor: true,
       className: clsx(ui.menu, className),
       onClose: () => setOpen(false),
       onSelect: next => { setOpen(false); if (next !== value) onChange(next); },
@@ -393,11 +416,12 @@ function createWorkbenchUI(React, require) {
   }
   function Dialog({ title, children, onClose, closeLabel, className, busy = false, footer, tone }) {
     const [style] = useDshStyle(React);
+    const [font] = useDshFont(React);
     const titleId = typeof useId === 'function' ? useId() : 'dsh-email-dialog-title';
     const P = primitives();
     const close = () => { if (!busy) onClose(); };
-    return h(P.Modal, { open: true, headless: true, title, onClose: close, backdropBlur: false, className: clsx(ui.dialog, className) },
-      h('div', { ref: createOverlaySyncRef(style), className: ui.dialogFrame, 'data-dsh-style': style, 'data-window-drag-exclude': '' },
+    return h(P.Modal, { open: true, headless: true, title, onClose: close, backdropBlur: false, dshStyle: style, dshFont: font, className: clsx(ui.dialog, className) },
+      h('div', { ref: createOverlaySyncRef(style, font), className: ui.dialogFrame, 'data-dsh-style': style, 'data-dsh-font': font, 'data-window-drag-exclude': '' },
         h('header', { className: ui.dialogHeader }, h('h2', { id: titleId, 'data-tone': tone }, title), h(IconButton, { icon: 'close', label: closeLabel, disabled: busy, onClick: close })),
         h('div', { className: ui.dialogBody, 'aria-busy': busy || undefined }, children),
         footer ? h('footer', { className: ui.dialogFooter }, footer) : null));
@@ -408,10 +432,16 @@ function createWorkbenchUI(React, require) {
       return h(Icon, { name: icon, size });
     }));
   }
+  const SplitResizer = styleKit.createSplitResizerComponent(React);
+  const Skeleton = styleKit.createSkeletonComponent(React);
+  const useResizableSplit = (options) => styleKit.useResizableSplit(React, options);
   return {
     Button, IconButton, Input, Checkbox, Icon, Page, Tabs, Status, Empty,
-    ChoiceMenu, SettingsChoice, Dialog, StyleSwitcher, CoachmarkTour, register, primitives,
+    ChoiceMenu, SettingsChoice, Dialog, StyleSwitcher, CoachmarkTour,
+    SplitResizer, Skeleton, useResizableSplit, register, primitives,
     styles: DSH_STYLES, styleKey: DSH_STYLE_STORAGE_KEY, styleEvent: DSH_STYLE_EVENT,
     useStyle: () => useDshStyle(React), readStyle: readDshStyle, writeStyle: writeDshStyle, subscribeStyle: subscribeDshStyle,
+    fonts: DSH_FONTS, defaultFont: DSH_DEFAULT_FONT, fontKey: DSH_FONT_STORAGE_KEY, fontEvent: DSH_FONT_EVENT,
+    useFont: () => useDshFont(React), readFont: readDshFont, writeFont: writeDshFont, subscribeFont: subscribeDshFont,
   };
 }

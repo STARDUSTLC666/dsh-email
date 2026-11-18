@@ -5164,6 +5164,10 @@ __stardustUpdatesGuard(React, "dsh-email.rules", { dirty: !!dirty, busy, retainO
             const openMailboxDraft = draftId => setComposeRequest({ id: ++requestId.current, draftId });
             const finishCompose = useCallback(() => setComposeRequest(null), []);
             useEffect(() => { if(workbench) emailActiveTab=tab;else emailSettingsActiveTab=tab; }, [tab]);
+            useEffect(() => {
+                openEmailInbox = () => setTab("mailbox");
+                return () => { if (openEmailInbox) openEmailInbox = null; };
+            }, []);
             const [draft, setDraft] = useState(null);
             useEffect(() => {
                 if (draft === null)
@@ -5460,12 +5464,8 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
             ];
             const panel = value => ({
                 role: "tabpanel", id: tabId + "-panel-" + value, "aria-labelledby": tabId + "-tab-" + value,
-                hidden: tab !== value, className: uiCss.panel,
+                hidden: tab !== value, className: emailUi.clsx(uiCss.panel, "dsh-tab-panel"),
             });
-            useEffect(() => {
-                openEmailInbox = () => setTab("mailbox");
-                return () => { if (openEmailInbox) openEmailInbox = null; };
-            }, []);
             const mailTourSteps = [
                 {
                     id: "accounts",
@@ -5682,6 +5682,7 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                 card.setAttribute("data-whale-skin", String(whaleSkin));
                 card.setAttribute("data-whale-mood", activeMood);
                 card.setAttribute("data-dsh-style", W.readStyle());
+                card.setAttribute("data-dsh-font", W.readFont());
                 card.setAttribute("data-dsh-portal-synced", "true");
                 card.setAttribute("data-window-drag-exclude", "");
                 card.setAttribute("role", "region");
@@ -6049,6 +6050,10 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                 const openCard = root.children && root.children[0];
                 if (openCard) openCard.setAttribute("data-dsh-style", next);
             });
+            const offFont = W.subscribeFont((next) => {
+                const openCard = root.children && root.children[0];
+                if (openCard) openCard.setAttribute("data-dsh-font", next);
+            });
             void tick().then(schedule);
             // 弹窗是命令式 DOM，没有 React 那层重渲染：语言切换后自己重画一次（开着的才重画）。
             relocalize = () => { if (current !== null && root.childElementCount > 0)
@@ -6060,6 +6065,7 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                 clearTimeout(pollTimer);
                 document.removeEventListener("visibilitychange", onVisibility);
                 offStyle();
+                offFont();
                 if (hideTimer)
                     clearTimeout(hideTimer);
                 clearInteractiveTimers();

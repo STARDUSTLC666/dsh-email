@@ -14,7 +14,7 @@
   min-width: 0;
   padding-block-start: var(--dsh-frame-top-clearance, 0px);
   padding-inline-start: var(--dsh-frame-leading-clearance, 0px);
-  background: var(--dsw-alias-bg-base, #ffffff);
+  background-color: var(--dsw-alias-bg-base, #ffffff);
   container-type: inline-size;
 }
 
@@ -30,7 +30,6 @@
   align-items: center;
   gap: 12px;
   padding: 8px 16px;
-  border-block-end: 0.5px solid var(--dsw-alias-border-l2);
 }
 
 .title {
@@ -100,6 +99,7 @@
 }
 
 .tabs {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -118,6 +118,10 @@
   background: var(--dsw-alias-interactive-bg-active);
   color: var(--dsw-alias-label-primary);
   font-weight: 600;
+}
+
+.tabs[data-indicator-ready="true"] .tab[aria-selected="true"] {
+  background: transparent;
 }
 
 .button.button {
@@ -445,7 +449,7 @@
   pointer-events: none;
   z-index: 2147483000;
   color: var(--tour-ink);
-  font: 13px/1.55 var(--ds-font-family-ui, system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif);
+  font: 13px/1.55 var(--dsh-font-body, var(--ds-font-family-ui, system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif));
 }
 
 .tourLayer[popover]:popover-open {

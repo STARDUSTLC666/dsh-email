@@ -437,12 +437,12 @@ function DraftWorkbench({ active, defaultAccount, composeRequest, onComposeFinis
   return h(React.Fragment, null,
     active ? h('section', { className: draftCss.drafts, 'aria-label': dt('邮件草稿', 'Email drafts') },
       h('header', { className: draftCss.toolbar },
-        h('h2', null, dt('本地草稿', 'Local drafts') + ' · ' + data.drafts.length),
+        h('h2', { 'data-dsh-serif': '' }, dt('本地草稿', 'Local drafts') + ' · ' + data.drafts.length),
         h(W.Button, { icon: 'refresh', 'aria-busy': busy || undefined, disabled: busy, onClick: () => run(reload) }, dt('刷新列表', 'Refresh list'))),
       h('p', { className: draftCss.hint }, dt('草稿只保存在本机。模型可用 email_draft 准备内容，你在这里编辑、保存和确认发送。', 'Drafts stay on this device. Ask the model to prepare one with email_draft, then edit, save and confirm here.')),
       !editorOpen ? h(W.Status, { tone: 'error' }, error) : null,
       data.drafts.length ? h('div', { className: draftCss.draftList, 'data-dsh-card': '' }, data.drafts.map(draft =>
-        h(W.Button, { key: draft.id, variant: 'ghost', className: draftCss.draftRow, 'data-dsh-row': '', disabled: busy, onClick: () => requestSwitch({ kind: 'open', id: draft.id }) },
+        h(W.Button, { key: draft.id, variant: 'ghost', className: draftCss.draftRow, 'data-dsh-row': '', 'data-active': selected?.id === draft.id ? 'true' : 'false', disabled: busy, onClick: () => requestSwitch({ kind: 'open', id: draft.id }) },
           h('span', null, h('strong', null, draft.subject || dt('未命名草稿', 'Untitled draft')), h('small', { className: draftCss.hint }, draft.account || dt('尚未选择账号', 'No account selected'))),
           h('small', { className: clsx(draftCss.hint, draftCss.draftState) }, selected?.id === draft.id && dirty ? dt('未保存', 'Unsaved') : draftState(draft.state)))))
         : h(W.Empty, { title: dt('还没有草稿', 'No drafts yet'), icon: 'mail' }, dt('点击上方“写邮件”开始。', 'Choose Compose above to begin.'))) :

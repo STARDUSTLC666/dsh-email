@@ -1,5 +1,12 @@
 # 更新记录
 
+## 0.29.0 (2026-11-18)
+
+- **UI v3 全新视觉与交互升级**：13 种高质感浅色预设（新增 `glass` 晴昼琉璃、`eink` 护眼墨水屏、`blueprint` 工程晒图、`risograph` 波普孔版、`win98` 千禧复古、`songhui` 宋韵朱砂、`frutiger` 晴空水晶、`gazette` 铅字晨报），以及 8 套独立的中英双层字体搭配（默认 `arcade` 幼圆等宽，支持 `auto` 风格专属字、`songkai` 中宋+楷书、`fangsong` 工程仿宋、`poster` 重磅画报黑、`retro98` 千禧新宋、`serif` 思源书宋、`modern` 现代思源黑）。
+- 统一 48px 单行工作台顶栏、滑动选项卡指示条、可拖拽调节分栏宽度、主题着色微光骨架屏、邮件行悬浮快捷操作栏、`[data-dsh-serif]` 标题排版，以及随主题/字体实时同步的鲸鱼娘信使交互卡片与引导浮层；修复 `EmailSettingsSection` Hook 顺序与 `useId()` 引导选择器转义。
+- **UI v3 Upgrade**: add 13 curated light presets (including `glass`, `eink`, `blueprint`, `risograph`, `win98`, `songhui`, `frutiger`, and `gazette`) and 8 independent dual-layer Chinese + Latin font pairings (defaulting to `arcade` YouYuan Mono alongside `auto`, `songkai`, `fangsong`, `poster`, `retro98`, `serif`, and `modern`).
+- Unify the 48px single-row header, sliding tab indicator, resizable split panes, theme-tinted shimmer skeletons, row hover quick actions, `[data-dsh-serif]` titles, and live theme/font syncing for Whale-Girl Courier and CoachmarkTour; fix `EmailSettingsSection` hook ordering and `useId()` tour selector escaping.
+
 ## 0.28.8 (2026-11-18)
 
 - 升级共享更新组件至 `@stardustlc/dsh-updates@0.2.5`：独立安装插件详情页底栏去重（保留组合包组件委派与对话页热更新卡片），补齐 `bundle-in-use` 组合包占用提示说明，并在检查结果过期或远端版本变更时自动刷新元数据，彻底消除 `check-first` 卡顿。

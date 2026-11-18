@@ -326,7 +326,7 @@ function MailMessage({ detail, currentRow, account, folder, selected, busy, run,
         h(W.IconButton, { icon: 'star', disabled: busy, 'aria-pressed': !!currentRow?.flagged, onClick: () => mark(currentRow?.flagged ? 'unstar' : 'star'), label: currentRow?.flagged ? dt('取消星标', 'Unstar') : dt('添加星标', 'Star') })) : null,
       canTrash ? h(W.IconButton, { icon: 'trash', variant: 'danger', disabled: busy, onClick: () => onTrash([selected]), label: dt('移入废纸篓', 'Move to Trash') }) : null),
     h('div', { className: mailCss.readerScroll },
-      h('h2', null, subject),
+      h('h2', { 'data-dsh-serif': '' }, subject),
       h('div', { className: mailCss.envelope, 'data-dsh-card': '' },
         h('span', { className: mailCss.avatar, 'aria-hidden': true }, initials),
         h('div', { className: mailCss.envelopeAddresses },
@@ -510,6 +510,8 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
   const activeAccount = accounts.find(row => row.name === account);
   const isPop3 = activeAccount?.incoming === 'pop3';
   const canTrash = activeAccount?.trashSupported === true;
+  const railSplit = W.useResizableSplit({ key: 'dsh-email:rail-width', initial: 224, min: 168, max: 320 });
+  const listSplit = W.useResizableSplit({ key: 'dsh-email:list-width', initial: 336, min: 256, max: 520 });
 
   __stardustUpdatesGuard(React, 'dsh-email.mailbox', { busy: !!trash || foldersOpen });
   __stardustUpdatesGuard(React, 'dsh-email.mailbox-operation', { busy });
@@ -693,7 +695,11 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
   if (accountsLoading || !accounts.length) {
     return h('section', { className: mailCss.mailbox, 'aria-label': dt('邮箱工作台','Mailbox workbench') },
       h('div', { className: mailCss.alert, hidden: !error }, errorBanner),
-      accountsLoading ? h(W.Empty, { title: dt('正在读取邮箱账号…','Loading accounts…') }) :
+      accountsLoading ? h('div', { className: mailCss.skeletonWrap, role: 'status', 'aria-busy': 'true', 'aria-label': dt('正在读取邮箱账号…','Loading accounts…') },
+        h(W.Skeleton, { variant: 'card' }),
+        h(W.Skeleton, { variant: 'row' }),
+        h(W.Skeleton, { variant: 'row' }),
+        h(W.Skeleton, { variant: 'row' })) :
         h(W.Empty, { title: error ? dt('暂时无法读取邮箱','Mailbox unavailable') : dt('连接你的邮箱','Connect your mailbox'),
           action: h(W.Button, { variant: 'primary', onClick: onConfigure }, dt('邮箱设置','Account settings')),
         }, dt('添加并测试邮箱账号后，即可在这里阅读和回复邮件。','Add and test an email account to read and reply here.')));
@@ -706,9 +712,14 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
         !moved.undo ? h('p', { className: mailCss.listNote }, dt('如需恢复，请在邮箱客户端移回原文件夹。', 'To restore, move the messages back in your mail client.')) : null),
       moved.undo ? h(W.Button, { disabled: busy, onClick: undoTrash }, dt('撤销移动', 'Undo move')) : null,
       h(W.IconButton, { icon: 'close', onClick: () => setMoved(null), label: dt('关闭提示', 'Dismiss') })) : null,
-    h('div', { className: mailCss.columns, 'data-reading': selected !== null },
+    h('div', {
+      className: mailCss.columns,
+      'data-reading': selected !== null,
+      style: { '--mail-rail-width': railSplit.size + 'px', '--mail-list-width': listSplit.size + 'px' },
+    },
       h(MailFolderRail, { accounts, account, folder, folders, busy, loading: foldersLoading,
         onAccount: changeAccount, onFolder: changeFolder, onManage: () => setFoldersOpen(true) }),
+      h(W.SplitResizer, { ...railSplit.resizerProps, label: dt('调整文件夹栏宽度', 'Resize folders pane') }),
       h('section', { className: mailCss.list, 'aria-label': dt('邮件列表', 'Message list'), 'aria-busy': listLoading || undefined },
         h('div', { className: mailCss.listHeader, 'data-tour': 'mail-filter' },
           h('form', { className: mailCss.search, onSubmit: event => { event.preventDefault(); if (!folder || busy || listLoading) return; reset(); setUnread(false); setQuery(input.trim()); setRefresh(n => n + 1); } },
@@ -731,11 +742,13 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
             const unseen = row.flagsSupported !== false && !row.seen;
             const subject = row.subject || dt('（无主题）','(No subject)');
             const from = who(row.from);
-            return h('div', { key: row.uid, className: mailCss.messageRow, 'data-dsh-row': '', 'data-selected': selected === row.uid, 'data-unread': unseen },
+            const isSelected = selected === row.uid;
+            return h('div', { key: row.uid, className: mailCss.messageRow, 'data-dsh-row': '', 'data-selected': isSelected, 'data-active': isSelected ? 'true' : 'false', 'data-unread': unseen },
               canTrash ? h(W.Checkbox, { hiddenLabel: true, label: dt('选择邮件：', 'Select message: ') + subject,
                 checked: checked.includes(row.uid), disabled: busy || listLoading,
                 onChange: value => setChecked(old => value ? [...old, row.uid] : old.filter(uid => uid !== row.uid)) }) : null,
-              h(W.Button, { variant: 'ghost', className: mailCss.messageButton, disabled: busy, 'aria-pressed': selected === row.uid,
+              h('span', { className: 'dsh-pixel-cursor', 'aria-hidden': 'true' }, '▶'),
+              h(W.Button, { variant: 'ghost', className: mailCss.messageButton, disabled: busy, 'aria-pressed': isSelected,
                 onClick: event => openMessage(row.uid, event.currentTarget) },
                 h('span', { className: mailCss.messageLine },
                   unseen ? h('span', { className: mailCss.unreadDot, role: 'img', 'aria-label': dt('未读','Unread') }) : null,
@@ -743,13 +756,53 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
                   row.flagged ? h(W.Icon, { name: 'star', size: 13 }) : null,
                   h('time', { className: mailCss.timestamp, dateTime: row.date }, formatDate(row.date))),
                 h('span', { className: mailCss.messageLine }, h('span', { className: mailCss.subject, title: subject }, subject),
-                  row.hasAttachments ? h(W.Icon, { name: 'clip', size: 13, role: 'img', 'aria-hidden': undefined, 'aria-label': dt('附件', 'Attachments') }) : null)));
-          }) : h(W.Empty, {
-            title:error && !result?dt('邮件列表没有读出来','Messages could not be loaded')
-              : listLoading ? dt('正在读取邮件…','Loading messages…') : rows.length && withAttachments ? dt('本页没有附件邮件', 'No messages with attachments on this page')
-              : query ? dt('当前检索范围内没有结果。','No results in the current search window.') : dt('当前页没有邮件。','No messages on this page.'),
-            action: error && !result ? h(W.Button, { icon: 'refresh', disabled: busy || listLoading, onClick: retry }, dt('重试','Retry')) : undefined,
-          })),
+                  row.hasAttachments ? h(W.Icon, { name: 'clip', size: 13, role: 'img', 'aria-hidden': undefined, 'aria-label': dt('附件', 'Attachments') }) : null)),
+              h('div', { className: clsx('dsh-row-actions', mailCss.rowActions) },
+                row.flagsSupported !== false ? h(React.Fragment, null,
+                  h(W.IconButton, {
+                    icon: 'mail',
+                    disabled: busy,
+                    label: row.seen ? dt('标记未读', 'Mark unread') : dt('标记已读', 'Mark read'),
+                    onClick: () => run(async valid => {
+                      await mailboxApi('mark', { account, folder, uid: row.uid, mark: row.seen ? 'unread' : 'read' });
+                      if (valid()) setResult(old => old && { ...old, messages: old.messages.map(m => m.uid === row.uid ? { ...m, seen: !row.seen } : m) });
+                    }),
+                  }),
+                  h(W.IconButton, {
+                    icon: 'star',
+                    disabled: busy,
+                    'aria-pressed': !!row.flagged,
+                    label: row.flagged ? dt('取消星标', 'Unstar') : dt('添加星标', 'Star'),
+                    onClick: () => run(async valid => {
+                      await mailboxApi('mark', { account, folder, uid: row.uid, mark: row.flagged ? 'unstar' : 'star' });
+                      if (valid()) setResult(old => old && { ...old, messages: old.messages.map(m => m.uid === row.uid ? { ...m, flagged: !row.flagged } : m) });
+                    }),
+                  })) : null,
+                h(W.IconButton, {
+                  icon: 'reply',
+                  disabled: busy,
+                  label: dt('回复到草稿', 'Reply in drafts'),
+                  onClick: () => run(async valid => {
+                    const draft = await mailboxApi('replyDraft', { account, folder, uid: row.uid, replyAll: false, locale: UI_LANG === 'en' ? 'en' : 'zh' });
+                    if (valid()) onDraft(draft.id);
+                  }),
+                }),
+                canTrash ? h(W.IconButton, {
+                  icon: 'trash',
+                  variant: 'danger',
+                  disabled: busy,
+                  label: dt('移入废纸篓', 'Move to Trash'),
+                  onClick: () => requestTrash([row.uid]),
+                }) : null));
+          }) : listLoading && !(error && !result)
+            ? h('div', { className: mailCss.skeletonList, role: 'status', 'aria-busy': 'true', 'aria-label': dt('正在读取邮件…','Loading messages…') },
+                Array.from({ length: 5 }, (_, idx) => h(W.Skeleton, { key: idx, variant: 'row' })))
+            : h(W.Empty, {
+                title:error && !result?dt('邮件列表没有读出来','Messages could not be loaded')
+                  : listLoading ? dt('正在读取邮件…','Loading messages…') : rows.length && withAttachments ? dt('本页没有附件邮件', 'No messages with attachments on this page')
+                  : query ? dt('当前检索范围内没有结果。','No results in the current search window.') : dt('当前页没有邮件。','No messages on this page.'),
+                action: error && !result ? h(W.Button, { icon: 'refresh', disabled: busy || listLoading, onClick: retry }, dt('重试','Retry')) : undefined,
+              })),
         h('footer', { className: mailCss.listFooter },
           h('p', { className: mailCss.listNote, role: 'status' }, result ? dt("本页 ", "This page: ") + rows.length + dt(" 封", " messages") +
             (result.order === 'relevance' ? dt(' · 按相关性排序', ' · Ranked by relevance') : dt(' · 按邮箱到达序排列', ' · Mailbox arrival order')) : null),
@@ -764,10 +817,14 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
             h('span', { className: mailCss.listNote }, dt('第 ', 'Page ') + (Math.floor(offset / pageLimit) + 1) + dt(' 页', '')),
             h(W.Button, { icon: 'right', disabled: loading || busy || !hasMore, onClick: () => setOffset(n => n + pageLimit) }, dt('下一页', 'Next page'))),
           result?.headerScan?.nextScanOffset !== undefined ? h(W.Button, { icon: 'search', disabled: loading || busy, onClick: () => { setOffset(0); setScanOffset(result.headerScan.nextScanOffset); } }, dt('继续搜索更早邮件', 'Search older headers')) : null)),
+      h(W.SplitResizer, { ...listSplit.resizerProps, label: dt('调整邮件列表宽度', 'Resize message list pane') }),
       h('section', { className: mailCss.reader, 'aria-label': dt('邮件详情', 'Message details'), 'aria-busy': reading || undefined },
         selected !== null ? h('div', { className: mailCss.readerBack, ref: readerBack },
           h(W.Button, { variant: 'ghost', icon: 'left', disabled: busy, onClick: backToList }, dt('返回邮件列表','Back to messages'))) : null,
-        reading && selected !== null ? h(W.Empty, { title: dt('正在读取正文…','Loading message…') }) :
+        reading && selected !== null ? h('div', { className: mailCss.readerSkeleton, role: 'status', 'aria-busy': 'true', 'aria-label': dt('正在读取正文…','Loading message…') },
+          h(W.Skeleton, { variant: 'text', lines: 1, width: '62%', height: '22px' }),
+          h(W.Skeleton, { variant: 'card' }),
+          h(W.Skeleton, { variant: 'text', lines: 5 })) :
           readError && selected !== null ? h(W.Empty, { title:dt('这封邮件没有读出来','This message could not be loaded'),
             action: h(W.Button, { icon: 'refresh', disabled: busy, onClick: () => setReadToken(n => n + 1) }, dt('重试','Retry')),
           }, readError) : detail ? h(MailMessage, {

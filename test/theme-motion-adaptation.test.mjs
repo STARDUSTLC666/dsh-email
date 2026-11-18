@@ -46,7 +46,7 @@ function loadClient({ withPrimitives = false, throwStorage = false } = {}) {
     },
     document: {
       querySelectorAll(selector) {
-        return selector === '[data-dsh-portal-synced]' ? syncedNodes : []
+        return String(selector).includes('[data-dsh-portal-synced]') ? syncedNodes : []
       },
     },
   }
@@ -67,6 +67,7 @@ function loadClient({ withPrimitives = false, throwStorage = false } = {}) {
       return [val, () => {}]
     },
     useEffect() {},
+    useLayoutEffect() {},
     useId: () => 'test-id',
     useMemo: fn => fn(),
     useRef: initial => ({ current: initial }),
@@ -157,23 +158,37 @@ test('DSH >=0.2.2-rc.3 manifest, window clearances, and dsh-updates footer are p
   assert.match(EMAIL_CSS, /\[data-window-drag-exclude\]\{-webkit-app-region:no-drag\}/)
 })
 
-test('never-too-dark slate adaptation and all 5 [data-dsh-style] palettes are present in EMAIL_CSS', () => {
+test('never-too-dark slate adaptation and all 13 [data-dsh-style] palettes + 8 DSH_FONTS are present in EMAIL_CSS', () => {
   const { EMAIL_CSS, W } = loadClient()
   assert.deepEqual(
     Array.from(W.styles, item => item.id),
-    ['harness', 'cream', 'claude', 'pixel8bit', 'mint'],
+    ['harness', 'cream', 'claude', 'pixel8bit', 'mint', 'glass', 'eink', 'blueprint', 'risograph', 'win98', 'songhui', 'frutiger', 'gazette'],
+  )
+  assert.equal(W.defaultFont, 'arcade')
+  assert.deepEqual(
+    Array.from(W.fonts, item => item.id),
+    ['arcade', 'auto', 'songkai', 'fangsong', 'poster', 'retro98', 'serif', 'modern'],
   )
   // Soft breathable slate in host dark mode under harness (never pitch black).
   assert.match(EMAIL_CSS, /body\[data-ds-dark-theme\] \[data-dsh-style=harness\][\s\S]*?#1f232b/i)
   assert.match(EMAIL_CSS, /#272c36/i)
+  assert.match(EMAIL_CSS, /#ececec[\s\S]*#1b4f9c/i, 'win98 platinum toolbar contrast rule present')
   assert.doesNotMatch(EMAIL_CSS, /--dsw-alias-bg-base:#000(?:000)?[;}]/i)
   assert.doesNotMatch(EMAIL_CSS, /#090a0f|#0b0d13/i)
-  // All 4 custom daylight presets define their bright base surfaces and pixel8bit geometry.
+  // All 12 custom daylight presets define their bright base surfaces.
   for (const [id, hex] of [
     ['cream', '#faf7f0'],
     ['claude', '#f5f4ed'],
     ['pixel8bit', '#f4f6e8'],
     ['mint', '#f5fafb'],
+    ['glass', '#f3f7ff'],
+    ['eink', '#f2f1ec'],
+    ['blueprint', '#eaf3fb'],
+    ['risograph', '#faf6ee'],
+    ['win98', '#dcdcdc'],
+    ['songhui', '#f7f3e8'],
+    ['frutiger', '#eaf7ff'],
+    ['gazette', '#f6f3ec'],
   ]) {
     assert.ok(
       EMAIL_CSS.includes(`[data-dsh-style=${id}]`) || EMAIL_CSS.includes(`[data-dsh-style="${id}"]`),
@@ -181,9 +196,15 @@ test('never-too-dark slate adaptation and all 5 [data-dsh-style] palettes are pr
     )
     assert.ok(EMAIL_CSS.toLowerCase().includes(hex), `missing bright surface ${hex} for ${id}`)
   }
+  for (const fontId of ['arcade', 'songkai', 'fangsong', 'poster', 'retro98', 'serif', 'modern']) {
+    assert.ok(
+      EMAIL_CSS.includes(`[data-dsh-font=${fontId}]`) || EMAIL_CSS.includes(`[data-dsh-font="${fontId}"]`),
+      `missing font selector for ${fontId}`,
+    )
+  }
 })
 
-test('style switcher syncs via localStorage["dsh-stardust:ui-style"], custom event, and portaled overlays', () => {
+test('style & font switchers sync via localStorage, custom events, and portaled overlays', () => {
   const env = loadClient()
   const { W, storage, dispatched, syncedNodes } = env
   const attrs = new Map()
@@ -193,7 +214,8 @@ test('style switcher syncs via localStorage["dsh-stardust:ui-style"], custom eve
   })
 
   assert.equal(W.readStyle(), 'harness')
-  for (const preset of ['cream', 'claude', 'pixel8bit', 'mint', 'harness']) {
+  assert.equal(W.readFont(), 'arcade')
+  for (const preset of ['cream', 'claude', 'pixel8bit', 'mint', 'gazette', 'harness']) {
     assert.equal(W.writeStyle(preset), preset)
     assert.equal(storage.get('dsh-stardust:ui-style'), preset)
     assert.equal(attrs.get('data-dsh-style'), preset)
@@ -202,15 +224,26 @@ test('style switcher syncs via localStorage["dsh-stardust:ui-style"], custom eve
   assert.equal(dispatched.some(ev => ev.type === 'dsh-stardust-style' && ev.detail?.style === 'pixel8bit'), true)
   assert.equal(W.writeStyle('unknown-theme'), 'harness', 'invalid preset falls back to harness')
 
+  for (const fontId of ['songkai', 'fangsong', 'auto', 'arcade']) {
+    assert.equal(W.writeFont(fontId), fontId)
+    assert.equal(storage.get('dsh-stardust:ui-font'), fontId)
+    assert.equal(attrs.get('data-dsh-font'), fontId)
+  }
+  assert.equal(dispatched.some(ev => ev.type === 'dsh-stardust-font' && ev.detail?.font === 'songkai'), true)
+  assert.equal(W.writeFont('unknown-font'), 'arcade', 'invalid font falls back to arcade')
+
   // Restricted storage sandbox must not throw.
   const restricted = loadClient({ throwStorage: true })
   assert.equal(restricted.W.readStyle(), 'harness')
   assert.equal(restricted.W.writeStyle('mint'), 'mint')
+  assert.equal(restricted.W.readFont(), 'arcade')
+  assert.equal(restricted.W.writeFont('songkai'), 'songkai')
 })
 
-test('standalone fallbacks render semantic controls, stamp data-dsh-icon, and sync portaled Dialog frames', () => {
+test('standalone fallbacks render semantic controls, FontSwitcher, stamp data-dsh-icon, and sync portaled Dialog frames', () => {
   const { react, W } = loadClient({ withPrimitives: false })
   W.writeStyle('claude')
+  W.writeFont('songkai')
 
   const pageTree = renderTree(
     react.createElement(
@@ -225,6 +258,11 @@ test('standalone fallbacks render semantic controls, stamp data-dsh-icon, and sy
 
   assert.equal(pageTree.type, 'section')
   assert.equal(pageTree.props['data-dsh-style'], 'claude')
+  assert.equal(pageTree.props['data-dsh-font'], 'songkai')
+  const styleTrigger = findNodes(pageTree, n => String(n.props?.className || '').includes('dsh-style-trigger'))[0]
+  const fontTrigger = findNodes(pageTree, n => String(n.props?.className || '').includes('dsh-font-trigger'))[0]
+  assert.ok(styleTrigger, 'StyleSwitcher trigger renders in unified header')
+  assert.ok(fontTrigger, 'FontSwitcher trigger renders beside StyleSwitcher')
   const svgs = findNodes(pageTree, n => n.type === 'svg')
   assert.ok(svgs.some(n => n.props['data-dsh-icon'] === 'mail'))
   assert.ok(svgs.some(n => n.props['data-dsh-icon'] === 'down'))
@@ -236,7 +274,7 @@ test('standalone fallbacks render semantic controls, stamp data-dsh-icon, and sy
   assert.equal(checkboxes[0].props['data-modal-autofocus'], '')
   assert.equal(Object.hasOwn(checkboxes[0].props, 'modalAutofocus'), false)
 
-  // Verify Dialog stamps data-dsh-style and data-window-drag-exclude onto portaled [role="dialog"] ancestor via ref.
+  // Verify Dialog stamps data-dsh-style, data-dsh-font, and data-window-drag-exclude onto portaled [role="dialog"] ancestor via ref.
   const dialogTree = renderTree(
     react.createElement(W.Dialog, { title: '写邮件', closeLabel: '关闭', onClose() {} }, '正文'),
   )
@@ -255,7 +293,9 @@ test('standalone fallbacks render semantic controls, stamp data-dsh-icon, and sy
     },
   })
   assert.equal(innerAttrs.get('data-dsh-style'), 'claude')
+  assert.equal(innerAttrs.get('data-dsh-font'), 'songkai')
   assert.equal(outerAttrs.get('data-dsh-style'), 'claude')
+  assert.equal(outerAttrs.get('data-dsh-font'), 'songkai')
   assert.equal(outerAttrs.get('data-window-drag-exclude'), '')
 })
 
@@ -364,4 +404,95 @@ test('interactive CoachmarkTour renders tethered popover card, directional arrow
   assert.ok(skipBtn)
   skipBtn.props.onClick()
   assert.equal(closed, true)
+})
+
+test('v3 header, sliding tab indicator, resizable split panes, shimmer skeletons, and row hover actions are wired', () => {
+  const { react, W, EMAIL_CSS } = loadClient()
+  for (const token of ['dsh-header', 'dsh-tab-indicator', 'dsh-split-resizer', 'dsh-skeleton', 'dsh-row-actions', 'dsh-pixel-cursor']) {
+    assert.ok(EMAIL_CSS.includes(token), `missing v3 CSS token ${token}`)
+  }
+
+  const tabsTree = renderTree(
+    react.createElement(W.Tabs, {
+      id: 't',
+      label: 'Features',
+      value: 'mailbox',
+      items: [{ id: 'mailbox', label: 'Mailbox' }, { id: 'drafts', label: 'Drafts' }],
+      onChange() {},
+    }),
+  )
+  assert.equal(tabsTree.props.role, 'tablist')
+  assert.ok(String(tabsTree.props.className).includes('dsh-tablist-pill'))
+  const indicator = findNodes(tabsTree, n => String(n.props?.className || '').includes('dsh-tab-indicator'))[0]
+  assert.ok(indicator, 'W.Tabs renders sliding tab indicator span')
+
+  let resized = 300
+  const resizerTree = renderTree(
+    react.createElement(W.SplitResizer, {
+      value: resized,
+      initial: 336,
+      min: 200,
+      max: 500,
+      label: 'Resize list',
+      onChange: next => { resized = next },
+      onReset: () => { resized = 336 },
+    }),
+  )
+  assert.equal(resizerTree.props.role, 'separator')
+  assert.equal(resizerTree.props['aria-orientation'], 'vertical')
+  assert.equal(resizerTree.props['data-window-drag-exclude'], '')
+  resizerTree.props.onKeyDown({ key: 'ArrowRight', preventDefault() {} })
+  assert.equal(resized, 316)
+  resizerTree.props.onDoubleClick()
+  assert.equal(resized, 336)
+
+  const skelTree = renderTree(react.createElement(W.Skeleton, { variant: 'card', label: 'Loading' }))
+  assert.equal(skelTree.props.role, 'status')
+  assert.equal(skelTree.props['aria-label'], 'Loading')
+  assert.ok(String(skelTree.props.className).includes('dsh-skeleton-card'))
+
+  assert.match(BUNDLE, /dsh-row-actions/)
+  assert.match(BUNDLE, /dsh-pixel-cursor/)
+  assert.match(BUNDLE, /dsh-email:rail-width/)
+  assert.match(BUNDLE, /dsh-email:list-width/)
+})
+
+test('EmailSettingsSection calls all hooks before early return and CoachmarkTour safely queries React useId() selectors', () => {
+  const clientTpl = readFileSync(new URL('templates/client.js', ROOT_URL), 'utf8')
+  const fnStart = clientTpl.indexOf('function EmailSettingsSection(')
+  const earlyReturn = clientTpl.indexOf('if (draft === null) {', fnStart)
+  const fnEnd = clientTpl.indexOf('function startWhaleWidget(', earlyReturn)
+  assert.ok(fnStart > 0 && earlyReturn > fnStart && fnEnd > earlyReturn)
+  const afterEarlyReturn = clientTpl.slice(earlyReturn, fnEnd)
+  assert.doesNotMatch(
+    afterEarlyReturn,
+    /\b(?:React\.)?(?:useState|useEffect|useLayoutEffect|useMemo|useCallback|useRef|useId)\s*\(/,
+    'No React hooks may be called after `if (draft === null)` early return in EmailSettingsSection',
+  )
+
+  const effects = []
+  const { react, W } = loadClient()
+  react.useEffect = fn => { effects.push(fn) }
+  const queried = []
+  const rootRef = {
+    current: {
+      querySelector(sel) {
+        queried.push(sel)
+        if (sel.startsWith('#:')) throw new SyntaxError('Invalid selector: ' + sel)
+        return sel === '[id=":r12:-tab-accounts"]' ? { getBoundingClientRect: () => ({ left: 10, top: 10, width: 80, height: 28 }) } : null
+      },
+    },
+  }
+  let measuredLayout = null
+  renderTree(
+    react.createElement(W.CoachmarkTour, {
+      rootRef,
+      steps: [{ id: 'accounts', selector: '#:r12:-tab-accounts', side: 'bottom', title: 'Accounts', desc: 'Desc' }],
+      step: 0,
+      setLayout: next => { measuredLayout = next },
+    }),
+  )
+  for (const fn of effects) fn?.()
+  assert.ok(queried.includes('[id=":r12:-tab-accounts"]'), 'CoachmarkTour rewrites #:id to safe [id="..."] selector')
+  assert.ok(measuredLayout?.spotlight, 'CoachmarkTour computes spotlight for useId() selector without SyntaxError')
 })
