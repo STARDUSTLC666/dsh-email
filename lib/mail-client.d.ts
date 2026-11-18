@@ -53,7 +53,7 @@ export declare function imapAuthOf(cfg: Pick<ResolvedEmailConfig, 'authUser' | '
  */
 export declare function smtpAuthOf(cfg: Pick<ResolvedEmailConfig, 'authUser' | 'authPassword' | 'authKind'>, accessToken?: string): SmtpAuth;
 /** The message an OAuth2 account gets when the mailbox has to be logged into again. */
-export declare const OAUTH2_RELOGIN_MESSAGE = "\u90AE\u7BB1\u767B\u5F55\u5931\u8D25\uFF1A\u8BF7\u5230\u8BBE\u7F6E\u9875\u91CD\u65B0\u767B\u5F55\uFF08Microsoft \u8D26\u53F7\u4F7F\u7528\u8BBE\u5907\u7801\u767B\u5F55\uFF0C\u4E0D\u4F7F\u7528\u6388\u6743\u7801\uFF09";
+export declare const OAUTH2_RELOGIN_MESSAGE = "Mailbox sign-in failed: sign in again in Settings (Microsoft accounts use the device-code flow, not an app password)";
 /**
  * True for the errors both libraries report when the server rejects the
  * credentials. An expired access token is indistinguishable from a wrong

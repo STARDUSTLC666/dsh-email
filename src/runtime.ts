@@ -113,7 +113,7 @@ export function createEmailRuntime(
   let poolFingerprint = ''
   let disposed = false
   const getPool = (): EmailClient => {
-    if (disposed) throw new Error('dsh-email 已卸载，不能继续使用邮箱连接池。')
+    if (disposed) throw new Error('dsh-email is unloaded; the mailbox connection pool cannot be used any more.')
     const effective = getEffectiveSettings()
     const fingerprint = fingerprintSettings(effective)
     if (pool === null || fingerprint !== poolFingerprint) {
@@ -187,7 +187,7 @@ export function createEmailRuntime(
   try {
     getPool()
   } catch (error) {
-    ctx.logger?.warn?.('[dsh-email] ' + messageOf(error, '未配置邮箱账号'))
+    ctx.logger?.warn?.('[dsh-email] ' + messageOf(error, 'No mailbox account configured'))
   }
   ctx.effect(() => dispose)
   return { settingsScope, getSettingsValue, getEffectiveSettings, getPool, watch, dispose }

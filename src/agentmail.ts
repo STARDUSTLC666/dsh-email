@@ -62,7 +62,7 @@ export class AgentMailClient {
   ) {}
   private account(name: string): ResolvedEmailConfig {
     const c = this.settings.accounts.get(name)
-    if (c?.transport !== 'agentmail') throw new Error('AgentMail 账号不存在')
+    if (c?.transport !== 'agentmail') throw new Error('AgentMail account does not exist')
     return c
   }
   private async request(
@@ -79,7 +79,7 @@ export class AgentMailClient {
         cfg.apiBase ?? '',
       )
     )
-      throw new Error('AgentMail API 区域无效')
+      throw new Error('AgentMail API region is invalid')
     const url = new URL(
       '/v0/inboxes/' + encodeURIComponent(cfg.user) + suffix,
       cfg.apiBase!,
@@ -90,7 +90,7 @@ export class AgentMailClient {
           url.searchParams.append(key, String(item))
     const serialized = body ? JSON.stringify(body) : undefined
     if (serialized && Buffer.byteLength(serialized) > 6_000_000)
-      throw new Error('AgentMail 单次发送内容超过 6 MB，请缩小附件或正文')
+      throw new Error('AgentMail payload exceeds 6 MB; reduce attachments or body text')
     const res = await this.fetcher(url, {
       method: body ? method : 'GET',
       redirect: 'error',
@@ -112,15 +112,15 @@ export class AgentMailClient {
     if (!res.ok) {
       await res.body?.cancel()
       throw new Error(
-        'AgentMail 请求失败（HTTP ' +
+        'AgentMail request failed (HTTP ' +
           res.status +
-          '）' +
+          ')' +
           ((
             {
-              401: '：请检查 API Key 和区域',
-              403: '：请检查账号权限、发信限制或邮箱状态',
-              404: '：邮箱或邮件不存在',
-              429: '：请求过于频繁，请稍后重试',
+              401: ': check the API key and region',
+              403: ': check account permissions, sending limits or mailbox status',
+              404: ': mailbox or message not found',
+              429: ': too many requests; retry later',
             } as Record<number, string>
           )[res.status] ?? ''),
       )
@@ -129,7 +129,7 @@ export class AgentMailClient {
     const chunks: Uint8Array[] = []
     for await (const chunk of res.body as any) {
       size += chunk.length
-      if (size > 4 * 1024 * 1024) throw new Error('AgentMail 响应过大')
+      if (size > 4 * 1024 * 1024) throw new Error('AgentMail response is too large')
       chunks.push(chunk)
     }
     const result = JSON.parse(Buffer.concat(chunks).toString('utf8'))
@@ -137,7 +137,7 @@ export class AgentMailClient {
       result.inbox_id !== undefined &&
       String(result.inbox_id).toLowerCase() !== cfg.user.toLowerCase()
     )
-      throw new Error('AgentMail 返回了其他邮箱，已拒绝使用')
+      throw new Error('AgentMail returned a different mailbox; refusing to use it')
     return result
   }
   async test(name: string, signal?: AbortSignal) {
@@ -146,7 +146,7 @@ export class AgentMailClient {
       String(value.inbox_id).toLowerCase() !==
       this.account(name).user.toLowerCase()
     )
-      throw new Error('AgentMail 返回了其他邮箱，已拒绝使用')
+      throw new Error('AgentMail returned a different mailbox; refusing to use it')
     return value
   }
   private folderLabel(folder: string): string | undefined {
@@ -171,7 +171,7 @@ export class AgentMailClient {
     query?: string,
   ): Promise<EmailListResult> {
     if (!['INBOX', 'Sent', 'Starred', 'Archive', 'All'].includes(folder))
-      throw new Error('AgentMail 文件夹可选 INBOX、Sent、Starred、Archive、All')
+      throw new Error('AgentMail folder must be INBOX, Sent, Starred, Archive or All')
     const rows: any[] = []
     let token: string | undefined
     let hasMore = false
@@ -196,7 +196,7 @@ export class AgentMailClient {
         signal,
       )
       if (!Array.isArray(res.messages))
-        throw new Error('AgentMail 返回了无效邮件列表')
+        throw new Error('AgentMail returned an invalid message list')
       for (const row of res.messages) {
         const id = row.message_id
         if (typeof id !== 'string' || !id || seen.has(id)) continue
@@ -206,7 +206,7 @@ export class AgentMailClient {
           String(row.inbox_id).toLowerCase() !==
             this.account(name).user.toLowerCase()
         )
-          throw new Error('AgentMail 返回了其他邮箱，已拒绝使用')
+          throw new Error('AgentMail returned a different mailbox; refusing to use it')
         seen.add(id)
         if (query && label && !labels(row).includes(label)) continue
         if (unread && !labels(row).includes('unread')) continue
@@ -219,10 +219,10 @@ export class AgentMailClient {
       hasMore = !!token || rows.length > offset + limit
       if (rows.length > offset + limit || !token) break
       if (tokens.has(token))
-        throw new Error('AgentMail 分页游标重复，请重新加载')
+        throw new Error('AgentMail repeated a page cursor; reload the list')
       tokens.add(token)
       if (page === 200)
-        throw new Error('AgentMail 查询范围过大，请缩小日期或搜索条件')
+        throw new Error('AgentMail query is too broad; narrow the date range or search terms')
     }
     return {
       account: name,
@@ -267,7 +267,7 @@ export class AgentMailClient {
       uid.length > 998 ||
       /[\x00-\x1f\x7f]/.test(uid)
     )
-      throw new Error('AgentMail uid 必须使用列表返回的字符串 message_id')
+      throw new Error('AgentMail uid must be the string message_id returned by the list')
     return uid
   }
   private async original(name: string, uid: MessageRef, signal?: AbortSignal) {
@@ -279,7 +279,7 @@ export class AgentMailClient {
         undefined,
         signal,
       )
-    if (m.message_id !== id) throw new Error('AgentMail 邮件标识不匹配')
+    if (m.message_id !== id) throw new Error('AgentMail message id does not match')
     return m
   }
   async read(
@@ -331,7 +331,7 @@ export class AgentMailClient {
     if (action === 'move') {
       if (target !== 'Archive' || folder !== 'INBOX')
         throw new Error(
-          'AgentMail 仅支持把 INBOX 归档到 Archive，不映射为 IMAP 移动或删除',
+          'AgentMail can only archive INBOX to Archive; it does not map to IMAP move or delete',
         )
       changes.move = { add_labels: ['archived'], remove_labels: ['received'] }
     }
@@ -376,13 +376,13 @@ export class AgentMailClient {
       ccList = normalized
         .filter((row) => row.field === 'cc')
         .map((row) => row.address)
-    if (!toList.length) throw new Error('请填写有效收件人')
+    if (!toList.length) throw new Error('Enter a valid recipient')
     if (
       attachments.length > 10 ||
       attachments.reduce((n, a) => n + a.content.length, 0) >
         Math.min(this.settings.maxAttachmentBytes, 4 * 1024 * 1024)
     )
-      throw new Error('AgentMail 附件总量最多 4 MiB，且不超过设置上限')
+      throw new Error('AgentMail attachments may total at most 4 MiB and must stay under the configured limit')
     const r = await this.request(
       name,
       reply
@@ -402,13 +402,13 @@ export class AgentMailClient {
       signal,
     )
     if (typeof r.message_id !== 'string')
-      throw new Error('AgentMail 未返回发送回执，请先核对已发送邮件再重试')
+      throw new Error('AgentMail returned no send receipt; check Sent mail before retrying')
     return {
       account: name,
       messageId: r.message_id,
       accepted: normalized.map((row) => row.address),
       rejected: [],
-      response: 'AgentMail 已接受提交；不表示收件方已投递成功',
+      response: 'AgentMail accepted the submission; this does not mean the recipient received it',
     }
   }
   async downloadAttachment(
@@ -423,7 +423,7 @@ export class AgentMailClient {
     const m = await this.original(name, uid, signal),
       attachment = m.attachments?.[index]
     if (!attachment || typeof attachment.attachment_id !== 'string')
-      throw new Error('附件不存在，请重新打开邮件')
+      throw new Error('Attachment no longer exists; reopen the message')
     const meta = await this.request(
       name,
       '/messages/' +
@@ -436,14 +436,14 @@ export class AgentMailClient {
     )
     const cap = Math.min(this.settings.maxAttachmentBytes, 20 * 1024 * 1024, byteLimit ?? this.settings.maxAttachmentBytes)
     if (Number(meta.size) > cap)
-      throw new Error('附件超过下载大小上限（AgentMail 最多 20 MiB）')
+      throw new Error('Attachment exceeds the download size limit (AgentMail allows at most 20 MiB)')
     const content = await this.downloader(
       String(meta.download_url),
       cap,
       signal,
     )
     if (content.length > cap)
-      throw new Error('附件超过下载大小上限（AgentMail 最多 20 MiB）')
+      throw new Error('Attachment exceeds the download size limit (AgentMail allows at most 20 MiB)')
     const filename = sanitizeFilename(
         attachment.filename ?? meta.filename ?? 'attachment',
       ),
@@ -499,7 +499,7 @@ export class AgentMailClient {
         const data = Buffer.from(chunk)
         bytes += data.length
         if (bytes > Math.min(this.settings.maxAttachmentBytes, 4 * 1024 * 1024))
-          throw new Error('AgentMail 附件总量最多 4 MiB')
+          throw new Error('AgentMail attachments may total at most 4 MiB')
         chunks.push(data)
       }
       attachments.push({
@@ -537,7 +537,7 @@ export class AgentMailClient {
       ids = new Set<string>(),
       tokens = new Set<string>()
     if (!['INBOX', 'Sent', 'Starred', 'Archive', 'All'].includes(folder))
-      throw new Error('AgentMail 文件夹无效')
+      throw new Error('Invalid AgentMail folder')
     let token: string | undefined
     for (let page = 0; page < 50; page++) {
       const result = await this.request(
@@ -548,7 +548,7 @@ export class AgentMailClient {
         signal,
       )
       if (!Array.isArray(result.messages))
-        throw new Error('AgentMail 返回了无效邮件列表')
+        throw new Error('AgentMail returned an invalid message list')
       for (const message of result.messages) {
         const id = this.id(message.message_id)
         if (
@@ -556,7 +556,7 @@ export class AgentMailClient {
           String(message.inbox_id).toLowerCase() !==
             this.account(name).user.toLowerCase()
         )
-          throw new Error('AgentMail 返回了其他邮箱，已拒绝使用')
+          throw new Error('AgentMail returned a different mailbox; refusing to use it')
         if (!ids.has(id)) {
           ids.add(id)
           rows.push(listRow(message))
@@ -568,13 +568,13 @@ export class AgentMailClient {
           : undefined
       if (!old || (old.anchor && ids.has(old.anchor)) || !token) break
       if (tokens.has(token))
-        throw new Error('AgentMail 分页游标重复，请重新加载')
+        throw new Error('AgentMail repeated a page cursor; reload the list')
       tokens.add(token)
     }
     signal?.throwIfAborted()
     if (old && (old.anchor ? !ids.has(old.anchor) : !!token))
       throw new Error(
-        'AgentMail 新邮件基线已超出窗口或被移除，请手动核对邮箱后重新启用提醒',
+        'AgentMail new-mail baseline fell outside the window or was removed; check the mailbox and re-enable the watch',
       )
     const totalUnread = rows.filter((m) => !m.seen).length,
       totalUnreadExact = !token,

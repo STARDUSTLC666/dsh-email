@@ -56,36 +56,36 @@ export class EmailService {
     return this.imap.withImap.bind(this.imap)
   }
   previewTrash(account: string, folder: string, uids: number[], target?: string, signal?: AbortSignal) {
-    if (this.settings.accounts.get(account)?.transport) throw new Error('移入废纸篓仅支持 IMAP 账号 / Trash is available for IMAP accounts')
+    if (this.settings.accounts.get(account)?.transport) throw new Error('Trash is available for IMAP accounts only')
     return this.imap.previewTrash(account, folder, uids, target, signal)
   }
   moveMessages(account: string, folder: string, uids: number[], target: string, uidValidity: number, signal?: AbortSignal) {
-    if (this.settings.accounts.get(account)?.transport) throw new Error('移入废纸篓仅支持 IMAP 账号 / Trash is available for IMAP accounts')
+    if (this.settings.accounts.get(account)?.transport) throw new Error('Trash is available for IMAP accounts only')
     return this.imap.moveMessages(account, folder, uids, target, uidValidity, signal)
   }
   createFolder(account: string, path: string, signal?: AbortSignal) {
     account = this.name(account)
-    if (this.settings.accounts.get(account)?.transport) throw new Error('新建文件夹仅支持 IMAP 账号 / Folders are only available for IMAP accounts')
+    if (this.settings.accounts.get(account)?.transport) throw new Error('Folders are available for IMAP accounts only')
     return this.imap.createFolder(account, path, signal)
   }
   previewFolderMutation(account: string, path: string, action: 'delete' | 'purge', signal?: AbortSignal) {
     account = this.name(account)
-    if (this.settings.accounts.get(account)?.transport) throw new Error('文件夹管理仅支持 IMAP 账号 / Folders are only available for IMAP accounts')
+    if (this.settings.accounts.get(account)?.transport) throw new Error('Folder management is available for IMAP accounts only')
     return this.imap.previewFolderMutation(account, path, action, signal)
   }
   deleteFolder(account: string, path: string, expected: FolderMutationSnapshot, signal?: AbortSignal) {
     account = this.name(account)
-    if (this.settings.accounts.get(account)?.transport) throw new Error('删除文件夹仅支持 IMAP 账号 / Folders are only available for IMAP accounts')
+    if (this.settings.accounts.get(account)?.transport) throw new Error('Deleting folders is available for IMAP accounts only')
     return this.imap.deleteFolder(account, path, expected, signal)
   }
   renameFolder(account: string, path: string, newPath: string, signal?: AbortSignal) {
     account = this.name(account)
-    if (this.settings.accounts.get(account)?.transport) throw new Error('重命名文件夹仅支持 IMAP 账号 / Folders are only available for IMAP accounts')
+    if (this.settings.accounts.get(account)?.transport) throw new Error('Renaming folders is available for IMAP accounts only')
     return this.imap.renameFolder(account, path, newPath, signal)
   }
   purgeFolder(account: string, path: string, expected: FolderMutationSnapshot, signal?: AbortSignal) {
     account = this.name(account)
-    if (this.settings.accounts.get(account)?.transport) throw new Error('清空文件夹仅支持 IMAP 账号 / Folders are only available for IMAP accounts')
+    if (this.settings.accounts.get(account)?.transport) throw new Error('Purging folders is available for IMAP accounts only')
     return this.imap.purgeFolder(account, path, expected, signal)
   }
   set withImap(run: EmailPool['withImap']) {
@@ -93,7 +93,7 @@ export class EmailService {
   }
   private name(account?: string) {
     const name = account || this.settings.defaultAccount
-    if (!this.settings.accounts.has(name)) throw new Error('未知邮件账号')
+    if (!this.settings.accounts.has(name)) throw new Error('Unknown mail account')
     return name
   }
   private usesApi(account?: string) {
@@ -107,7 +107,7 @@ export class EmailService {
     // only after selecting IMAP, so AgentMail IDs remain opaque (including 001).
     const value = typeof uid === 'string' && /^[0-9]+$/.test(uid) ? Number(uid) : uid
     if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0)
-      throw new Error('IMAP uid 必须是正整数或纯数字字符串；AgentMail 字符串邮件标识仅适用于 AgentMail 账号')
+      throw new Error('IMAP uid must be a positive integer or a digits-only string; AgentMail string message ids only work for AgentMail accounts')
     return value
   }
   private folder(account: string | undefined, folder: string) {
@@ -186,7 +186,7 @@ export class EmailService {
     if (this.usesPop3(account)) return this.pop3.search(this.name(account), query, this.folder(account, folder), limit, offset, since, until, signal, options)
     if (this.usesApi(account) && options.headerScanOffset)
       throw new Error(
-        'AgentMail 搜索使用 offset 分页，不使用 IMAP headerScanOffset',
+        'AgentMail search pages with offset; IMAP headerScanOffset does not apply',
       )
     return this.usesApi(account)
       ? this.api.search(
@@ -219,7 +219,7 @@ export class EmailService {
     target?: string,
     signal?: AbortSignal,
   ) {
-    if (this.usesPop3(account)) throw new Error('POP3 不提供服务器已读、星标或移动状态；请使用 IMAP 进行这些操作')
+    if (this.usesPop3(account)) throw new Error('POP3 provides no server-side read, star or move state; use an IMAP account for these actions')
     return this.usesApi(account)
       ? this.api.mark(
           this.name(account),
@@ -266,7 +266,7 @@ export class EmailService {
   readInlineAttachment(ref: InlineAttachmentRef, byteLimit: number, signal?: AbortSignal): Promise<Buffer> {
     const { account, folder, uid, uidValidity, index, attachment } = ref
     if (this.usesPop3(account)) return this.pop3.readInlineAttachment(account, folder, uid, index, attachment.contentId, byteLimit, signal)
-    if (this.usesApi(account)) throw new Error('此邮箱服务未提供内嵌附件的 Content-ID')
+    if (this.usesApi(account)) throw new Error('This mail service does not provide Content-ID for inline attachments')
     return this.imap.readInlineAttachment(account, folder, this.number(uid), attachment, uidValidity, byteLimit, signal)
   }
   downloadAttachment(
@@ -344,7 +344,7 @@ export class EmailService {
     const body = prepareMailBody(text, html)
     if (this.usesPop3(account) && reply) {
       const original = await this.pop3.original(this.name(account), reply.uid, this.folder(account, reply.folder), signal)
-      if (!original.messageId) throw new Error('原邮件缺少 Message-ID，无法关联回复草稿；请新建草稿发送')
+      if (!original.messageId) throw new Error('The original message has no Message-ID, so the reply draft cannot be linked; create a new draft instead')
       return this.imap.sendPrepared(account, to, subject, text, cc, attachments, signal, undefined, {
         ...(reply.mode === 'forward' ? {} : { inReplyTo: original.messageId }), references: [original.references, original.messageId].filter(Boolean).join(' '),
       }, html)
@@ -443,15 +443,15 @@ export class EmailService {
     }
   }
   unseenUids(...args: Parameters<EmailPool['unseenUids']>) {
-    if (this.usesPop3(args[0])) throw new Error('POP3 使用独立 UIDL 新邮件游标，不提供服务器未读状态')
-    if (this.usesApi(args[0])) throw new Error('AgentMail 使用独立的新邮件游标')
+    if (this.usesPop3(args[0])) throw new Error('POP3 uses its own UIDL new-mail cursor and provides no server unread state')
+    if (this.usesApi(args[0])) throw new Error('AgentMail uses its own new-mail cursor')
     return this.imap.unseenUids(...args)
   }
   fetchByUids(...args: Parameters<EmailPool['fetchByUids']>) {
-    if (this.usesPop3(args[0])) throw new Error('POP3 请使用列表中的完整 uid，不使用 IMAP 数字 UID')
+    if (this.usesPop3(args[0])) throw new Error('For POP3 use the full uid from the list, not an IMAP numeric UID')
     if (this.usesApi(args[0]))
       throw new Error(
-        'AgentMail 不支持 IMAP 数字 UID 批量读取，请使用列表中的 message_id',
+        'AgentMail does not support IMAP numeric UID batch reads; use the message_id from the list',
       )
     return this.imap.fetchByUids(...args)
   }

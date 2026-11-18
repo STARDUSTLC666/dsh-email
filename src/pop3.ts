@@ -18,7 +18,7 @@ const htmlToText = compileHtmlToText({ wordwrap: false, limits: { maxInputLength
 interface Entry { number: number; uid: string; size: number }
 const opaque = (uid: string) => 'pop3:' + Buffer.from(uid, 'ascii').toString('base64url')
 const lines = (bytes?: Buffer) => (bytes?.toString('ascii') ?? '').split('\r\n').filter(Boolean)
-const noFlags = () => new Error('POP3 不提供服务器已读、星标或移动状态；请使用 IMAP 账号进行这些操作')
+const noFlags = () => new Error('POP3 provides no server-side read, star or move state; use an IMAP account for these actions')
 
 /** Read-only maildrop. Stable UIDL identities are re-resolved in every transaction. */
 export class Pop3Client {
@@ -30,14 +30,14 @@ export class Pop3Client {
   constructor(private settings: ResolvedEmailSettings, private options: Pop3WireOptions = {}) {}
   private account(name: string) {
     const cfg = this.settings.accounts.get(name)
-    if (cfg?.transport !== 'pop3') throw new Error('POP3 账号不存在')
+    if (cfg?.transport !== 'pop3') throw new Error('POP3 account does not exist')
     return cfg
   }
-  private folder(folder: string) { if (folder !== 'INBOX') throw new Error('POP3 只提供 INBOX 收件箱；已发送、归档和其他文件夹请使用 IMAP') }
+  private folder(folder: string) { if (folder !== 'INBOX') throw new Error('POP3 only exposes the INBOX; use IMAP for Sent, Archive and other folders') }
   private async session<T>(name: string, fn: (wire: Pop3Wire) => Promise<T>, signal?: AbortSignal): Promise<T> {
     const cfg = this.account(name), controller = new AbortController()
     const combined = AbortSignal.any([controller.signal, ...(signal ? [signal] : [])])
-    if (this.closed) throw new Error('POP3 账号已关闭，请重试')
+    if (this.closed) throw new Error('POP3 account was closed; retry')
     combined.throwIfAborted(); this.active.add(controller)
     const previous = this.queues.get(name) ?? Promise.resolve()
     const next = previous.catch(() => {}).then(() => { combined.throwIfAborted(); return withPop3(cfg, fn, combined, this.options) })
@@ -49,39 +49,39 @@ export class Pop3Client {
   private async index(wire: Pop3Wire): Promise<Entry[]> {
     let ids: string[]
     try { ids = lines((await wire.command('UIDL')).bytes) }
-    catch (error) { if (error instanceof Pop3CommandError) throw new Pop3WireError('POP3 服务器未提供 UIDL，无法稳定定位邮件；请启用 UIDL 或改用 IMAP'); throw error }
+    catch (error) { if (error instanceof Pop3CommandError) throw new Pop3WireError('The POP3 server does not provide UIDL, so messages cannot be identified reliably; enable UIDL or use IMAP'); throw error }
     const sizes = new Map<number, number>(), seen = new Set<string>(), numbers = new Set<number>()
     for (const line of lines((await wire.command('LIST')).bytes)) {
       const match = /^(\d+) (\d+)$/.exec(line)
-      if (!match || !Number.isSafeInteger(Number(match[1])) || Number(match[1]) < 1 || !Number.isSafeInteger(Number(match[2])) || sizes.has(Number(match[1]))) throw new Pop3WireError('POP3 邮件大小列表无效，请重试')
+      if (!match || !Number.isSafeInteger(Number(match[1])) || Number(match[1]) < 1 || !Number.isSafeInteger(Number(match[2])) || sizes.has(Number(match[1]))) throw new Pop3WireError('The POP3 message size list is invalid; retry')
       sizes.set(Number(match[1]), Number(match[2]))
     }
-    if (ids.length > 50000 || sizes.size !== ids.length) throw new Pop3WireError('POP3 邮箱过大或列表不一致；最多支持 50000 封，请整理邮箱或使用 IMAP')
+    if (ids.length > 50000 || sizes.size !== ids.length) throw new Pop3WireError('The POP3 mailbox is too large or its lists disagree; at most 50000 messages are supported. Clean up the mailbox or use IMAP.')
     return ids.map(line => {
       const match = /^(\d+) ([\x21-\x7e]{1,70})$/.exec(line)
-      if (!match) throw new Pop3WireError('POP3 UIDL 列表无效')
+      if (!match) throw new Pop3WireError('The POP3 UIDL list is invalid')
       const number = Number(match[1]), uid = opaque(match[2])
-      if (!sizes.has(number) || seen.has(uid) || numbers.has(number)) throw new Pop3WireError('POP3 邮件标识重复或列表不一致，已停止读取')
+      if (!sizes.has(number) || seen.has(uid) || numbers.has(number)) throw new Pop3WireError('The POP3 message ids are duplicated or the lists disagree; reading stopped')
       seen.add(uid); numbers.add(number); return { number, uid, size: sizes.get(number)! }
     }).sort((a, b) => b.number - a.number)
   }
   private entry(entries: Entry[], uid: number | string) {
-    if (typeof uid !== 'string' || !/^pop3:[A-Za-z0-9_-]{1,94}$/.test(uid)) throw new Pop3WireError('请使用 POP3 列表中的完整 uid，不要使用邮件序号或 IMAP UID')
+    if (typeof uid !== 'string' || !/^pop3:[A-Za-z0-9_-]{1,94}$/.test(uid)) throw new Pop3WireError('Use the full uid from the POP3 list, not a message number or IMAP UID')
     const row = entries.find(e => e.uid === uid)
-    if (!row) throw new Pop3WireError('POP3 原邮件已不存在，请刷新列表；不会按旧序号读取另一封邮件')
+    if (!row) throw new Pop3WireError('The original POP3 message no longer exists; refresh the list. Nothing else will be read under the old number.')
     return row
   }
   private async raw(wire: Pop3Wire, entry: Entry): Promise<Buffer> {
-    if (entry.size > MESSAGE_LIMIT) throw new Pop3WireError('POP3 整封邮件超过 32 MiB，请使用邮箱客户端处理')
+    if (entry.size > MESSAGE_LIMIT) throw new Pop3WireError('The full POP3 message exceeds 32 MiB; use your mail client')
     const { bytes } = await wire.command('RETR', [entry.number], MESSAGE_LIMIT)
-    if (!bytes) throw new Pop3WireError('POP3 未返回邮件正文')
+    if (!bytes) throw new Pop3WireError('POP3 returned no message body')
     return bytes
   }
   private async parsed(bytes: Buffer) {
     try {
       return await simpleParser(bytes, { skipHtmlToText: true, skipTextToHtml: true, keepCidLinks: true })
     } catch {
-      throw new Pop3WireError('POP3 邮件内容无法解析，请使用邮箱客户端查看')
+      throw new Pop3WireError('The POP3 message content cannot be parsed; view it in your mail client')
     }
   }
   private async header(wire: Pop3Wire, name: string, entry: Entry): Promise<ListedMessage> {
@@ -107,9 +107,9 @@ export class Pop3Client {
     const converted = omitted ? '' : html ? htmlToText(html) : parsed.text ?? ''
     const structureLimited = converted.includes(HTML_LIMIT_MARKER), text = converted.replaceAll(HTML_LIMIT_MARKER, '')
     const body = omitted
-      ? { text: '[HTML 正文超过 2 MiB，未转换为文字；请使用邮箱客户端查看。附件仍可下载。]', truncated: true }
+      ? { text: '[HTML body exceeds 2 MiB and was not converted to text; view it in your mail client. Attachments can still be downloaded.]', truncated: true }
       : truncateText(text, this.settings.maxBodyChars)
-    if (structureLimited) { body.text += '\n\n[HTML 结构超过转换上限，已省略部分内容；请使用邮箱客户端查看。]'; body.truncated = true }
+    if (structureLimited) { body.text += '\n\n[HTML structure exceeded the conversion limit and part of it was omitted; view it in your mail client.]'; body.truncated = true }
     const value = { date: parsed.date instanceof Date ? parsed.date.toISOString() : '', from: flattenAddresses(parsed.from), to: flattenAddresses(parsed.to), cc: flattenAddresses(parsed.cc), subject: parsed.subject ?? '', text: body.text,
       truncated: body.truncated, attachments: (parsed.attachments ?? []).map((a, i) => ({ filename: a.filename ?? '(unnamed)', contentType: a.contentType, size: a.size, part: 'attachment-' + i, ...(a.contentId ? { contentId: a.contentId } : {}) })) }
     const rich = richEmailBody(parsed.html, value.attachments)
@@ -161,18 +161,18 @@ export class Pop3Client {
     const parsed = await this.parsed(await this.raw(wire, entry))
     wire.signal.throwIfAborted()
     const attachment = parsed.attachments?.[index]
-    if (!Number.isInteger(index) || index < 0 || !attachment) throw new Pop3WireError('附件序号无效，请重新读取邮件查看附件列表')
+    if (!Number.isInteger(index) || index < 0 || !attachment) throw new Pop3WireError('Invalid attachment index; read the message again to see the attachment list')
     const cap = Math.min(this.settings.maxAttachmentBytes, 20 * 1024 * 1024, byteLimit ?? this.settings.maxAttachmentBytes)
-    if (!Buffer.isBuffer(attachment.content) || attachment.content.length > cap) throw new Pop3WireError('附件超过下载上限（POP3 最多 20 MiB，整封邮件最多 32 MiB）')
+    if (!Buffer.isBuffer(attachment.content) || attachment.content.length > cap) throw new Pop3WireError('Attachment exceeds the download limit (POP3 allows at most 20 MiB per attachment and 32 MiB per full message)')
     return attachment
   }
   readInlineAttachment(name: string, folder: string, uid: number | string, index: number, expectedCid: string | undefined, byteLimit: number, signal?: AbortSignal): Promise<Buffer> {
     this.folder(folder)
     const cid = mailContentId(expectedCid)
-    if (!cid) throw new Pop3WireError('无法定位内嵌图片，请重新打开邮件')
+    if (!cid) throw new Pop3WireError('Cannot locate the inline image; reopen the message')
     return this.session(name, async wire => {
       const attachment = await this.attachmentOf(wire, uid, index, byteLimit)
-      if (mailContentId(attachment.contentId) !== cid) throw new Pop3WireError('内嵌图片已改变，请重新打开邮件')
+      if (mailContentId(attachment.contentId) !== cid) throw new Pop3WireError('The inline image changed; reopen the message')
       return attachment.content
     }, signal)
   }
@@ -201,5 +201,5 @@ export class Pop3Client {
       wire.signal.throwIfAborted(); result.newCount = result.messages.length; this.watches.set(key, { known, pending: pending.slice(result.messages.length) }); return result
     }, signal)
   }
-  clear() { this.closed = true; for (const c of this.active) c.abort(new Error('POP3 账号已更新或关闭')); this.headers.clear(); this.watches.clear() }
+  clear() { this.closed = true; for (const c of this.active) c.abort(new Error('POP3 account was updated or closed')); this.headers.clear(); this.watches.clear() }
 }

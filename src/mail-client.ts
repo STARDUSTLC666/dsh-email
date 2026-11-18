@@ -63,9 +63,9 @@ export function messageOf(error: unknown, fallback: string): string {
  */
 export function redactCredentials(text: string): string {
   return text
-    .replace(/(["']?(?:password|passwd|authPassword|clientSecret|secret|api[_-]?key)["']?)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s;,)]+)/gi, '$1$2<已隐去的凭据>')
-    .replace(/[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{8,}/g, match => `<已隐去 ${match.length} 字符的令牌>`)
-    .replace(/[A-Za-z0-9+/]{40,}={0,2}/g, match => `<已隐去 ${match.length} 字符的凭据>`)
+    .replace(/(["']?(?:password|passwd|authPassword|clientSecret|secret|api[_-]?key)["']?)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s;,)]+)/gi, '$1$2<credentials hidden>')
+    .replace(/[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{8,}/g, match => `<token of ${match.length} characters hidden>`)
+    .replace(/[A-Za-z0-9+/]{40,}={0,2}/g, match => `<credentials of ${match.length} characters hidden>`)
 }
 
 /** The IMAP auth shape imapflow accepts: a password, or an OAuth2 access token. */
@@ -107,7 +107,7 @@ export function smtpAuthOf(cfg: Pick<ResolvedEmailConfig, 'authUser' | 'authPass
 }
 
 /** The message an OAuth2 account gets when the mailbox has to be logged into again. */
-export const OAUTH2_RELOGIN_MESSAGE = '邮箱登录失败：请到设置页重新登录（Microsoft 账号使用设备码登录，不使用授权码）'
+export const OAUTH2_RELOGIN_MESSAGE = 'Mailbox sign-in failed: sign in again in Settings (Microsoft accounts use the device-code flow, not an app password)'
 
 /**
  * True for the errors both libraries report when the server rejects the
@@ -326,7 +326,7 @@ export function buildReplyMessage(original: OriginalDigest, mode: EmailReplyMode
   const self = (Array.isArray(selfAddress) ? selfAddress : [selfAddress]).filter(a => a.trim() !== '')
   if (mode === 'forward') {
     const to = forwardTo.trim()
-    if (to === '') throw new MailError('forward 模式需要 to 参数指定转发收件人')
+    if (to === '') throw new MailError('forward mode needs the to parameter to name the forward recipient')
     const fwdBody = original.text.length > FORWARD_MAX_CHARS
       ? original.text.slice(0, FORWARD_MAX_CHARS) + '\n…[' + words.truncated + ']'
       : original.text
@@ -355,7 +355,7 @@ export function buildReplyMessage(original: OriginalDigest, mode: EmailReplyMode
     recipients = dedupeAddresses(original.from, '')
   }
   if (recipients.length === 0) {
-    throw new MailError('原邮件没有可用的发件人地址，无法回复；可用 email_send 手动发送')
+    throw new MailError('The original message has no usable sender address, so it cannot be replied to; send it manually with email_send')
   }
   const quoteText = original.text.length > QUOTE_MAX_CHARS
     ? original.text.slice(0, QUOTE_MAX_CHARS) + '\n…[' + words.truncated + ']'
@@ -436,7 +436,7 @@ export class EmailPool {
   account(name: string): ResolvedEmailConfig {
     const cfg = this.settings.accounts.get(name)
     if (cfg === undefined) {
-      throw new MailError('未知账号 "' + name + '"，可用：' + [...this.settings.accounts.keys()].join('、'))
+      throw new MailError('Unknown account "' + name + '"; available: ' + [...this.settings.accounts.keys()].join(', '))
     }
     return cfg
   }
@@ -491,7 +491,7 @@ export class EmailPool {
     // 不必为了拿它先拉整封 source（第一次就下载附件的邮件也一样）。
     const message = await client.fetchOne(uid, { uid: true, bodyStructure: true }, { uid: true })
     if (message === false || message === undefined) {
-      throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folder + '"）')
+      throw new MailError('No message with uid=' + uid + ' (it may have been deleted, or may not be in folder "' + folder + '")')
     }
     signal?.throwIfAborted()
     if (message.bodyStructure !== undefined) {
@@ -506,7 +506,7 @@ export class EmailPool {
       ? message
       : await client.fetchOne(uid, { uid: true, source: true, bodyStructure: true }, { uid: true })
     if (full === false || full === undefined || full.source === undefined) {
-      throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folder + '"）')
+      throw new MailError('No message with uid=' + uid + ' (it may have been deleted, or may not be in folder "' + folder + '")')
     }
     const body = await parseRawMessage(full.source, this.settings.maxBodyChars)
     signal?.throwIfAborted()
@@ -609,7 +609,7 @@ export class EmailPool {
   private oauth2ErrorOf(error: unknown): Error {
     if (error instanceof OAuth2Error) return new MailError(error.message)
     if (error instanceof MailError) return error
-    return new MailError(OAUTH2_RELOGIN_MESSAGE + '（' + redactCredentials(messageOf(error, '未知错误')) + '）')
+    return new MailError(OAUTH2_RELOGIN_MESSAGE + ' (' + redactCredentials(messageOf(error, 'unknown error')) + ')')
   }
 
   private async imapRun<T>(
@@ -665,16 +665,16 @@ export class EmailPool {
   }
 
   private normalizeImapError(error: unknown, folder: string | null, authKind: AuthKind = 'password'): Error {
-    const raw = messageOf(error, 'IMAP 操作失败')
+    const raw = messageOf(error, 'IMAP operation failed')
     const lower = raw.toLowerCase()
     if (lower.includes('authentication') || lower.includes('login')) {
       // An OAuth2 account has no 授权码 to check: the only fix is a new login.
       return new MailError(authKind === 'oauth2'
-        ? OAUTH2_RELOGIN_MESSAGE + '（' + raw + '）'
-        : '邮箱登录失败：' + raw + '（请检查 user 与授权码）')
+        ? OAUTH2_RELOGIN_MESSAGE + ' (' + raw + ')'
+        : 'Mailbox sign-in failed: ' + raw + ' (check user and app password)')
     }
     if (lower.includes('nonselect') || lower.includes('does not exist') || lower.includes('nonexistent')) {
-      return new MailError('找不到邮箱文件夹 "' + (folder ?? '') + '"：' + raw)
+      return new MailError('Mailbox folder "' + (folder ?? '') + '" not found: ' + raw)
     }
     return new MailError(raw)
   }
@@ -790,7 +790,7 @@ export class EmailPool {
    */
   private async sendMail(name: string, cfg: ResolvedEmailConfig, message: any, signal?: AbortSignal): Promise<any> {
     signal?.throwIfAborted()
-    if (cfg.transport === 'pop3' && !cfg.smtp.host) throw new MailError('此 POP3 账号尚未配置 SMTP 发信服务器；请在账号设置中补全 SMTP 后再发送，草稿仍保留')
+    if (cfg.transport === 'pop3' && !cfg.smtp.host) throw new MailError('This POP3 account has no SMTP sending server configured; add SMTP in the account settings before sending. The draft is kept.')
     // This is shared by chat sends, prepared drafts, replies and forwards. Enforce
     // before token refresh or opening any SMTP connection, even with approval off.
     await assertRecipientsAllowed(message.to ?? '', message.cc ?? '', this.settings.recipientPolicies?.get(name))
@@ -825,7 +825,7 @@ export class EmailPool {
         onAbort = () => {
           smtpSocket?.destroy()
           transporter.close()
-          reject(new MailError('SMTP发送已取消；服务器是否已接收邮件无法确认，请先检查邮箱再决定是否重发'))
+          reject(new MailError('SMTP send cancelled; we cannot confirm whether the server accepted the message. Check the mailbox before deciding to resend.'))
         }
         signal.addEventListener('abort', onAbort, { once: true })
       })
@@ -868,7 +868,7 @@ export class EmailPool {
   private async downloadPartText(client: ImapFlow, uid: number, part: TextBodyPart, maxBytes: number, signal?: AbortSignal): Promise<string> {
     const dl = await client.download(uid, part.key, { uid: true, maxBytes })
     signal?.throwIfAborted()
-    if (dl.content === undefined) throw new MailError('邮件正文分段已不存在；将尝试重新读取邮件')
+    if (dl.content === undefined) throw new MailError('The message body part no longer exists; the message will be read again')
     const buf = await collectStream(dl.content, maxBytes, signal)
     signal?.throwIfAborted()
     return buf.toString('utf8')
@@ -1148,7 +1148,7 @@ export class EmailPool {
       // 只为看正文时不再整封拉下来，附件元数据直接复用 bodyStructure。
       const message = await client.fetchOne(uid, { uid: true, envelope: true, bodyStructure: true }, { uid: true })
       if (message === false || message === undefined) {
-        throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folderName + '"；可用 email_list 重新获取 uid）')
+        throw new MailError('No message with uid=' + uid + ' (it may have been deleted, or may not be in folder "' + folderName + '"; use email_list to get a fresh uid)')
       }
       signal?.throwIfAborted()
       if (message.source === undefined && message.envelope !== undefined && message.bodyStructure !== undefined) {
@@ -1198,7 +1198,7 @@ export class EmailPool {
         ? message
         : await client.fetchOne(uid, { uid: true, source: true, bodyStructure: true }, { uid: true })
       if (full === false || full === undefined || full.source === undefined) {
-        throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folderName + '"；可用 email_list 重新获取 uid）')
+        throw new MailError('No message with uid=' + uid + ' (it may have been deleted, or may not be in folder "' + folderName + '"; use email_list to get a fresh uid)')
       }
       const body = await parseRawMessage(full.source, this.settings.maxBodyChars)
       signal?.throwIfAborted()
@@ -1223,7 +1223,7 @@ export class EmailPool {
       const before = await client.fetchOne(uid, { uid: true, flags: true }, { uid: true })
       signal?.throwIfAborted()
       if (before === false || before === undefined) {
-        throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folderName + '"；可用 email_list 重新获取 uid）')
+        throw new MailError('No message with uid=' + uid + ' (it may have been deleted, or may not be in folder "' + folderName + '"; use email_list to get a fresh uid)')
       }
       let seen = before.flags?.has('\\Seen') === true
       let flagged = before.flags?.has('\\Flagged') === true
@@ -1245,22 +1245,22 @@ export class EmailPool {
         flagged = false
       } else if (action === 'move') {
         const target = (toFolder ?? '').trim()
-        if (target === '') throw new MailError('move 操作需要 toFolder 参数（用 email_folders 查看可用文件夹）')
-        if (target === folderName) throw new MailError('邮件已在文件夹 "' + folderName + '" 中，无需移动')
+        if (target === '') throw new MailError('move needs the toFolder parameter (see the available folders with email_folders)')
+        if (target === folderName) throw new MailError('The message is already in folder "' + folderName + '"; no move needed')
         // ImapFlow falls back to COPY + STORE + EXPUNGE without MOVE. Only
         // UIDPLUS can scope that expunge to this UID; plain EXPUNGE also deletes
         // unrelated mail that another client marked \\Deleted.
         if (!client.capabilities?.has('MOVE') && !client.capabilities?.has('UIDPLUS')) {
-          throw new MailError('服务器同时缺少 MOVE 和 UIDPLUS，无法安全移动邮件；操作已取消，源邮件未改动。请用邮箱原生客户端处理或升级服务器。')
+          throw new MailError('The server lacks both MOVE and UIDPLUS, so the message cannot be moved safely; the operation was cancelled and the source message is unchanged. Use your mail client or upgrade the server.')
         }
         const folders = await client.list()
         signal?.throwIfAborted()
         if (!folders.some(row => row.path === target)) {
-          throw new MailError('找不到目标文件夹 "' + target + '"，可用：' + folders.map(row => row.path).join('、'))
+          throw new MailError('Target folder "' + target + '" not found; available: ' + folders.map(row => row.path).join(', '))
         }
         const moved = await client.messageMove(uid, target, { uid: true })
         signal?.throwIfAborted()
-        if (moved === false) throw new MailError('移动 uid=' + uid + ' 到 "' + target + '" 失败（服务器拒绝了 MOVE/COPY）')
+        if (moved === false) throw new MailError('Moving uid=' + uid + ' to "' + target + '" failed (the server refused MOVE/COPY)')
         const result: EmailMarkResult = { account: name, uid, folder: folderName, action, seen, flagged, movedTo: target }
         const destUid = (moved as { uidMap?: Map<number, number> })?.uidMap?.get(uid) ?? (moved as { destinationUid?: unknown })?.destinationUid
         if (typeof destUid === 'number') result.movedUid = destUid
@@ -1277,7 +1277,7 @@ export class EmailPool {
 
   async purgeFolder(accountName: string | undefined, path: string, expected: FolderMutationSnapshot, signal?: AbortSignal): Promise<{ count: number }> {
     const name = this.resolveName(accountName)
-    if (!expected || expected.account !== name || expected.path !== path) throw new Error('请先预览并确认文件夹 / Preview and confirm the folder first')
+    if (!expected || expected.account !== name || expected.path !== path) throw new Error('Preview and confirm the folder first')
     return this.withImap(name, folderPath(path), async (client) => {
       const result = await purgeConfirmedFolder(client, expected, signal)
       this.folderCache.delete(name)
@@ -1289,9 +1289,9 @@ export class EmailPool {
     const name = this.resolveName(accountName)
     folderPath(path)
     return this.withImap(name, null, async (client) => {
-      if ((await client.list()).some(row => row.path === path)) throw new Error('文件夹已存在 / Folder already exists')
+      if ((await client.list()).some(row => row.path === path)) throw new Error('Folder already exists')
       signal?.throwIfAborted()
-      if (!await client.mailboxCreate(path)) throw new Error('服务器未确认新建文件夹 / Server did not confirm folder creation')
+      if (!await client.mailboxCreate(path)) throw new Error('The server did not confirm folder creation')
       this.folderCache.delete(name)
     }, true, signal)
   }
@@ -1299,15 +1299,15 @@ export class EmailPool {
   async deleteFolder(accountName: string | undefined, path: string, expected: FolderMutationSnapshot, signal?: AbortSignal): Promise<void> {
     const name = this.resolveName(accountName)
     folderPath(path)
-    if (!expected || expected.action !== 'delete' || expected.account !== name || expected.path !== path || expected.count !== 0) throw new Error('请先预览并确认空文件夹 / Preview and confirm the empty folder first')
+    if (!expected || expected.action !== 'delete' || expected.account !== name || expected.path !== path || expected.count !== 0) throw new Error('Preview and confirm the empty folder first')
     return this.withImap(name, null, async (client) => {
       assertCustomFolder(path, await client.list(), true)
       // SELECT another mailbox rather than CLOSE: CLOSE implicitly expunges messages.
       if (client.mailbox && client.mailbox.path === path) await client.mailboxOpen('INBOX', { readOnly: true })
       const state = await client.status(path, { messages: true, uidValidity: true })
-      if (!state || state.messages !== 0 || Number(state.uidValidity) !== expected.uidValidity) throw new Error('文件夹已改变，请重新预览 / Folder changed; preview again')
+      if (!state || state.messages !== 0 || Number(state.uidValidity) !== expected.uidValidity) throw new Error('Folder changed; preview again')
       signal?.throwIfAborted()
-      if (!await client.mailboxDelete(path)) throw new Error('删除结果未确认，请刷新核对 / Folder deletion unconfirmed; refresh before retrying')
+      if (!await client.mailboxDelete(path)) throw new Error('Folder deletion was not confirmed; refresh and check before retrying')
       this.folderCache.delete(name)
     }, true, signal)
   }
@@ -1318,9 +1318,9 @@ export class EmailPool {
     return this.withImap(name, null, async (client) => {
       const rows = await client.list()
       assertCustomFolder(path, rows, true)
-      if (rows.some(row => row.path === newPath) || /^INBOX$/i.test(newPath)) throw new Error('目标文件夹已存在或受保护 / Destination exists or is protected')
+      if (rows.some(row => row.path === newPath) || /^INBOX$/i.test(newPath)) throw new Error('The destination folder already exists or is protected')
       signal?.throwIfAborted()
-      if (!await client.mailboxRename(path, newPath)) throw new Error('重命名结果未确认，请刷新核对 / Folder rename unconfirmed; refresh before retrying')
+      if (!await client.mailboxRename(path, newPath)) throw new Error('Folder rename was not confirmed; refresh and check before retrying')
       this.folderCache.delete(name)
     }, true, signal)
   }
@@ -1349,18 +1349,18 @@ export class EmailPool {
 
   private attachmentLimit(byteLimit?: number): number {
     const cap = Math.min(this.settings.maxAttachmentBytes, byteLimit ?? this.settings.maxAttachmentBytes)
-    if (!Number.isSafeInteger(cap) || cap < 1) throw new MailError('无效下载上限')
+    if (!Number.isSafeInteger(cap) || cap < 1) throw new MailError('Invalid download limit')
     return cap
   }
 
   private async downloadPart(client: ImapFlow, uid: number, attachment: AttachmentPart, cap: number, signal?: AbortSignal) {
     signal?.throwIfAborted()
     if (attachment.size > cap) {
-      throw new MailError('附件 "' + attachment.filename + '" 大小 ' + attachment.size + ' 字节，超过上限 maxAttachmentBytes=' + cap)
+      throw new MailError('Attachment "' + attachment.filename + '" is ' + attachment.size + ' bytes, over the limit maxAttachmentBytes=' + cap)
     }
     const download = await client.download(uid, attachment.part, { uid: true, maxBytes: cap })
     signal?.throwIfAborted()
-    if (download.content === undefined) throw new MailError('附件分段已不存在，请重新读取邮件后再下载')
+    if (download.content === undefined) throw new MailError('The attachment part no longer exists; read the message again before downloading')
     const bytes = await collectStream(download.content, cap, signal)
     return { bytes, filename: download.meta?.filename ?? attachment.filename }
   }
@@ -1369,9 +1369,9 @@ export class EmailPool {
   async readInlineAttachment(account: string, folder: string, uid: number, attachment: EmailAttachmentMeta, expectedValidity: number | undefined, byteLimit: number, signal?: AbortSignal): Promise<Buffer> {
     const cap = this.attachmentLimit(byteLimit)
     const cid = mailContentId(attachment.contentId)
-    if (!cid) throw new MailError('无法定位内嵌图片，请重新打开邮件')
+    if (!cid) throw new MailError('Cannot locate the inline image; reopen the message')
     return this.withImap(account, folder, async client => {
-      if (expectedValidity && expectedValidity !== this.uidValidityOf(client)) throw new MailError('UIDVALIDITY 已改变，请重新打开邮件')
+      if (expectedValidity && expectedValidity !== this.uidValidityOf(client)) throw new MailError('UIDVALIDITY changed; reopen the message')
       let part = attachment
       // BODYSTRUCTURE supplies a stable section in the usual read path. Whole
       // MIME fallbacks have parser indexes instead, so resolve by Content-ID.
@@ -1381,7 +1381,7 @@ export class EmailPool {
           ? (await this.attachmentIndexOf(client, account, folder, uid, signal)).parts
           : collectAttachmentParts((await client.fetchOne(uid, { uid: true, bodyStructure: true }, { uid: true }) || undefined)?.bodyStructure)
         const matches = parts.filter(part => mailContentId(part.contentId) === cid && (!hasSection || part.part === attachment.part))
-        if (matches.length !== 1) throw new MailError('无法定位内嵌图片，请重新打开邮件')
+        if (matches.length !== 1) throw new MailError('Cannot locate the inline image; reopen the message')
         part = matches[0]
       }
       return (await this.downloadPart(client, uid, part, cap, signal)).bytes
@@ -1394,19 +1394,19 @@ export class EmailPool {
     const cfg = this.account(name)
     const folderName = folder || cfg.inboxFolder
     return this.withImap(name, folderName, async (client) => {
-      if (expectedValidity && this.uidValidityOf(client) !== expectedValidity) throw new MailError('UIDVALIDITY 已改变，请重新打开邮件')
+      if (expectedValidity && this.uidValidityOf(client) !== expectedValidity) throw new MailError('UIDVALIDITY changed; reopen the message')
       // The mailparser list is authoritative for the index email_read showed and
       // the bodyStructure walk supplies the IMAP part to download. email_read
       // already produced both in the usual read-then-download flow, so reuse that
       // instead of pulling the whole message — attachments included — again.
       const { attachments, parts } = await this.attachmentIndexOf(client, name, folderName, uid, signal)
-      if (attachments.length === 0) throw new MailError('该邮件没有附件')
+      if (attachments.length === 0) throw new MailError('This message has no attachments')
       if (attachments[index] === undefined) {
-        throw new MailError('附件序号 ' + index + ' 越界：共 ' + attachments.length + ' 个附件（序号从 0 开始，与 email_read 返回的 attachments 顺序一致）')
+        throw new MailError('Attachment index ' + index + ' is out of range: ' + attachments.length + ' attachments (indexes start at 0 and match the order returned by email_read)')
       }
       const att = selectAttachmentPart(attachments, parts, index)
       if (att === undefined) {
-        throw new MailError('附件 #' + index + '（' + attachments[index].filename + '）无法在邮件结构中定位（可能是内嵌图片，暂不支持下载）')
+        throw new MailError('Attachment #' + index + ' (' + attachments[index].filename + ') cannot be located in the message structure (it may be an inline image, which cannot be downloaded yet)')
       }
       const { bytes: buf, filename } = await this.downloadPart(client, uid, att, cap, signal)
       const safeName = sanitizeFilename(filename)
@@ -1448,18 +1448,18 @@ export class EmailPool {
   /** Send the attachment bytes the human reviewed, without re-reading mutable paths. */
   async sendPrepared(accountName: string, to: string, subject: string, text: string, cc: string, attachments: Array<{ filename: string; content: Buffer }>, signal?: AbortSignal, reply?: { uid: number; folder: string; uidValidity?: number; mode?: EmailReplyMode }, pop3Thread?: Pick<BuiltReply, 'inReplyTo' | 'references'>, html?: string): Promise<EmailSendResult> {
     const name = this.resolveName(accountName), cfg = this.account(name)
-    if (attachments.length > 10 || attachments.reduce((sum, file) => sum + file.content.length, 0) > draftAttachmentLimit(this.settings.maxAttachmentBytes, cfg.transport)) throw new MailError('草稿附件超过大小或数量上限')
+    if (attachments.length > 10 || attachments.reduce((sum, file) => sum + file.content.length, 0) > draftAttachmentLimit(this.settings.maxAttachmentBytes, cfg.transport)) throw new MailError('Draft attachments exceed the size or count limit')
     const thread: Record<string, unknown> = {}
     if (cfg.transport === 'pop3' && pop3Thread) {
       if (pop3Thread.inReplyTo) thread.inReplyTo = '<' + pop3Thread.inReplyTo + '>'
       if (pop3Thread.references) thread.references = pop3Thread.references.split(' ').filter(Boolean).map(id => '<' + id + '>')
     }
     if (reply) await this.withImap(name, reply.folder || cfg.inboxFolder, async client => {
-      if (reply.uidValidity !== undefined && reply.uidValidity !== this.uidValidityOf(client)) throw new MailError('原文件夹 UIDVALIDITY 已变化，无法关联旧回复草稿；请重新打开邮件准备回复')
+      if (reply.uidValidity !== undefined && reply.uidValidity !== this.uidValidityOf(client)) throw new MailError('UIDVALIDITY of the original folder changed, so the old reply draft cannot be linked; reopen the message to prepare a reply')
       const original = await client.fetchOne(reply.uid, { uid: true, headers: ['message-id', 'references'] }, { uid: true })
-      if (!original || !original.headers) throw new MailError('原邮件不存在或缺少线程头，请重新打开邮件')
+      if (!original || !original.headers) throw new MailError('The original message does not exist or lacks thread headers; reopen the message')
       const ids = extractMessageIds(original.headers)
-      if (!ids.messageId) throw new MailError('原邮件缺少 Message-ID，无法安全关联回复线程')
+      if (!ids.messageId) throw new MailError('The original message has no Message-ID, so the reply thread cannot be linked safely')
       if (reply.mode !== 'forward') thread.inReplyTo = '<' + ids.messageId + '>'
       thread.references = [...(ids.references ?? '').split(' ').filter(Boolean), ids.messageId].map(id => '<' + id + '>')
     }, true, signal)
@@ -1476,7 +1476,7 @@ export class EmailPool {
     const built = await this.withImap(name, folderName, async (client) => {
       const message = await client.fetchOne(uid, { uid: true, source: true }, { uid: true })
       if (message === false || message === undefined || message.source === undefined) {
-        throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folderName + '"；可用 email_list 重新获取 uid）')
+        throw new MailError('No message with uid=' + uid + ' (it may have been deleted, or may not be in folder "' + folderName + '"; use email_list to get a fresh uid)')
       }
       const ids = extractMessageIds(message.source)
       const body = await parseRawMessage(message.source, this.settings.maxBodyChars)
@@ -1526,18 +1526,18 @@ export async function validateAttachmentPaths(paths: string[], maxBytes: number,
   for (const rawPath of paths) {
     signal?.throwIfAborted()
     if (typeof rawPath !== 'string' || rawPath.trim() === '') {
-      throw new MailError('附件路径无效：' + String(rawPath))
+      throw new MailError('Invalid attachment path: ' + String(rawPath))
     }
     const path = rawPath.trim()
     let info
     try { info = await stat(path) } catch {
-      throw new MailError('附件路径不存在或不可读：' + path)
+      throw new MailError('Attachment path does not exist or cannot be read: ' + path)
     }
     signal?.throwIfAborted()
-    if (!info.isFile()) throw new MailError('附件路径不是文件：' + path)
+    if (!info.isFile()) throw new MailError('Attachment path is not a file: ' + path)
     total += info.size
     if (total > maxBytes) {
-      throw new MailError('附件总大小超过上限 maxAttachmentBytes=' + maxBytes + ' 字节')
+      throw new MailError('Total attachment size exceeds the limit maxAttachmentBytes=' + maxBytes + ' bytes')
     }
     out.push({ path })
   }
@@ -1552,12 +1552,12 @@ async function readSmtpAttachments(paths: string[], maxBytes: number, signal?: A
   for (const { path } of files) {
     signal?.throwIfAborted()
     const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK).catch(() => {
-      throw new MailError('附件路径不存在或不可读：' + path)
+      throw new MailError('Attachment path does not exist or cannot be read: ' + path)
     })
     try {
       const info = await file.stat()
-      if (!info.isFile()) throw new MailError('附件路径不是文件：' + path)
-      if (info.size > remaining) throw new MailError('附件总大小超过上限 maxAttachmentBytes=' + maxBytes + ' 字节')
+      if (!info.isFile()) throw new MailError('Attachment path is not a file: ' + path)
+      if (info.size > remaining) throw new MailError('Total attachment size exceeds the limit maxAttachmentBytes=' + maxBytes + ' bytes')
       signal?.throwIfAborted()
       const content = await collectStream(file.createReadStream({ autoClose: false }), remaining, signal)
       remaining -= content.length
@@ -1574,7 +1574,7 @@ async function collectStream(stream: Readable, maxBytes: number, signal?: AbortS
   const chunks: Buffer[] = []
   let total = 0
   const onAbort = (): void => {
-    stream.destroy(signal?.reason instanceof Error ? signal.reason : new Error('邮件附件下载已取消'))
+    stream.destroy(signal?.reason instanceof Error ? signal.reason : new Error('Attachment download cancelled'))
   }
   signal?.throwIfAborted()
   signal?.addEventListener('abort', onAbort, { once: true })
@@ -1583,7 +1583,7 @@ async function collectStream(stream: Readable, maxBytes: number, signal?: AbortS
       signal?.throwIfAborted()
       const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
       total += buf.length
-      if (total > maxBytes) throw new MailError('附件超过上限 maxAttachmentBytes=' + maxBytes + ' 字节，下载中止')
+      if (total > maxBytes) throw new MailError('Attachment exceeds the limit maxAttachmentBytes=' + maxBytes + ' bytes; download aborted')
       chunks.push(buf)
     }
     signal?.throwIfAborted()
@@ -1618,5 +1618,5 @@ async function writeUniqueAttachment(path: string, bytes: Buffer, signal?: Abort
       throw error
     }
   }
-  throw new MailError('无法分配附件文件名，请稍后重试')
+  throw new MailError('Could not allocate an attachment filename; retry later')
 }
