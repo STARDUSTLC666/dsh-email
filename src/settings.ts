@@ -7,6 +7,16 @@ import { normalizeMailConsumers } from './mail-consumers.js'
 export const SETTINGS_NAMESPACE = 'dsh-email'
 
 /**
+ * Interface languages the workbench ships. `auto` follows the DSH host locale;
+ * every other value pins the workbench UI to that language. The first entry is
+ * not the default: `uiLocale` defaults to English (see EmailSettingsSchema).
+ */
+export const UI_LOCALES = ['auto', 'en', 'zh', 'es', 'fr', 'de', 'ja', 'pt', 'ru'] as const
+
+/** A workbench interface language choice: `auto` or a shipped language id. */
+export type UiLocale = (typeof UI_LOCALES)[number]
+
+/**
  * The settings-page shape: the single default account plus shared policy.
  * The form edits the default/shorthand account; its advanced YAML area
  * edits named accounts through accountsYaml.
@@ -22,6 +32,9 @@ export const EmailSettingsSchema: z = z.object({
   allowTrustedReply: z.boolean().default(false),
   replyLocale: z.string().default('auto'),
   replyTimeZone: z.string().default(''),
+  // English by default so an English DSH never opens a Chinese workbench when
+  // the host locale snapshot is missing or unusable; `auto` follows the host.
+  uiLocale: z.union([...UI_LOCALES]).default('en'),
   newMailPopup: z.boolean().default(true),
   trustedRecipientsYaml: z.string().default(''),
   maxBodyChars: z.number().default(20000),
@@ -64,6 +77,7 @@ export interface EmailSettingsValue {
   allowTrustedReply?: boolean
   replyLocale?: string
   replyTimeZone?: string
+  uiLocale?: UiLocale
   newMailPopup?: boolean
   trustedRecipientsYaml?: string
   maxBodyChars: number
@@ -91,6 +105,7 @@ export function toSettingsBase(config: EmailConfig): Partial<EmailSettingsValue>
     ...(config.allowTrustedReply !== undefined ? { allowTrustedReply: config.allowTrustedReply } : {}),
     ...(config.replyLocale !== undefined ? { replyLocale: config.replyLocale } : {}),
     ...(config.replyTimeZone !== undefined ? { replyTimeZone: config.replyTimeZone } : {}),
+    ...(config.uiLocale !== undefined && config.uiLocale !== '' ? { uiLocale: config.uiLocale as UiLocale } : {}),
     ...(config.newMailPopup !== undefined ? { newMailPopup: config.newMailPopup } : {}),
     ...(config.trustedRecipientsYaml !== undefined ? { trustedRecipientsYaml: config.trustedRecipientsYaml } : {}),
     ...(config.maxBodyChars !== undefined ? { maxBodyChars: config.maxBodyChars } : {}),
@@ -253,6 +268,7 @@ export function validateSettingsValue(value: EmailSettingsValue, extraProviders:
   const draft = (value ?? {}) as Partial<EmailSettingsValue>
   if(draft.allowTrustedReply!==undefined&&typeof draft.allowTrustedReply!=='boolean')throw new Error('可信回复免审开关必须为布尔值')
   if(draft.replyLocale!==undefined&&(typeof draft.replyLocale!=='string'||!/^(?:auto|(?:zh|en|fr)(?:-[a-z0-9]{1,8})*)$/i.test(draft.replyLocale)))throw new Error('回复引用语言请选择 auto、zh、en 或 fr')
+  if(draft.uiLocale!==undefined&&!UI_LOCALES.includes(draft.uiLocale as UiLocale))throw new Error('界面语言只能是 ' + UI_LOCALES.join('、'))
   if(draft.replyTimeZone!==undefined){if(typeof draft.replyTimeZone!=='string')throw new Error('时区必须为文本');if(draft.replyTimeZone.trim())try{new Intl.DateTimeFormat('en',{timeZone:draft.replyTimeZone.trim()})}catch{throw new Error('引用日期时区无效，请填写 Asia/Shanghai、Europe/Paris 等 IANA 时区')}}
   if (draft.receiveProtocol !== undefined && !['imap', 'pop3'].includes(draft.receiveProtocol)) throw new Error('收信协议只能是 IMAP 或 POP3')
   if (portOutOfRange(endpointPort(draft.pop3))) throw new Error('POP3 端口必须在 1-65535 之间')

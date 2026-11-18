@@ -12,6 +12,15 @@
 - 升级共享更新组件至 `@stardustlc/dsh-updates@0.2.5`：独立安装插件详情页底栏去重（保留组合包组件委派与对话页热更新卡片），补齐 `bundle-in-use` 组合包占用提示说明，并在检查结果过期或远端版本变更时自动刷新元数据，彻底消除 `check-first` 卡顿。
 - Upgrade `@stardustlc/dsh-updates` to `0.2.5`: deduplicate standalone native plugin detail footers while keeping Suite delegation and in-chat reminder cards, surface clear `bundle-in-use` guidance, and automatically refresh expired update checks without `check-first` stalls.
 
+## Unreleased
+
+- 修复设置页与侧边栏工作台首次打开即崩溃：`EmailSettingsSection` 在加载态的提前 return 之后才声明 `useEffect`，快照到达的那一轮 hook 数量变化触发 React #310，`settings.section` 与 `main` 两个槽位一起被错误边界卸载（issue #56）。
+- 修复引导层（coachmark）选择器崩溃：分步引导把 `React.useId()`（形如 `:r2o:`）拼成 `#id` 选择器，`querySelector` 抛 `SyntaxError`，侧边栏工作台在引导自动弹出后整块空白；改用 `[id="…"]` 属性选择器。
+- 界面语言默认英语，设置里新增 `uiLocale`（`auto` 跟随 DSH；`en/zh/es/fr/de/ja/pt/ru` 直接指定），宿主没有可用语言时不再退回中文。`zh` 等 8 套词典保持原样。
+- Fix the settings page and the sidebar workbench crashing on first open: `EmailSettingsSection` declared a `useEffect` after the loading early return, so the render that delivered the settings snapshot changed the hook count and React threw #310, taking the `settings.section` and `main` slots down with it (issue #56).
+- Fix the coachmark selector crash: the tour built `React.useId()` values (for example `:r2o:`) into `#id` selectors, so `querySelector` threw `SyntaxError` and the sidebar workbench went blank once the tour auto-opened; selectors now use `[id="…"]`.
+- Default the interface to English and add the `uiLocale` setting (`auto` follows DSH; `en/zh/es/fr/de/ja/pt/ru` pin a language), so a missing or unusable host locale no longer falls back to Chinese. All eight dictionaries, including `zh`, stay as they are.
+
 ## 0.28.7 (2026-11-18)
 
 - 升级共享更新组件至 `@stardustlc/dsh-updates@0.2.4`：对话页新增一键热更新提醒卡片，自动检查周期缩短至 6 小时，手动热更新后可顺手开启包含兼容功能小版本的空闲自动更新。

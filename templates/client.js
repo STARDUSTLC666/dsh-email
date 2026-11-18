@@ -188,6 +188,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             allowTrustedReply: false,
             replyLocale: "auto",
             replyTimeZone: "",
+            uiLocale: "en",
             newMailPopup: true,
             downloadDir: "",
             accountsYaml: "",
@@ -1540,6 +1541,8 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
         // leading/trailing spaces join concatenated fragments and must not move.
         const INLINE_LOCALE_COMPLETION = {
             es: {
+                "Interface language": "Idioma de la interfaz",
+                "Follow DSH language": "Seguir el idioma de DSH",
                 "System folders": "Carpetas del sistema",
                 "Custom folders": "Carpetas personalizadas",
                 "Confirm empty": "Confirmar vaciado",
@@ -1817,6 +1820,8 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "Copy failed — check clipboard": "Error al copiar — revisa el portapapeles",
             },
             fr: {
+                "Interface language": "Langue de l'interface",
+                "Follow DSH language": "Suivre la langue de DSH",
                 "System folders": "Dossiers système",
                 "Custom folders": "Dossiers personnalisés",
                 "Confirm empty": "Confirmer le vidage",
@@ -2094,6 +2099,8 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "Copy failed — check clipboard": "Échec de la copie — vérifiez le presse-papiers",
             },
             de: {
+                "Interface language": "Sprache der Oberfläche",
+                "Follow DSH language": "DSH-Sprache folgen",
                 "System folders": "Systemordner",
                 "Custom folders": "Eigene Ordner",
                 "Confirm empty": "Leeren bestätigen",
@@ -2371,6 +2378,8 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "Copy failed — check clipboard": "Kopieren fehlgeschlagen — Zwischenablage prüfen",
             },
             ja: {
+                "Interface language": "表示言語",
+                "Follow DSH language": "DSH の言語に合わせる",
                 "System folders": "システムフォルダー",
                 "Custom folders": "カスタムフォルダー",
                 "Confirm empty": "空にする",
@@ -2648,6 +2657,8 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "Copy failed — check clipboard": "コピー失敗 — クリップボード権限を確認",
             },
             pt: {
+                "Interface language": "Idioma da interface",
+                "Follow DSH language": "Seguir o idioma do DSH",
                 "System folders": "Pastas do sistema",
                 "Custom folders": "Pastas personalizadas",
                 "Confirm empty": "Confirmar esvaziamento",
@@ -2925,6 +2936,8 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 "Copy failed — check clipboard": "Falha ao copiar — verifique a área de transferência",
             },
             ru: {
+                "Interface language": "Язык интерфейса",
+                "Follow DSH language": "Следовать языку DSH",
                 "System folders": "Системные папки",
                 "Custom folders": "Пользовательские папки",
                 "Confirm empty": "Подтвердить очистку",
@@ -3232,19 +3245,64 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             ja: "日本語", pt: "Português (Brasil)", ru: "Русский",
         };
         /**
-         * 当前界面语言。真正的语言选择、持久化和 fallback 由 DSH locale runtime 负责；
-         * UI_LANG 只为旧宿主和模块尚未挂载 locale 服务时保留一个兼容初值。
+         * 界面语言解析。语言本身由 DSH locale runtime 提供；插件多一层自己的偏好
+         * （设置里的 `uiLocale`），因为宿主语言拿不到时旧版会退回中文，英文用户
+         * 一进来就是中文界面。
+         *
+         * 优先级：`uiLocale` 指定了某个语言就用它；`auto`（或没有该设置）时宿主
+         * locale 说了算；宿主也没有可用 locale 时退回 UI_LANG，初值英文。
          */
-        var UI_LANG = "zh";
+        var UI_LANG = "en";
+        /** 设置里 `uiLocale` 的缺省值：与 EmailSettingsSchema 的 default('en') 保持一致。 */
+        const UI_LOCALE_DEFAULT = "en";
+        var uiLocalePreference = UI_LOCALE_DEFAULT;
+        /** React 侧的重绘登记：命令式弹窗走 relocalize，组件走这里。 */
+        var uiLocaleListeners = new Set();
         var activeLocaleService = null;
         var localeTranslate = null;
-        function uiLanguage() {
+        /** 归一化一个 uiLocale 值：`auto`、受支持的语言 id，其余返回 null。 */
+        function normalizeUiLocale(value) {
+            const tag = String(value === undefined || value === null ? "" : value).trim().toLowerCase();
+            if (tag === "auto") return "auto";
+            for (const language of EMAIL_LOCALE_IDS)
+                if (tag === language || tag.indexOf(language + "-") === 0) return language;
+            return null;
+        }
+        /** 宿主 locale 快照里的语言；宿主没给出可用值时退回 UI_LANG。 */
+        function hostUiLanguage() {
             try {
                 const active = activeLocaleService?.getSnapshot?.().active;
                 if (active !== undefined && active !== null && String(active) !== "") return localeToLang(active);
             }
             catch { /* 旧宿主可能没有完整的 locale snapshot */ }
             return UI_LANG;
+        }
+        function uiLanguage() {
+            const override = normalizeUiLocale(uiLocalePreference);
+            if (override !== null && override !== "auto") return override;
+            return hostUiLanguage();
+        }
+        /**
+         * 应用设置里的 `uiLocale`。只做语言偏好与重绘，不写设置：持久化仍由设置页
+         * 的草稿负责。返回是否真的变了，方便调用方决定要不要再取一次文案。
+         */
+        function applyUiLocale(value) {
+            const next = normalizeUiLocale(value) || UI_LOCALE_DEFAULT;
+            if (next === normalizeUiLocale(uiLocalePreference)) return false;
+            uiLocalePreference = next;
+            for (const listener of [...uiLocaleListeners]) {
+                try { listener(); }
+                catch { /* 一个重绘失败不能拖垮其它订阅者 */ }
+            }
+            if (typeof relocalize === "function") {
+                try { relocalize(); }
+                catch { /* 弹窗重画失败不影响设置页 */ }
+            }
+            return true;
+        }
+        function subscribeUiLocale(listener) {
+            uiLocaleListeners.add(listener);
+            return () => { uiLocaleListeners.delete(listener); };
         }
         function inlineText(zh, en) {
             const language = uiLanguage();
@@ -3260,7 +3318,8 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
         }
         /**
          * Resolve the host language against the available UI dictionaries.
-         * Unknown locales use English; hosts without a locale service keep the zh initial value.
+         * Unknown locales use English; hosts without a locale service keep the English
+         * initial value, so an English DSH never falls back to the Chinese tables.
          */
         function localeToLang(active) {
             const tag = String(active === undefined || active === null ? "" : active).toLowerCase();
@@ -5159,7 +5218,14 @@ __stardustUpdatesGuard(React, "dsh-email.rules", { dirty: !!dirty, busy, retainO
             const requestId = useRef(0);
             const tabId = React.useId();
             const [, redrawLocale] = useState(0);
-            useEffect(() => activeLocaleService?.subscribe?.(() => redrawLocale(n => n + 1)), []);
+            useEffect(() => {
+                const offLocale = activeLocaleService?.subscribe?.(() => redrawLocale(n => n + 1));
+                const offUiLocale = subscribeUiLocale(() => redrawLocale(n => n + 1));
+                return () => {
+                    if (typeof offLocale === "function") offLocale();
+                    offUiLocale();
+                };
+            }, []);
             const [tab, setTab] = useState(workbench ? emailActiveTab : emailSettingsActiveTab);
             const openMailboxDraft = draftId => setComposeRequest({ id: ++requestId.current, draftId });
             const finishCompose = useCallback(() => setComposeRequest(null), []);
@@ -5229,6 +5295,8 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                     const snap = await api();
                     setSnapshot(snap);
                     const value = (snap && snap.settings && snap.settings.value) || EMPTY;
+                    // 语言偏好先落地再 setDraft：这一轮的重渲染才会用上新语言。
+                    applyUiLocale(value.uiLocale);
                     const next = {
                         ...EMPTY,
                         ...value,
@@ -5553,6 +5621,7 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                             ? h("div", { id: "dshe-send-approval-risk", className: "dshe-alert info", role: "status" }, t("global.sendApprovalRisk"))
                             : null,
                         h('label',{className:'dshe-field'},dt('回复引用语言','Reply quote language'),h(W.SettingsChoice, null, h('select',{'aria-label':dt('回复引用语言','Reply quote language'),value:draft.replyLocale||'auto',disabled:snapshot?.writable===false,onChange:e=>update({replyLocale:e.target.value})},h('option',{value:'auto'},dt('跟随界面，未知时用英语','Follow interface; English if unknown')),h('option',{value:'zh'},'中文'),h('option',{value:'en'},'English'),h('option',{value:'fr'},'Français')))),
+                        h('label',{className:'dshe-field'},dt('界面语言','Interface language'),h(W.SettingsChoice, null, h('select',{'aria-label':dt('界面语言','Interface language'),value:draft.uiLocale||'en',disabled:snapshot?.writable===false,onChange:e=>{update({uiLocale:e.target.value});applyUiLocale(e.target.value);}},h('option',{value:'auto'},dt('跟随 DSH 语言','Follow DSH language')),h('option',{value:'zh'},'中文'),h('option',{value:'en'},'English'),h('option',{value:'es'},'Español'),h('option',{value:'fr'},'Français'),h('option',{value:'de'},'Deutsch'),h('option',{value:'ja'},'日本語'),h('option',{value:'pt'},'Português (Brasil)'),h('option',{value:'ru'},'Русский')))),
                         h('label',{className:'dshe-check'},h('input',{type:'checkbox',checked:draft.allowTrustedReply===true,disabled:snapshot?.writable===false,onChange:e=>update({allowTrustedReply:e.target.checked})}),dt('允许可信回复免审（默认关闭）','Allow trusted replies without confirmation (off by default)')),
                         h('p',{className:'dshe-hint'},dt('开启后，仅当回复、回复全部或转发的所有实际 To/Cc 都匹配该账号可信规则时免审；禁止规则和宿主权限继续生效。','When enabled, every actual To/Cc in a reply, reply-all or forward must match that account’s trusted rules. Block rules and host permissions still apply.')),
                         h('label',{className:'dshe-field'},dt('引用日期时区（可选）','Quote date timezone (optional)'),h('input',{value:draft.replyTimeZone||'',placeholder:'Asia/Shanghai · Europe/Paris',disabled:snapshot?.writable===false,onChange:e=>update({replyTimeZone:e.target.value})})),
@@ -6006,6 +6075,9 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                     const snap = await api();
                     if (disposed)
                         return;
+                    // 弹窗是命令式 DOM，也不开设置页：语言偏好跟着这次快照落地，
+                    // 变了就由 applyUiLocale 重画一次。
+                    applyUiLocale(snap?.settings?.value?.uiLocale);
                     setEnabled(localPreference ?? (snap?.settings?.value?.newMailPopup !== false));
                     if (snap && snap.whale) {
                         whaleUrl = (snap.whale.url || "").replace(/^\/_dsh\//, "_dsh/");

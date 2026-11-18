@@ -93,7 +93,7 @@ function loadClient({ locale = 'zh-CN', hostLanguages = ['zh', 'en'], withLocale
   const source = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
     .replace(
       'return module.exports;',
-      'module.exports.probe = { emailError, localeToLang, t, dt, formatDate, subscribeLocale, uiLanguage }; return module.exports;',
+      'module.exports.probe = { emailError, localeToLang, t, dt, formatDate, subscribeLocale, uiLanguage, applyUiLocale }; return module.exports;',
     )
   runInNewContext(source, {
     window: { __ModuleLoader__: { load({ factory }) { client = factory(() => ({})) } } },
@@ -121,6 +121,7 @@ function loadClient({ locale = 'zh-CN', hostLanguages = ['zh', 'en'], withLocale
 
 test('host labels update before plugin subscribers and error guidance follows UI language', () => {
   const harness = loadClient({ locale: 'zh-CN' })
+  harness.client.probe.applyUiLocale('auto')
   assert.equal(harness.definition.label(), '邮件 (dsh-email)')
   harness.runtime.switchTo('en-US')
   assert.equal(harness.definition.label(), 'Email (dsh-email)')
@@ -200,6 +201,8 @@ test('the completion layer really localizes the keys the first pass left in Engl
 
 test('switching the host language re-translates UI keys and inline phrases', () => {
   const harness = loadClient({ locale: 'en-US', hostLanguages: ['zh', 'en', 'es', 'fr', 'de', 'ja', 'pt', 'ru'] })
+  // `auto` is the setting that follows the host; the plugin default is English.
+  harness.client.probe.applyUiLocale('auto')
   const { t, dt } = harness.client.probe
 
   assert.equal(t('common.cancel'), 'Cancel')
@@ -219,6 +222,7 @@ test('switching the host language re-translates UI keys and inline phrases', () 
 
 test('inline phrases resolve through the bound namespace translator', () => {
   const harness = loadClient({ locale: 'de-DE', hostLanguages: ['zh', 'en', 'de'] })
+  harness.client.probe.applyUiLocale('auto')
   const { dt } = harness.client.probe
   const dictionary = harness.runtime.dictionary('de')
   const inlineKeys = Object.keys(dictionary).filter(key => key.startsWith('inline:'))
@@ -261,16 +265,34 @@ test('disposing the locale effect removes the registrations it created', () => {
   assert.equal(harness.runtime.namespaceCount(), 0, 'every namespace registration is disposed')
 })
 
-test('a host without a locale service keeps the built-in Chinese default', () => {
-  const harness = loadClient({ withLocale: false, locale: 'en-US' })
+test('a host without a locale service falls back to the built-in English default', () => {
+  const harness = loadClient({ withLocale: false, locale: 'zh-CN' })
   const { t, dt } = harness.client.probe
-  assert.equal(t('common.cancel'), '取消')
-  assert.equal(dt('邮件', 'Email'), '邮件')
+  assert.equal(t('common.cancel'), 'Cancel')
+  assert.equal(dt('邮件', 'Email'), 'Email')
   assert.equal(harness.runtime.calls.register.length, 0, 'no locale service means no registration attempt')
+})
+
+test('uiLocale defaults to English, pins a language, and auto follows the host', () => {
+  const harness = loadClient({ locale: 'zh-CN', hostLanguages: ['zh', 'en'] })
+  const { uiLanguage, applyUiLocale } = harness.client.probe
+  assert.equal(uiLanguage(), 'en', 'the plugin default is English even on a Chinese host')
+  assert.equal(applyUiLocale('auto'), true)
+  assert.equal(uiLanguage(), 'zh', 'auto follows the host locale')
+  harness.runtime.switchTo('en-US')
+  assert.equal(uiLanguage(), 'en')
+  assert.equal(applyUiLocale('ja'), true)
+  assert.equal(uiLanguage(), 'ja', 'a pinned language wins over the host')
+  harness.runtime.switchTo('zh-CN')
+  assert.equal(uiLanguage(), 'ja')
+  assert.equal(applyUiLocale('ja'), false, 'an unchanged preference asks for no redraw')
+  assert.equal(applyUiLocale('klingon'), true, 'an unusable value falls back to the default')
+  assert.equal(uiLanguage(), 'en')
 })
 
 test('formats timestamps using the selected UI locale', () => {
   const harness = loadClient({ locale: 'en-US', hostLanguages: ['zh', 'en', 'es', 'fr', 'de', 'ja', 'pt', 'ru'] })
+  harness.client.probe.applyUiLocale('auto')
   const timestamp = '2026-06-01T13:45:00.000Z'
   const formatted = []
   for (const language of ['zh', 'en', 'es', 'fr', 'de', 'ja', 'pt', 'ru']) {

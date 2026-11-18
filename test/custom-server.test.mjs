@@ -25,11 +25,14 @@ function editor(props) {
   }
   let client
   const source = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
-    .replace('return module.exports;', 'module.exports.editors = { AccountCardsEditor, ServerPresetsEditor }; return module.exports;')
+    .replace('return module.exports;', 'module.exports.editors = { AccountCardsEditor, ServerPresetsEditor }; module.exports.applyUiLocale = applyUiLocale; return module.exports;')
   runInNewContext(source, {
     console,
     window: { __ModuleLoader__: { load({ factory }) { client = factory(() => react) } } },
   })
+  // These assertions read the Chinese tables, so pin the language; the English
+  // default is covered by client-locale.test.mjs.
+  client.applyUiLocale('zh')
   const render = () => { cursor = 0; return client.editors.AccountCardsEditor(props) }
   const find = (node, predicate) => {
     if (!node || typeof node !== 'object') return undefined

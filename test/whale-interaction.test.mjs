@@ -60,7 +60,7 @@ function interactiveWidgetFixture({ enabled = true, accounts = ['default'], watc
       if (action === 'watch') watchCalls++
       const value = action === 'watch'
         ? (typeof watchResult === 'function' ? watchResult(watchCalls) : watchResult)
-        : { settings: { value: { newMailPopup: enabled } }, accounts, whale: { url: WHALE_ASSET_ROUTE, skin: false, credit: '' } }
+        : { settings: { value: { newMailPopup: enabled, uiLocale: 'zh' } }, accounts, whale: { url: WHALE_ASSET_ROUTE, skin: false, credit: '' } }
       return { ok: true, json: async () => ({ ok: true, value }) }
     },
   })

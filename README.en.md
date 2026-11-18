@@ -23,7 +23,7 @@ Supports safe HTML send/reply/draft previews, reviewed scheduled sends, Google &
 - Besides built-in providers and server presets, the provider dropdown offers **Custom server (enter details)**: enter IMAP/SMTP endpoints directly for intranet or self-hosted mail servers. A blank outgoing host reuses the incoming host, and blank ports default to 993/465.
 - Read messages, search and download attachments in the workbench.
 - Review the sender, To/Cc, content and attachments before confirming.
-- Run in Chinese, English, Spanish, French, German, Japanese, Brazilian Portuguese or Russian, using the DSH locale runtime.
+- Run in English by default, or pick Chinese, Spanish, French, German, Japanese, Brazilian Portuguese or Russian in settings. Set `uiLocale: "auto"` to follow the DSH language, which still falls back to English when the host has no usable locale.
 - Subscribe in-process to mailbox arrivals through `emailTasks`, without reading bodies or starting sessions.
 
 <details>

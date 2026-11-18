@@ -3,6 +3,14 @@ import { type EmailConfig } from './config.js';
 /** Settings-document namespace this plugin owns (editable from the Web settings page). */
 export declare const SETTINGS_NAMESPACE = "dsh-email";
 /**
+ * Interface languages the workbench ships. `auto` follows the DSH host locale;
+ * every other value pins the workbench UI to that language. The first entry is
+ * not the default: `uiLocale` defaults to English (see EmailSettingsSchema).
+ */
+export declare const UI_LOCALES: readonly ["auto", "en", "zh", "es", "fr", "de", "ja", "pt", "ru"];
+/** A workbench interface language choice: `auto` or a shipped language id. */
+export type UiLocale = (typeof UI_LOCALES)[number];
+/**
  * The settings-page shape: the single default account plus shared policy.
  * The form edits the default/shorthand account; its advanced YAML area
  * edits named accounts through accountsYaml.
@@ -23,6 +31,7 @@ export interface EmailSettingsValue {
     allowTrustedReply?: boolean;
     replyLocale?: string;
     replyTimeZone?: string;
+    uiLocale?: UiLocale;
     newMailPopup?: boolean;
     trustedRecipientsYaml?: string;
     maxBodyChars: number;

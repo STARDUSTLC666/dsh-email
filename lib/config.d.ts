@@ -127,6 +127,12 @@ export interface AccountConfig {
 export interface EmailConfig extends AccountConfig {
     /** Show browser new-mail notifications. UI policy only; default true. */
     newMailPopup?: boolean;
+    /**
+     * Workbench interface language: `auto` follows the DSH host locale, any other
+     * value pins the UI. UI policy only, so it never enters the connection
+     * fingerprint. The settings schema defaults it to `en`.
+     */
+    uiLocale?: string;
     /** Per-account recipient rules, independent of IMAP/SMTP connection settings. */
     trustedRecipientsYaml?: string;
     /** Ask the user for approval before email_send. Default true. */
