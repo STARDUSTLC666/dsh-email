@@ -5458,6 +5458,10 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                 className: "dshe-auto-status" + (hasIncompleteDraft ? " is-draft" : saveState === null ? "" : " is-" + saveState.kind),
             }, statusText);
             const defaultAccount = snapshot?.accountsDetail?.defaultAccount || (accounts.length === 1 ? accounts[0] : "");
+            // React 的 useId() 一定带冒号（":r2o:"），拼成 "#id" 后不是合法 CSS 选择器：
+            // 引导层 measure() 的 querySelector 会抛 SyntaxError，main 槽位整块崩掉。
+            // 属性选择器的引号里冒号是普通字符，所以这里一律写 [id="..."]。
+            const tabElement = suffix => '[id="' + tabId + "-tab-" + suffix + '"]';
             const tabs = [
                 { id: "mailbox", label: dt("收发邮件", "Mailbox") },
                 { id: "drafts", label: dt("草稿", "Drafts") },
@@ -5472,7 +5476,7 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
             const mailTourSteps = [
                 {
                     id: "accounts",
-                    selector: "#" + tabId + "-tab-accounts",
+                    selector: tabElement("accounts"),
                     side: "bottom",
                     title: dt("先连接并测试邮箱账号", "Connect & test your account"),
                     desc: dt("首次使用点击「邮箱账号」添加 IMAP/SMTP 或企业邮箱并验证连接，密码仅在本地安全存储。", "Start in Accounts to configure and test IMAP/SMTP or work mail; credentials stay safely local."),
@@ -5480,14 +5484,14 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                 {
                     id: "filter",
                     selector: '[data-tour="mail-filter"]',
-                    fallback: "#" + tabId + "-tab-mailbox",
+                    fallback: tabElement("mailbox"),
                     side: "bottom",
                     title: dt("搜索与快速筛选来信", "Filter & inspect mail"),
                     desc: dt("在「收发邮件」按关键词、只看未读或本页有附件快速锁定重点来信，点开即可阅读与下载附件。", "Filter by keyword, Unread only, or Attachments in Mailbox to focus on priority messages."),
                 },
                 {
                     id: "ai-draft",
-                    selector: "#" + tabId + "-tab-drafts",
+                    selector: tabElement("drafts"),
                     side: "bottom",
                     title: dt("让 AI 汇总未读或起草回复", "Summarize or draft replies with AI"),
                     desc: dt("复制下方指令发到对话，助手会自动梳理待办或把回复草稿存进「草稿」页供你核对，绝不会未经确认擅自发信。", "Copy the prompt below into chat — AI summarizes mail or saves reply drafts in Drafts without sending automatically."),
@@ -5497,7 +5501,7 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                 {
                     id: "compose",
                     selector: '[data-tour="mail-compose"]',
-                    fallback: "#" + tabId + "-tab-rules",
+                    fallback: tabElement("rules"),
                     side: "bottom",
                     title: dt("人工核对发送与发信规则", "Review before sending & recipient rules"),
                     desc: dt("点「写邮件」或在「草稿」确认收件人与附件后手动发送；还可在「收件人规则」配置白名单与确认策略。", "Compose or send from Drafts after checking recipients, and configure allowlists in Recipient rules."),

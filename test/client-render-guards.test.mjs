@@ -77,3 +77,19 @@ test('组件不在条件 return 之后声明 hook（React #310 回归）', () =>
   }
   assert.deepEqual(findings, [], 'hook 必须无条件声明；把 hook 提到提前 return 之前')
 })
+
+/**
+ * React 的 useId() 一定带冒号（":r2o:"），拼进 `#id` 就不是合法 CSS 选择器：
+ * 0.28.7 的引导层用它拼出四个选择器，querySelector 抛 SyntaxError，侧边栏工作台
+ * 在引导自动弹出后空白（issue #56）。属性选择器 [id="…"] 不受冒号影响。
+ */
+test('源码不把 React 生成的 id 拼成 #id 选择器（引导层崩溃回归）', () => {
+  const offenders = []
+  for (const file of files) {
+    const text = readFileSync(join(root, file), 'utf8')
+    text.split('\n').forEach((line, index) => {
+      if (/"#" \+|'#' \+|`#\$\{/.test(line)) offenders.push(file + ':' + (index + 1) + ' ' + line.trim())
+    })
+  }
+  assert.deepEqual(offenders, [], 'id 选择器请写成 [id="…"]，别用 "#" + id 拼接')
+})
