@@ -116,7 +116,7 @@ export class EmailService {
   replyOptions(account?: string, options: ReplyOptions = {}): ReplyOptions {
     const cfg = this.settings.accounts.get(this.name(account))!
     const configured = cfg.replyLocale && cfg.replyLocale !== 'auto' ? cfg.replyLocale : undefined
-    return { ...options, locale: options.locale || configured || options.uiLocale || this.locale() || 'en', timeZone: options.timeZone || cfg.replyTimeZone || undefined }
+    return { ...options, locale: options.locale || configured || this.locale() || 'zh', timeZone: options.timeZone || cfg.replyTimeZone || undefined }
   }
   async prepareReply(account: string | undefined, folder: string, uid: MessageRef, mode: EmailReplyMode, text: string, to: string, cc?: string, signal?: AbortSignal, options: ReplyOptions = {}) {
     const name = this.name(account), cfg = this.settings.accounts.get(name)!, original = await this.read(name, uid, folder, signal)

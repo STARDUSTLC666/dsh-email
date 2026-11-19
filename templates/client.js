@@ -187,6 +187,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             sendApproval: true,
             allowTrustedReply: false,
             replyLocale: "auto",
+            uiLocale: "auto",
             replyTimeZone: "",
             newMailPopup: true,
             downloadDir: "",
@@ -3232,19 +3233,50 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             ja: "日本語", pt: "Português (Brasil)", ru: "Русский",
         };
         /**
-         * 当前界面语言。真正的语言选择、持久化和 fallback 由 DSH locale runtime 负责；
-         * UI_LANG 只为旧宿主和模块尚未挂载 locale 服务时保留一个兼容初值。
+         * uiLocalePreference controls interface copy. UI_LANG tracks a valid host locale
+         * and keeps the legacy Chinese fallback when no active host language is available.
          */
         var UI_LANG = "zh";
+        var uiLocalePreference = "auto";
         var activeLocaleService = null;
         var localeTranslate = null;
-        function uiLanguage() {
+        const uiLocaleListeners = new Set();
+        function normalizeUiLocale(value) {
+            return value === "zh" || value === "en" || value === "auto" ? value : "auto";
+        }
+        function hostUiLanguage() {
             try {
                 const active = activeLocaleService?.getSnapshot?.().active;
-                if (active !== undefined && active !== null && String(active) !== "") return localeToLang(active);
+                if (active !== undefined && active !== null && String(active).trim() !== "") {
+                    UI_LANG = localeToLang(active);
+                    return UI_LANG;
+                }
             }
-            catch { /* 旧宿主可能没有完整的 locale snapshot */ }
+            catch { /* older hosts may not expose a complete locale snapshot */ }
+            UI_LANG = "zh";
             return UI_LANG;
+        }
+        function uiLanguage() {
+            const preference = normalizeUiLocale(uiLocalePreference);
+            return preference === "auto" ? hostUiLanguage() : preference;
+        }
+        function applyUiLocale(value) {
+            const next = normalizeUiLocale(value);
+            if (next === uiLocalePreference) return false;
+            uiLocalePreference = next;
+            for (const listener of [...uiLocaleListeners]) {
+                try { listener(); }
+                catch { /* one redraw failure cannot block other subscribers */ }
+            }
+            if (typeof relocalize === "function") {
+                try { relocalize(); }
+                catch { /* popup redraw failures do not affect settings */ }
+            }
+            return true;
+        }
+        function subscribeUiLocale(listener) {
+            uiLocaleListeners.add(listener);
+            return () => uiLocaleListeners.delete(listener);
         }
         function inlineText(zh, en) {
             const language = uiLanguage();
@@ -3339,10 +3371,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             activeLocaleService = service;
             const disposeDictionaries = registerEmailLocale(service);
             const apply = () => {
-                try {
-                    if (typeof service?.getSnapshot === "function") UI_LANG = localeToLang(service.getSnapshot().active);
-                }
-                catch { UI_LANG = "en"; }
+                hostUiLanguage();
                 if (typeof relocalize === "function") {
                     try { relocalize(); }
                     catch { /* popup redraw failures must not break locale subscribers */ }
@@ -5159,7 +5188,15 @@ __stardustUpdatesGuard(React, "dsh-email.rules", { dirty: !!dirty, busy, retainO
             const requestId = useRef(0);
             const tabId = React.useId();
             const [, redrawLocale] = useState(0);
-            useEffect(() => activeLocaleService?.subscribe?.(() => redrawLocale(n => n + 1)), []);
+            useEffect(() => {
+                const redraw = () => redrawLocale(n => n + 1);
+                const offHost = activeLocaleService?.subscribe?.(redraw);
+                const offUi = subscribeUiLocale(redraw);
+                return () => {
+                    if (typeof offHost === 'function') offHost();
+                    offUi();
+                };
+            }, []);
             const [tab, setTab] = useState(workbench ? emailActiveTab : emailSettingsActiveTab);
             const openMailboxDraft = draftId => setComposeRequest({ id: ++requestId.current, draftId });
             const finishCompose = useCallback(() => setComposeRequest(null), []);
@@ -5232,6 +5269,7 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                         imap: { ...EMPTY.imap, ...(value.imap || {}) },
                         smtp: { ...EMPTY.smtp, ...(value.smtp || {}) },
                     };
+                    applyUiLocale(value.uiLocale);
                     setDraft(next);
                     // 新快照 = 新的 accountsYaml 基线：卡片产物作废，签名对齐，免得回存一次。
                     savedYamlRef.current = next.accountsYaml || "";
@@ -5252,7 +5290,10 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                 }
             }, []);
             useEffect(() => { load(); }, [load]);
-            const update = (patch) => setDraft((cur) => Object.assign({}, cur, patch));
+            const update = (patch) => {
+                if (Object.prototype.hasOwnProperty.call(patch, 'uiLocale')) applyUiLocale(patch.uiLocale);
+                setDraft((cur) => Object.assign({}, cur, patch));
+            };
             /**
              * 防抖排期。immediate = 明确动作（确认删除 / 登录前落盘），立刻落盘、不等那 800ms。
              * immediate 时把落盘的 promise 交出去，调用方要等「真的写完了」可以先 await 它；
@@ -5545,7 +5586,8 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                         draft.sendApproval === false
                             ? h("div", { id: "dshe-send-approval-risk", className: "dshe-alert info", role: "status" }, t("global.sendApprovalRisk"))
                             : null,
-                        h('label',{className:'dshe-field'},dt('回复引用语言','Reply quote language'),h(W.SettingsChoice, null, h('select',{'aria-label':dt('回复引用语言','Reply quote language'),value:draft.replyLocale||'auto',disabled:snapshot?.writable===false,onChange:e=>update({replyLocale:e.target.value})},h('option',{value:'auto'},dt('跟随界面，未知时用英语','Follow interface; English if unknown')),h('option',{value:'zh'},'中文'),h('option',{value:'en'},'English'),h('option',{value:'fr'},'Français')))),
+                        h('label',{className:'dshe-field'},dt('界面语言','Interface language'),h(W.SettingsChoice, null, h('select',{'aria-label':dt('界面语言','Interface language'),value:draft.uiLocale||'auto',disabled:snapshot?.writable===false,onChange:e=>update({uiLocale:e.target.value})},h('option',{value:'auto'},dt('跟随 DSH 语言（无可用语言时用中文）','Follow DSH language (Chinese if unavailable)')),h('option',{value:'zh'},'中文'),h('option',{value:'en'},'English')))),
+                        h('label',{className:'dshe-field'},dt('回复引用语言','Reply quote language'),h(W.SettingsChoice, null, h('select',{'aria-label':dt('回复引用语言','Reply quote language'),value:draft.replyLocale||'auto',disabled:snapshot?.writable===false,onChange:e=>update({replyLocale:e.target.value})},h('option',{value:'auto'},dt('跟随 DSH 语言（无可用语言时用中文）','Follow DSH language (Chinese if unavailable)')),h('option',{value:'zh'},'中文'),h('option',{value:'en'},'English'),h('option',{value:'fr'},'Français')))),
                         h('label',{className:'dshe-check'},h('input',{type:'checkbox',checked:draft.allowTrustedReply===true,disabled:snapshot?.writable===false,onChange:e=>update({allowTrustedReply:e.target.checked})}),dt('允许可信回复免审（默认关闭）','Allow trusted replies without confirmation (off by default)')),
                         h('p',{className:'dshe-hint'},dt('开启后，仅当回复、回复全部或转发的所有实际 To/Cc 都匹配该账号可信规则时免审；禁止规则和宿主权限继续生效。','When enabled, every actual To/Cc in a reply, reply-all or forward must match that account’s trusted rules. Block rules and host permissions still apply.')),
                         h('label',{className:'dshe-field'},dt('引用日期时区（可选）','Quote date timezone (optional)'),h('input',{value:draft.replyTimeZone||'',placeholder:'Asia/Shanghai · Europe/Paris',disabled:snapshot?.writable===false,onChange:e=>update({replyTimeZone:e.target.value})})),

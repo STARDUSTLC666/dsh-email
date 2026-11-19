@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
+import { EmailService, resolveEmailSettings } from '../lib/index.js'
 
 const NAMESPACE = 'dsh-email'
 
@@ -93,7 +94,7 @@ function loadClient({ locale = 'zh-CN', hostLanguages = ['zh', 'en'], withLocale
   const source = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
     .replace(
       'return module.exports;',
-      'module.exports.probe = { emailError, localeToLang, t, dt, formatDate, subscribeLocale, uiLanguage }; return module.exports;',
+      'module.exports.probe = { emailError, localeToLang, t, dt, formatDate, subscribeLocale, uiLanguage, applyUiLocale }; return module.exports;',
     )
   runInNewContext(source, {
     window: { __ModuleLoader__: { load({ factory }) { client = factory(() => ({})) } } },
@@ -268,6 +269,51 @@ test('a host without a locale service keeps the built-in Chinese default', () =>
   assert.equal(dt('邮件', 'Email'), '邮件')
   assert.equal(harness.runtime.calls.register.length, 0, 'no locale service means no registration attempt')
 })
+
+test('uiLocale preference matrix is independent of replyLocale, follows host in auto, and keeps Chinese without host locale', () => {
+  const harness = loadClient({ locale: 'zh-CN', hostLanguages: ['zh', 'en'] })
+  const { applyUiLocale, uiLanguage } = harness.client.probe
+  const cases = [
+    { ui: 'auto', host: 'zh-CN', reply: 'en', expectedUi: 'zh' },
+    { ui: 'auto', host: 'en-US', reply: 'zh', expectedUi: 'en' },
+    { ui: 'auto', host: '', reply: 'en', expectedUi: 'zh' },
+    { ui: 'zh', host: 'en-US', reply: 'en', expectedUi: 'zh' },
+    { ui: 'en', host: 'zh-CN', reply: 'zh', expectedUi: 'en' },
+    { ui: 'zh', host: '', reply: 'en', expectedUi: 'zh' },
+    { ui: 'en', host: '', reply: 'zh', expectedUi: 'en' },
+    { ui: 'auto', host: 'en-US', reply: 'auto', expectedUi: 'en' },
+    { ui: 'auto', host: 'zh-CN', reply: 'auto', expectedUi: 'zh' },
+  ]
+  for (const row of cases) {
+    harness.runtime.switchTo(row.host)
+    applyUiLocale(row.ui)
+    assert.equal(uiLanguage(), row.expectedUi, JSON.stringify(row))
+    const settings = resolveEmailSettings({
+      accounts: { default: { provider: 'qq', user: 'fixture@example.invalid', password: 'fixture-only', replyLocale: row.reply } },
+      defaultAccount: 'default',
+    })
+    const mail = new EmailService(settings, { replyLocale: () => row.host || undefined })
+    try {
+      const expectedReply = ['zh', 'en', 'fr'].includes(row.reply) ? row.reply : row.host || 'zh'
+      assert.equal(mail.replyOptions('default', { uiLocale: row.ui }).locale, expectedReply,
+        `reply locale ${JSON.stringify(row)}`)
+    } finally { mail.dispose() }
+  }
+})
+
+test('explicit uiLocale consistently controls UI error guidance, not replyLocale', () => {
+  const harness = loadClient({ locale: 'zh-CN' })
+  const { applyUiLocale, uiLanguage, emailError } = harness.client.probe
+  applyUiLocale('en')
+  assert.equal(uiLanguage(), 'en')
+  assert.match(emailError('账号 "default" 的邮箱地址未填写'), /Account settings/)
+  harness.runtime.switchTo('en-US')
+  assert.equal(uiLanguage(), 'en', 'explicit preference also survives host locale changes')
+  applyUiLocale('zh')
+  assert.equal(uiLanguage(), 'zh')
+  assert.equal(emailError('账号 "default" 的邮箱地址未填写'), '账号 "default" 的邮箱地址未填写')
+})
+
 
 test('formats timestamps using the selected UI locale', () => {
   const harness = loadClient({ locale: 'en-US', hostLanguages: ['zh', 'en', 'es', 'fr', 'de', 'ja', 'pt', 'ru'] })

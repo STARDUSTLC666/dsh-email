@@ -288,7 +288,7 @@ function MailMessage({ detail, currentRow, account, folder, selected, busy, run,
 
   function reply(all) {
     return run(async valid => {
-      const draft = await mailboxApi('replyDraft', { account, folder, uid: selected, replyAll: all, locale: UI_LANG === 'en' ? 'en' : 'zh' });
+      const draft = await mailboxApi('replyDraft', { account, folder, uid: selected, replyAll: all });
       if (valid()) onDraft(draft.id);
     });
   }
@@ -783,7 +783,7 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
                   disabled: busy,
                   label: dt('回复到草稿', 'Reply in drafts'),
                   onClick: () => run(async valid => {
-                    const draft = await mailboxApi('replyDraft', { account, folder, uid: row.uid, replyAll: false, locale: UI_LANG === 'en' ? 'en' : 'zh' });
+                    const draft = await mailboxApi('replyDraft', { account, folder, uid: row.uid, replyAll: false });
                     if (valid()) onDraft(draft.id);
                   }),
                 }),

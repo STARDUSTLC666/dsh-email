@@ -1,5 +1,8 @@
 import z from 'schemastery';
 import { type EmailConfig } from './config.js';
+export declare const UI_LOCALES: readonly ["auto", "zh", "en"];
+/** A workbench interface language choice: `auto` follows host locale or the legacy Chinese fallback. */
+export type UiLocale = (typeof UI_LOCALES)[number];
 /** Settings-document namespace this plugin owns (editable from the Web settings page). */
 export declare const SETTINGS_NAMESPACE = "dsh-email";
 /**
@@ -22,6 +25,7 @@ export interface EmailSettingsValue {
     sendApproval: boolean;
     allowTrustedReply?: boolean;
     replyLocale?: string;
+    uiLocale?: UiLocale;
     replyTimeZone?: string;
     newMailPopup?: boolean;
     trustedRecipientsYaml?: string;

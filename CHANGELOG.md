@@ -1,5 +1,11 @@
 # 更新记录
 
+## Unreleased (2026-11-19)
+
+- 修复草稿编辑时弹窗反复重挂载、闪烁和焦点返回收件人的问题；保持控件身份稳定，同时保留宿主迟到、卸载与替换的发现能力。
+- 新增独立的 `uiLocale: auto | zh | en`：自动模式跟随宿主，无宿主语言时保留中文兼容默认；回复引用继续由 `replyLocale` 或显式 `locale` 控制，切换界面语言不再改变邮件引用语言。
+- Fix draft modal remounts/focus loss and separate workbench language from reply quotation language. Inspired by the locale discussion in PR #57 and #58; broad English-default translations are not included.
+
 ## 0.29.0 (2026-11-18)
 
 - **UI v3 全新视觉与交互升级**：13 种高质感浅色预设（新增 `glass` 晴昼琉璃、`eink` 护眼墨水屏、`blueprint` 工程晒图、`risograph` 波普孔版、`win98` 千禧复古、`songhui` 宋韵朱砂、`frutiger` 晴空水晶、`gazette` 铅字晨报），以及 8 套独立的中英双层字体搭配（默认 `arcade` 幼圆等宽，支持 `auto` 风格专属字、`songkai` 中宋+楷书、`fangsong` 工程仿宋、`poster` 重磅画报黑、`retro98` 千禧新宋、`serif` 思源书宋、`modern` 现代思源黑）。

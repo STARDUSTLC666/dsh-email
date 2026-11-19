@@ -125,6 +125,8 @@ export interface AccountConfig {
     replyTimeZone?: string;
 }
 export interface EmailConfig extends AccountConfig {
+    /** Workbench language preference; UI-only and never part of a mail account. */
+    uiLocale?: 'auto' | 'zh' | 'en';
     /** Show browser new-mail notifications. UI policy only; default true. */
     newMailPopup?: boolean;
     /** Per-account recipient rules, independent of IMAP/SMTP connection settings. */

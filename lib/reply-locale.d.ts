@@ -1,7 +1,6 @@
 export type ReplyLanguage = 'zh' | 'en' | 'fr';
 export interface ReplyOptions {
     locale?: string;
-    uiLocale?: string;
     timeZone?: string;
     html?: string;
 }
