@@ -306,11 +306,13 @@ test('explicit uiLocale consistently controls UI error guidance, not replyLocale
   const { applyUiLocale, uiLanguage, emailError } = harness.client.probe
   applyUiLocale('en')
   assert.equal(uiLanguage(), 'en')
+  assert.equal(harness.definition.label(), 'Email (dsh-email)')
   assert.match(emailError('账号 "default" 的邮箱地址未填写'), /Account settings/)
   harness.runtime.switchTo('en-US')
   assert.equal(uiLanguage(), 'en', 'explicit preference also survives host locale changes')
   applyUiLocale('zh')
   assert.equal(uiLanguage(), 'zh')
+  assert.equal(harness.definition.label(), '邮件 (dsh-email)')
   assert.equal(emailError('账号 "default" 的邮箱地址未填写'), '账号 "default" 的邮箱地址未填写')
 })
 

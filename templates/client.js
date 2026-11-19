@@ -6148,14 +6148,7 @@ W.register(ctx,{id:'dsh-email.workbench',label:()=>dt('邮件','Email'),icon:'ma
                 name: "settings.section",
                 id: "dsh-email",
                 order: 45,
-                label: () => {
-                    const lang = uiLanguage();
-                    if (typeof localeTranslate === "function") {
-                        const localized = localeTranslate("nav.title");
-                        if (localized !== "nav.title") return localized;
-                    }
-                    return (UI[lang] || UI.en)["nav.title"];
-                },
+                label: () => t("nav.title"),
                 inject: () => ({}),
             }, EmailSettingsSection));
         }
