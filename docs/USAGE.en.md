@@ -293,7 +293,7 @@ Trusted replies are a separate opt-in, off by default. Enable allowTrustedReply 
 
 When DSH listens on a LAN address, sign in to DSH in your browser and open Settings → Email to add, edit and test accounts. The page uses the official authenticated connection service; there is no need to disable the legacy route guard or enable an unsafe remote switch. Use HTTPS on public or untrusted networks.
 
-The current UI uses `/api/dsh-email/settings`, with host-owned session authentication, same-origin checks and an explicit request marker. The legacy `/_dsh/dsh-email/settings` route remains localhost-only. Manual API calls need a valid DSH session and the `x-dsh-email-settings: 1` header; that header is not an authentication credential.
+The current UI uses `/api/dsh-email/settings`, with host-owned session authentication, same-origin checks and an explicit request marker. The legacy `/_dsh/dsh-email/settings` and `/_dsh/dsh-email/assets/whale` routes have been removed; whale images use the authenticated `/api/dsh-email/whale` route. Manual settings API calls need a valid DSH session and the `x-dsh-email-settings: 1` header; that header is not an authentication credential.
 
 ## Account preservation and folder management
 

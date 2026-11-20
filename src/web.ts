@@ -1157,7 +1157,7 @@ export class EmailSettingsBackend {
       presets,
       whale: whale === null
         ? { url: '', skin: false, credit: '' }
-        : { url: WHALE_ASSET_ROUTE, skin: whale.skin, credit: whale.credit },
+        : { url: WHALE_API_ROUTE, skin: whale.skin, credit: whale.credit },
     }
   }
 
@@ -1405,44 +1405,16 @@ export class EmailSettingsBackend {
     const res = { setHeader: (name: string, value: string) => headers.set(name, value), writeHead: (value: number) => { status = value }, end: (value: Buffer) => { bytes = Buffer.from(value) } }
     if (asset) this.handleAsset(req, res, AUTHENTICATED_CARRIER)
     else await this.handle(req, res, AUTHENTICATED_CARRIER)
-    if (!asset && status === 200) {
-      const body = JSON.parse(bytes.toString('utf8'))
-      if (body.value?.whale?.url) { body.value.whale.url = WHALE_API_ROUTE; bytes = Buffer.from(JSON.stringify(body)) }
-    }
     headers.delete('Content-Length')
     return new Response(bytes as any, { status, headers })
   }
 
   async handle(req: any, res: any, transport?: symbol) {
-    // Localhost-only: the snapshot carries the stored authorization code. If a
-    // deployment binds the webserver to 0.0.0.0, this route must never leak it
-    // to the LAN.
-    const remote = String(req.socket?.remoteAddress ?? '')
-    if (transport !== AUTHENTICATED_CARRIER && remote !== '127.0.0.1' && remote !== '::1' && remote !== '::ffff:127.0.0.1') {
-      this.responseJson(res, 403, { ok: false, error: { code: 'forbidden', message: 'dsh-email settings route is localhost-only' } })
+    // The snapshot includes editable credentials. Loopback addresses and
+    // request headers cannot replace the host's connection authentication.
+    if (transport !== AUTHENTICATED_CARRIER) {
+      this.responseJson(res, 401, { ok: false, error: { code: 'unauthorized', message: 'Use the authenticated connection route' } })
       return
-    }
-    // Localhost is where the packets came from, not which name the browser thinks
-    // it reached: a rebound domain resolves to 127.0.0.1 and would otherwise read
-    // the snapshot, `accountsYaml` and its plaintext 授权码 included.
-    const headers = (req.headers ?? {}) as Record<string, unknown>
-    const host = transport === AUTHENTICATED_CARRIER ? undefined : hostVerdict(headers.host)
-    if (host !== undefined) {
-      this.responseJson(res, 403, { ok: false, error: { code: 'forbidden', message: host } })
-      return
-    }
-    if (req.method === 'POST') {
-      // A page the user visits can POST here cross-origin as a「simple request」
-      // and change settings or trigger a dial; these headers are the part of that
-      // a page script cannot forge away.
-      const post = transport === AUTHENTICATED_CARRIER ? undefined : postVerdict(headers)
-      if (post !== undefined) {
-        this.responseJson(res, post.status, {
-          ok: false,
-          error: { code: post.status === 415 ? 'unsupported-media-type' : 'forbidden', message: post.message },
-        })
-        return
-      }
     }
     if (req.method === 'GET') {
       try {
@@ -1552,11 +1524,10 @@ export class EmailSettingsBackend {
       })
     }
   }
-  /** GET-only localhost route serving the whale-girl courier image. */
+  /** GET-only authenticated route serving the whale-girl courier image. */
   handleAsset(req: any, res: any, transport?: symbol) {
-    const remote = String(req.socket?.remoteAddress ?? '')
-    if (transport !== AUTHENTICATED_CARRIER && remote !== '127.0.0.1' && remote !== '::1' && remote !== '::ffff:127.0.0.1') {
-      this.responseJson(res, 403, { ok: false, error: { code: 'forbidden', message: 'dsh-email asset route is localhost-only' } })
+    if (transport !== AUTHENTICATED_CARRIER) {
+      this.responseJson(res, 401, { ok: false, error: { code: 'unauthorized', message: 'Use the authenticated connection route' } })
       return
     }
     if (req.method !== 'GET') {
@@ -1584,28 +1555,10 @@ export class EmailSettingsBackend {
   }
 }
 
-/** Mount the same-origin routes when a webServer service is present. */
+/** Mount routes only on the host's authenticated connection service. */
 export function installEmailSettingsWeb(ctx: any, backend: EmailSettingsBackend): void {
   ctx.inject?.(['connection'], (host: any) => {
     host.connection?.fetch?.register?.({ path: SETTINGS_API_ROUTE, methods: ['GET', 'POST'], requestBody: 'buffered', fetch: (request: Request) => backend.fetch(request) })
     host.connection?.fetch?.register?.({ path: WHALE_API_ROUTE, methods: ['GET'], requestBody: 'buffered', fetch: (request: Request) => backend.fetch(request, true) })
-  })
-  ctx.inject(['webServer'], (webCtx: any) => {
-    webCtx.effect(() => {
-      const dispose = webCtx.webServer.register({
-        kind: 'exact',
-        path: SETTINGS_ROUTE,
-        handler: (req: any, res: any) => backend.handle(req, res),
-      })
-      const disposeAsset = webCtx.webServer.register({
-        kind: 'exact',
-        path: WHALE_ASSET_ROUTE,
-        handler: (req: any, res: any) => backend.handleAsset(req, res),
-      })
-      return () => {
-        dispose()
-        disposeAsset()
-      }
-    }, 'dsh-email: web routes')
   })
 }

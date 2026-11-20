@@ -3,10 +3,10 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { apply, EmailPool, SETTINGS_ROUTE } from '../lib/index.js'
+import { apply, EmailPool } from '../lib/index.js'
 import { OUTLOOK_OAUTH2_CLIENT_ID, parseAccountsYaml, parseServerPresets, PROVIDER_NAMES, PROVIDER_PRESETS, resolveEmailSettings, serializeAccountsYaml } from '../lib/config.js'
 import { oauth2TokenFile, readTokenStore, writeTokenStore } from '../lib/oauth2.js'
-import { hostVerdict, postVerdict } from '../lib/web.js'
+import { hostVerdict, postVerdict, SETTINGS_API_ROUTE } from '../lib/web.js'
 
 const BASE = {
   provider: 'qq',
@@ -75,8 +75,8 @@ test('the selected card reports its own missing password without using the envir
 })
 
 /**
- * Mount the real route through apply() and drive it with fake req/res objects,
- * the same way plugin-lifecycle.test.mjs does. Returns { get, post } where
+ * Mount the real connection route through apply() and drive its Fetch API.
+ * Returns { get, post } where
  * post resolves { status, body } for any action payload.
  */
 function mount(t, options = {}) {
@@ -114,46 +114,35 @@ function mount(t, options = {}) {
     inject(_services, callback) {
       callback({
         effect,
-        webServer: {
+        connection: { fetch: {
           register(route) {
             routes.push(route)
             return () => {}
           },
-        },
+        } },
       })
     },
   }
   apply(ctx, config)
   t.after(() => cleanups.reverse().forEach(cleanup => cleanup()))
-  const route = routes.find(candidate => candidate.path === SETTINGS_ROUTE)
+  const route = routes.find(candidate => candidate.path === SETTINGS_API_ROUTE)
   assert.ok(route, 'the settings route must be mounted')
 
-  const call = async (payload, { method = 'POST', remoteAddress = '127.0.0.1', headers } = {}) => {
-    const req = {
-      method,
-      socket: { remoteAddress },
-      // What the settings panel actually sends: a same-origin JSON POST. Cases
-      // that probe the Host/Origin/Content-Type guards override one header.
-      headers: {
+  const call = async (payload, { method = 'POST', headers } = {}) => {
+    const requestHeaders = new Headers()
+    for (const [name, value] of Object.entries({
         host: '127.0.0.1:3080',
+        'x-dsh-email-settings': '1',
         'content-type': 'application/json',
         origin: 'http://127.0.0.1:3080',
         'sec-fetch-site': 'same-origin',
         ...headers,
-      },
-      async *[Symbol.asyncIterator]() {
-        if (payload !== undefined) yield Buffer.from(JSON.stringify(payload))
-      },
-    }
-    let status
-    let body
-    const res = {
-      setHeader() {},
-      writeHead(value) { status = value },
-      end(bytes) { body = JSON.parse(bytes) },
-    }
-    await route.handler(req, res)
-    return { status, body }
+      })) if (value !== undefined) requestHeaders.set(name, value)
+    const response = await route.fetch(new Request('http://127.0.0.1:3080' + SETTINGS_API_ROUTE, {
+      method, headers: requestHeaders,
+      ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+    }))
+    return { status: response.status, body: await response.json() }
   }
   return {
     get: () => call(undefined, { method: 'GET' }),
@@ -945,9 +934,9 @@ test('existing actions still behave (save conflict, watch, unsupported action)',
   assert.equal(pure.body.value.ok, true)
 })
 
-test('the new actions stay localhost-only like the rest of the route', async t => {
+test('the new actions require the connection request marker', async t => {
   const { call } = mount(t)
-  const { status } = await call({ action: 'parseAccounts', value: { accountsYaml: '' } }, { remoteAddress: '10.0.0.7' })
+  const { status } = await call({ action: 'parseAccounts', value: { accountsYaml: '' } }, { headers: { 'x-dsh-email-settings': undefined } })
   assert.equal(status, 403)
 })
 
@@ -958,8 +947,8 @@ test('a cross-origin simple request cannot write settings', async t => {
   const simple = await call({ action: 'save', value: BASE }, {
     headers: { 'content-type': 'text/plain;charset=UTF-8', origin: 'https://evil.example', 'sec-fetch-site': 'cross-site' },
   })
-  assert.equal(simple.status, 415)
-  assert.equal(simple.body.error.code, 'unsupported-media-type')
+  assert.equal(simple.status, 403)
+  assert.equal(simple.body.error.code, 'forbidden')
 })
 
 test('a foreign Origin on a JSON POST is refused', async t => {
@@ -969,7 +958,7 @@ test('a foreign Origin on a JSON POST is refused', async t => {
   })
   assert.equal(status, 403)
   assert.equal(body.error.code, 'forbidden')
-  assert.match(body.error.message, /evil\.example/)
+  assert.match(body.error.message, /origin/i)
 })
 
 test('Sec-Fetch-Site catches an opaque Origin, and same-origin is let through', async t => {
@@ -992,12 +981,12 @@ test('a rebound Host cannot read the snapshot, whatever the method', async t => 
   // with the plaintext 授权码 in it.
   const get = await call(undefined, { method: 'GET', headers: { host: 'attacker.example' } })
   assert.equal(get.status, 403)
-  assert.match(get.body.error.message, /attacker\.example/)
+  assert.match(get.body.error.message, /origin/i)
   const post = await call({ action: 'parseAccounts', value: { accountsYaml: '' } }, { headers: { host: 'attacker.example' } })
   assert.equal(post.status, 403)
 })
 
-test('a non-browser client on localhost still works, and localhost Hosts pass', async t => {
+test('an authenticated non-browser carrier works without browser headers and accepts matching localhost origins', async t => {
   const { call } = mount(t)
   // No Origin, no Sec-Fetch-Site: a script or curl on the same machine. Page
   // script cannot omit these headers, so this stays open.
@@ -1006,7 +995,7 @@ test('a non-browser client on localhost still works, and localhost Hosts pass', 
   })
   assert.equal(scripted.status, 200)
   for (const host of ['localhost:3080', '127.0.0.1:3080', '[::1]:3080']) {
-    const { status } = await call({ action: 'parseAccounts', value: { accountsYaml: '' } }, { headers: { host } })
+    const { status } = await call({ action: 'parseAccounts', value: { accountsYaml: '' } }, { headers: { host, origin: 'http://' + host } })
     assert.equal(status, 200, `Host ${host} is a legitimate way to reach the panel`)
   }
 })
@@ -1927,12 +1916,12 @@ test('test action: an OAuth2 account with a valid token does dial, and a broken 
   assert.equal(calls[0].params.grant_type, 'refresh_token')
 })
 
-test('the OAuth2 actions stay localhost-only like the rest of the route', async t => {
+test('the OAuth2 actions reject cross-origin carrier requests', async t => {
   clearTokens()
   const { call } = mount(t, { value: { accountsYaml: OUTLOOK_YAML } })
-  const login = await call({ action: 'oauthLogin', account: 'work' }, { remoteAddress: '10.0.0.7' })
+  const login = await call({ action: 'oauthLogin', account: 'work' }, { headers: { origin: 'https://evil.example' } })
   assert.equal(login.status, 403)
-  const poll = await call({ action: 'oauthPoll', account: 'work' }, { remoteAddress: '10.0.0.7' })
+  const poll = await call({ action: 'oauthPoll', account: 'work' }, { headers: { origin: 'https://evil.example' } })
   assert.equal(poll.status, 403)
 })
 

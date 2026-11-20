@@ -49,23 +49,32 @@ test('carrier rejects simple forms, missing markers, invalid methods and oversiz
   assert.equal((await f.backend.fetch(request('POST', {}, { action: 'save', value: { accountsYaml: 'x'.repeat(256 * 1024) }, expectedRevision: 0 }))).status, 400)
   assert.equal(f.writes(), 0)
 })
-test('carrier never weakens the old raw route and a forged header or symbol cannot authorize LAN reads', async () => {
-  const f = fixture(), req = Readable.from([]);req.method = 'GET';req.socket = { remoteAddress: '192.168.36.12' };req.headers = { host, 'x-dsh-email-settings': '1', 'x-dsh-authenticated': '1' }
-  let status, body
-  await f.backend.handle(req, { setHeader() {}, writeHead(v) { status = v }, end(v) { body = JSON.parse(v) } }, Symbol('DSH authenticated connection'))
-  assert.equal(status, 403);assert.equal(body.ok, false)
+test('raw adapters reject loopback and LAN requests before reading settings, bodies or assets', async () => {
+  for (const remoteAddress of ['127.0.0.1', '::1', '::ffff:127.0.0.1', '192.168.36.12']) {
+    for (const method of ['GET', 'POST']) {
+      for (const adapter of ['handle', 'handleAsset']) {
+        const f = fixture(), req = Readable.from((async function* () { assert.fail('raw request body must not be read') })())
+        f.backend.snapshot = () => assert.fail('raw requests must not read settings')
+        req.method = method;req.socket = { remoteAddress };req.url = '/?mood=idle'
+        req.headers = { host: 'localhost:3080', 'x-dsh-email-settings': '1', 'x-dsh-authenticated': '1' }
+        let status, body
+        await f.backend[adapter](req, { setHeader() {}, writeHead(v) { status = v }, end(v) { body = JSON.parse(v) } }, Symbol('DSH authenticated connection'))
+        assert.equal(status, 401);assert.equal(body.ok, false);assert.equal(f.writes(), 0)
+      }
+    }
+  }
 })
 test('aborted carrier requests do not modify settings', async () => {
   const f = fixture(), controller = new AbortController();controller.abort()
   const original = request('POST', {}, { action: 'save', value: f.value(), expectedRevision: 0 }), req = new Request(original, { signal: controller.signal })
   await assert.rejects(f.backend.fetch(req), { name: 'AbortError' });assert.equal(f.writes(), 0)
 })
-test('settings and static courier routes register through the authenticated connection service and retain raw routes', () => {
+test('settings and static courier routes register only through the authenticated connection service', () => {
   const { backend } = fixture(), carrier = [], raw = []
   const ctx = { inject(deps, cb) { if (deps[0] === 'connection') cb({ connection: { fetch: { register(row) { carrier.push(row) } } } });else cb({ effect(cb) { cb() }, webServer: { register(row) { raw.push(row);return () => {} } } }) } }
   installEmailSettingsWeb(ctx, backend)
   assert.deepEqual(carrier.map(v => [v.path, v.methods]), [[SETTINGS_API_ROUTE, ['GET', 'POST']], [WHALE_API_ROUTE, ['GET']]])
-  assert.equal(carrier[0].requestBody, 'buffered');assert.equal(carrier[1].requestBody, 'buffered');assert.equal(raw.length, 2)
+  assert.equal(carrier[0].requestBody, 'buffered');assert.equal(carrier[1].requestBody, 'buffered');assert.equal(raw.length, 0)
 })
 
 function mapBackedFixture(overrides = {}) {

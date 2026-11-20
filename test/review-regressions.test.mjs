@@ -8,7 +8,7 @@ import { once } from 'node:events'
 import { runInNewContext } from 'node:vm'
 import nodemailer from 'nodemailer'
 import { redactCredentials, smtpAuthOf } from '../lib/mail-client.js'
-import { EmailSettingsBackend } from '../lib/web.js'
+import { EmailSettingsBackend, SETTINGS_API_ROUTE } from '../lib/web.js'
 import { parseAccountsYaml, resolveEmailSettings } from '../lib/config.js'
 import { getFreshAccessToken, writeTokenStore } from '../lib/oauth2.js'
 
@@ -18,17 +18,18 @@ process.env.DSH_HOME = mkdtempSync(join(tmpdir(), 'email-review-'))
 async function serialize(accountsYaml, accounts) {
   const backend = new EmailSettingsBackend({ settings: {} }, { get: () => ({}) }, {})
   const payload = { action: 'serializeAccounts', accountsYaml, accounts }
-  let result
-  await backend.handle({
-    method: 'POST', socket: { remoteAddress: '127.0.0.1' },
+  const response = await backend.fetch(new Request('http://127.0.0.1:3080' + SETTINGS_API_ROUTE, {
+    method: 'POST',
     headers: {
       host: '127.0.0.1:3080',
       'content-type': 'application/json',
       origin: 'http://127.0.0.1:3080',
       'sec-fetch-site': 'same-origin',
+      'x-dsh-email-settings': '1',
     },
-    async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify(payload)) },
-  }, { setHeader() {}, writeHead() {}, end(bytes) { result = JSON.parse(bytes) } })
+    body: JSON.stringify(payload),
+  }))
+  const result = await response.json()
   assert.equal(result.ok, true, JSON.stringify(result))
   return result.value.accountsYaml
 }

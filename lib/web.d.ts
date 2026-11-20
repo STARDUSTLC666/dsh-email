@@ -347,9 +347,9 @@ export declare class EmailSettingsBackend {
     /** Only registered authenticated connection routes may use this transport. */
     fetch(request: Request, asset?: boolean): Promise<Response>;
     handle(req: any, res: any, transport?: symbol): Promise<void>;
-    /** GET-only localhost route serving the whale-girl courier image. */
+    /** GET-only authenticated route serving the whale-girl courier image. */
     handleAsset(req: any, res: any, transport?: symbol): void;
 }
-/** Mount the same-origin routes when a webServer service is present. */
+/** Mount routes only on the host's authenticated connection service. */
 export declare function installEmailSettingsWeb(ctx: any, backend: EmailSettingsBackend): void;
 export {};

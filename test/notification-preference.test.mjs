@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
 import { EmailSettingsSchema, toSettingsBase, validateSettingsValue } from '../lib/settings.js'
 import { createEmailRuntime } from '../lib/runtime.js'
-import { EmailSettingsBackend } from '../lib/web.js'
+import { EmailSettingsBackend, WHALE_API_ROUTE } from '../lib/web.js'
 
 const settle = async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve)) }
 function widgetFixture(enabled = true, whale = {}) {
@@ -95,7 +95,7 @@ test('closing the preference or unloading suppresses late watch results even if 
 })
 
 test('whale popup fits portrait fallback and skin artwork without cropping, exposes data-whale hooks, and pauses dismiss on focus/hover (#55)', async t => {
-  const f = widgetFixture(true, { url: '/_dsh/dsh-email/assets/whale', skin: false, credit: 'community credit' })
+  const f = widgetFixture(true, { url: WHALE_API_ROUTE, skin: false, credit: 'community credit' })
   t.after(f.dispose)
   const { EMAIL_CSS: css, settingsCss } = f.probe
   const rule = selector => {
@@ -137,7 +137,7 @@ test('whale popup fits portrait fallback and skin artwork without cropping, expo
   assert.equal(img.getAttribute('data-whale-skin'), 'false')
   assert.equal(img.getAttribute('width'), '800')
   assert.equal(img.getAttribute('height'), '597')
-  assert.equal(img.src, '_dsh/dsh-email/assets/whale')
+  assert.equal(img.src, WHALE_API_ROUTE)
 
   assert.equal(body.getAttribute('data-whale'), 'body')
   assert.deepEqual(
@@ -170,7 +170,7 @@ test('whale popup fits portrait fallback and skin artwork without cropping, expo
   assert.equal(root.childElementCount, 0, 'idle toast closes on the next timer tick')
 
   // Skin artwork of arbitrary aspect ratio omits fallback-only dimensions.
-  f.setWhale({ url: '/_dsh/dsh-email/assets/whale', skin: true, credit: 'skin credit' })
+  f.setWhale({ url: WHALE_API_ROUTE, skin: true, credit: 'skin credit' })
   await f.poll()
   const skinCard = root.children[0]
   const skinImg = skinCard.children[0]

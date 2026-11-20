@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { apply, EmailPool, SETTINGS_ROUTE } from '../lib/index.js'
+import { apply, EmailPool } from '../lib/index.js'
+import { SETTINGS_API_ROUTE } from '../lib/web.js'
 
 test('apply shares watch behavior with the web route and releases owned resources', async (t) => {
   let rows = [{ uid: 1 }]
@@ -28,32 +29,31 @@ test('apply shares watch behavior with the web route and releases owned resource
     on() {},
     get() { return undefined },
     inject(_services, callback) {
-      callback({ effect, webServer: { register(route) {
+      callback({ effect, connection: { fetch: { register(route) {
         routes.push(route)
-        return () => removedRoutes.push(route.path)
-      } } })
+        effect(() => () => removedRoutes.push(route.path))
+      } } } })
     },
   }
   apply(ctx, config)
   t.after(() => cleanups.reverse().forEach(cleanup => cleanup()))
   const watch = definitions.find(definition => definition.name === 'email_watch')
-  const route = routes.find(route => route.path === SETTINGS_ROUTE)
+  const route = routes.find(route => route.path === SETTINGS_API_ROUTE)
   const webWatch = async () => {
-    const req = {
-      method: 'POST', socket: { remoteAddress: '127.0.0.1' },
+    const req = new Request('http://127.0.0.1:3080' + SETTINGS_API_ROUTE, {
+      method: 'POST',
       headers: {
         host: '127.0.0.1:3080',
         'content-type': 'application/json',
         origin: 'http://127.0.0.1:3080',
         'sec-fetch-site': 'same-origin',
+        'x-dsh-email-settings': '1',
       },
-      async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify({ action: 'watch' })) },
-    }
-    let status
-    let body
-    const res = { setHeader() {}, writeHead(value) { status = value }, end(bytes) { body = JSON.parse(bytes) } }
-    await route.handler(req, res)
-    assert.equal(status, 200)
+      body: JSON.stringify({ action: 'watch' }),
+    })
+    const response = await route.fetch(req)
+    const body = await response.json()
+    assert.equal(response.status, 200)
     assert.equal(body.ok, true)
     return body.value
   }

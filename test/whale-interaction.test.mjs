@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
-import { EmailSettingsBackend, WHALE_API_ROUTE, WHALE_ASSET_ROUTE, parseWhaleMood } from '../lib/web.js'
+import { EmailSettingsBackend, WHALE_API_ROUTE, parseWhaleMood } from '../lib/web.js'
 
 const settle = async () => { for (let i = 0; i < 6; i++) await new Promise(resolve => setImmediate(resolve)) }
 
@@ -60,7 +60,7 @@ function interactiveWidgetFixture({ enabled = true, accounts = ['default'], watc
       if (action === 'watch') watchCalls++
       const value = action === 'watch'
         ? (typeof watchResult === 'function' ? watchResult(watchCalls) : watchResult)
-        : { settings: { value: { newMailPopup: enabled } }, accounts, whale: { url: WHALE_ASSET_ROUTE, skin: false, credit: '' } }
+        : { settings: { value: { newMailPopup: enabled } }, accounts, whale: { url: WHALE_API_ROUTE, skin: false, credit: '' } }
       return { ok: true, json: async () => ({ ok: true, value }) }
     },
   })
@@ -95,7 +95,7 @@ test('backend serves all 3 original whale-maid mood PNGs with empty FALLBACK_CRE
   const scope = { get: () => ({ newMailPopup: true }) }
   const backend = new EmailSettingsBackend(ctx, scope, {})
   const snap = await backend.snapshot()
-  assert.equal(snap.whale.url, WHALE_ASSET_ROUTE)
+  assert.equal(snap.whale.url, WHALE_API_ROUTE)
   assert.equal(snap.whale.skin, false)
   assert.equal(snap.whale.credit, '')
 
@@ -165,7 +165,7 @@ test('whale courier supports header summon toggle, headpat expressions/particles
   assert.equal(card.getAttribute('data-whale-mood'), 'deliver')
   assert.equal(card.getAttribute('data-dsh-style'), 'harness')
   assert.equal(card.getAttribute('data-dsh-font'), 'arcade')
-  assert.equal(img.src, '_dsh/dsh-email/assets/whale')
+  assert.equal(img.src, WHALE_API_ROUTE)
 
   // Check Mail with no new messages -> switches to ?mood=check and reports empty inbox.
   await checkBtn.onclick()

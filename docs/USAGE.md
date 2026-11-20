@@ -299,7 +299,7 @@ MIT。这是一个社区插件，与 DeepSeek 官方无关；`@deepseek-ai/*` �
 
 DSH 已绑定局域网地址时，在浏览器中完成 DSH 登录，再打开「设置 → 邮件」即可添加、编辑和测试账号。无需放开旧接口，也无需额外开启不安全的远程开关。公网或不可信网络部署请使用 HTTPS。
 
-页面使用 DSH 官方连接服务的 `/api/dsh-email/settings` 接口；宿主负责会话认证，插件保留同源与请求类型检查。旧的 `/_dsh/dsh-email/settings` 接口仍仅限本机。手工调用新接口也需要有效的 DSH 会话和 `x-dsh-email-settings: 1` 请求头；该请求头本身不提供登录权限。
+页面使用 DSH 官方连接服务的 `/api/dsh-email/settings` 接口；宿主负责会话认证，插件保留同源与请求类型检查。旧的 `/_dsh/dsh-email/settings` 和 `/_dsh/dsh-email/assets/whale` 接口已移除，鲸鱼图片通过认证接口 `/api/dsh-email/whale` 加载。手工调用设置接口也需要有效的 DSH 会话和 `x-dsh-email-settings: 1` 请求头；该请求头本身不提供登录权限。
 
 ## 账号保护与文件夹管理
 
