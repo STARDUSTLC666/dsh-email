@@ -253,7 +253,7 @@ export class EmailService {
     subscribed: boolean,
     signal?: AbortSignal,
   ): Promise<EmailFoldersResult> {
-    if (this.usesPop3(account)) { signal?.throwIfAborted(); return { account: this.name(account), folders: [{ name: 'INBOX', path: 'INBOX', specialUse: '\\Inbox', subscribed: true }] } }
+    if (this.usesPop3(account)) { signal?.throwIfAborted(); return { account: this.name(account), folders: [{ name: 'INBOX', path: 'INBOX', specialUse: '\\Inbox', subscribed: true, delimiter: '/', parentPath: '' }] } }
     if (!this.usesApi(account))
       return this.imap.folders(account, subscribed, signal)
     signal?.throwIfAborted()
@@ -270,6 +270,8 @@ export class EmailService {
         path,
         specialUse,
         subscribed: true,
+        delimiter: '/',
+        parentPath: '',
       })),
     }
   }

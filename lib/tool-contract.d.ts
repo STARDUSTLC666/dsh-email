@@ -237,6 +237,15 @@ export declare const foldersSchema: {
                     subscribed: {
                         type: string;
                     };
+                    delimiter: {
+                        type: string;
+                    };
+                    parentPath: {
+                        type: string;
+                    };
+                    unseen: {
+                        type: string;
+                    };
                 };
                 additionalProperties: boolean;
             };

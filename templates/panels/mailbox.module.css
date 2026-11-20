@@ -183,11 +183,54 @@
 }
 
 .rail .folder {
+  flex: 1;
   justify-content: flex-start;
   gap: 8px;
   min-width: 0;
   text-align: start;
   color: var(--dsw-alias-label-secondary);
+}
+
+.folderNode {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding-inline-start: calc(var(--mail-folder-depth, 0) * 12px);
+}
+
+.folderNode > .folderToggle {
+  flex: none;
+  width: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  padding: 0;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.folderToggleSpacer {
+  flex: none;
+  width: 20px;
+}
+
+.folderName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folderUnread {
+  flex: none;
+  margin-inline-start: auto;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--dsw-alias-state-business-primary) 16%, transparent);
+  color: var(--dsw-alias-state-business-primary);
+  font: 600 10px/16px var(--ds-font-family-code, ui-monospace);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .folder[aria-current="location"] {
@@ -196,7 +239,7 @@
   font-weight: 600;
 }
 
-.folder > span:last-child {
+.folder > .folderName {
   overflow-wrap: anywhere;
 }
 
