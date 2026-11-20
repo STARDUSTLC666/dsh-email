@@ -1,5 +1,12 @@
 # 更新记录
 
+## 未发布 / Unreleased
+
+- **修复自定义服务器主机被当成 URL 直接拨号**：服务器地址栏粘贴 `https://mail.corp.example` 时，整个字符串被原样交给 socket，连接阶段报 `getaddrinfo ENOTFOUND https://…`。解析与保存现在都会剥掉协议、路径、`user:pass@` 与内嵌端口，只保留可拨号的主机名（显式端口栏仍优先）；真正无效的主机（空格、非法字符）在设置校验或配置解析阶段就给出账号级提示。服务器预设计算同样归一化。
+- **修复内网 / 企业 CA 邮件服务器 TLS 校验失败**：Node 默认只信任自带根证书，公司私有 CA 签发的证书会报 `unable to verify the first certificate`（同一台机器上的浏览器却正常）。IMAP / SMTP / POP3 现在把操作系统信任库、`NODE_EXTRA_CA_CERTS` 与 Node 自带根证书合并后用于校验，证书校验仍然开启。
+- **Fix custom-server hosts treated as URLs**: a pasted `https://mail.corp.example` was handed to the socket verbatim and failed with `getaddrinfo ENOTFOUND https://…`. Resolution and saving now strip the scheme, path, `user:pass@` and an embedded port (an explicit port field still wins); genuinely unusable hosts fail during settings validation or config resolution with the account named. Server presets are normalized the same way.
+- **Fix TLS verification against intranet / enterprise-CA mail servers**: Node only trusts its bundled roots, so a certificate from the company's private CA failed with `unable to verify the first certificate` although browsers on the same machine accept it. IMAP, SMTP and POP3 now validate against the OS trust store, `NODE_EXTRA_CA_CERTS` and Node's bundled roots together; certificate verification stays enabled.
+
 ## 0.30.6 (2026-11-20)
 
 - 关闭绕过宿主会话认证的旧设置与鲸鱼图片 HTTP 入口；设置、邮件、草稿和图片继续使用官方 connection.fetch 认证通道。

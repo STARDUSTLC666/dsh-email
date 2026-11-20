@@ -69,6 +69,27 @@ export declare const ENDPOINT_DEFAULTS: {
     };
 };
 export declare function normalizeSettingsEndpoint<T extends SmtpConfig>(value: T, kind: keyof typeof ENDPOINT_DEFAULTS): Omit<T, 'host' | 'port' | 'secure'> & SmtpConfig;
+/**
+ * Split one endpoint's host field into the hostname a socket can dial and an
+ * optional port, tolerating a pasted URL.
+ *
+ * Provider help pages document their servers as URLs (`https://mail.corp.example/imap`),
+ * so users paste exactly that into「服务器」. None of it is a hostname: passed to
+ * the socket as-is it becomes one DNS lookup for the whole string and fails with
+ * `getaddrinfo ENOTFOUND https://mail.corp.example`, which reports the symptom
+ * without naming the fix. Strip the URL wrapper here; the embedded port is only
+ * a fallback, because an explicit port field always wins in resolution.
+ */
+export declare function splitMailHost(value: unknown): {
+    host: string;
+    port?: number;
+};
+/**
+ * Why a normalized host still cannot be dialled, or undefined when it looks
+ * usable. This is what turns a silent `ENOTFOUND` from the socket into a
+ * settings error that says which account and field are wrong.
+ */
+export declare function mailHostProblem(host: string): string | undefined;
 /** One mailbox account. Top-level shorthand fields act as shared defaults. */
 export interface AccountConfig {
     /** Incoming protocol only; outgoing messages still use SMTP. */

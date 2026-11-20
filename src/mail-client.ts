@@ -18,6 +18,7 @@ import { prepareMailBody } from './outgoing-body.js'
 import { escapeMailHtml } from './mail-html.js'
 import { attribution, replyDate, replyWords, type ReplyOptions } from './reply-locale.js'
 import { assertRecipientsAllowed } from './recipient-policy.js'
+import { mailTlsOptions } from './mail-tls.js'
 import { openProxiedSocket, resolveProxyUrl } from './proxy.js'
 import { flattenAddresses, parseRawMessage, sanitizeFilename, stripHtml, truncateText } from './parse.js'
 import type {
@@ -530,6 +531,9 @@ export class EmailPool {
       secure: cfg.imap.secure,
       auth,
       logger: false,
+      // Include the OS trust store: an intranet server's private CA lives there,
+      // not in Node's bundled roots (see mail-tls.ts).
+      tls: mailTlsOptions(),
       connectionTimeout: cfg.imap.connectionTimeoutMs ?? 30000,
       greetingTimeout: 30000,
       socketTimeout: cfg.imap.socketTimeoutMs ?? 60000,
@@ -710,6 +714,9 @@ export class EmailPool {
       port: cfg.smtp.port,
       secure: cfg.smtp.secure,
       ...(proxy !== undefined ? { servername: cfg.smtp.host } : {}),
+      // Same OS trust store as the IMAP socket: a corporate SMTP gateway and its
+      // IMAP sibling usually share one private CA.
+      tls: mailTlsOptions(),
       auth: smtpAuthOf(cfg, accessToken),
       connectionTimeout: 30000,
       greetingTimeout: 10000,

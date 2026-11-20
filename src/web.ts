@@ -6,6 +6,7 @@ import { isMap, parseDocument, type Document, type YAMLMap } from 'yaml'
 import { SETTINGS_NAMESPACE, toEmailConfig, validateSettingsValue, type EmailSettingsValue } from './settings.js'
 import {
   isOAuth2Account,
+  mailHostProblem,
   OUTLOOK_OAUTH2_CLIENT_ID,
   parseAccountsYaml,
   parseServerPresets,
@@ -14,6 +15,7 @@ import {
   POP3_PRESETS,
   resolveEmailSettings,
   serializeAccountsYaml,
+  splitMailHost,
   type EmailConfig,
   type EndpointPreset,
   type ProviderPreset,
@@ -548,14 +550,18 @@ function writeEndpoint(doc: Document, account: YAMLMap, key: 'imap' | 'smtp' | '
     if (!Number.isInteger(endpoint.port) || endpoint.port < 1 || endpoint.port > 65535) throw new Error(key.toUpperCase() + ' 端口必须在 1-65535 之间')
   }
   if (endpoint.secure !== undefined && typeof endpoint.secure !== 'boolean') throw new Error('TLS 开关必须为布尔值')
-  if (endpoint.host !== undefined && (typeof endpoint.host !== 'string' || /\s/.test(endpoint.host.trim()))) throw new Error(key.toUpperCase() + ' 主机地址无效')
-  const host = endpoint.host?.trim()
+  if (endpoint.host !== undefined && typeof endpoint.host !== 'string') throw new Error(key.toUpperCase() + ' 主机地址无效')
+  // Store the hostname a paste actually names: a scheme, a path or a port
+  // suffix would come back as a DNS failure on the next connection.
+  const { host } = splitMailHost(endpoint.host)
   if (host === '') {
     account.delete(key)
     return
   }
+  const problem = mailHostProblem(host)
+  if (problem !== undefined) throw new Error(key.toUpperCase() + ' 主机地址无效（' + problem + '）；只填服务器地址，例如 mail.example.com')
   const target = ensureMap(doc, account, key)
-  if (host !== undefined) target.set('host', host)
+  target.set('host', host)
   if (endpoint.port !== undefined) target.set('port', endpoint.port)
   if (endpoint.secure !== undefined) target.set('secure', endpoint.secure)
 }
