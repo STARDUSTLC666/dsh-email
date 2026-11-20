@@ -9,6 +9,7 @@ import { installLegacySettingsImport } from './legacy-settings.js'
 import { EmailSettingsSchema, SETTINGS_NAMESPACE } from './settings.js'
 import { EmailDraftBackend, installEmailDrafts } from './draft-web.js'
 import { EmailMailboxBackend, installEmailMailbox } from './mailbox-web.js'
+import { ContactsStore } from './contacts.js'
 import { EmailService, type MailDependencies } from './mail-service.js'
 import { installScheduleApproval } from './schedule-tool.js'
 import { disposeOAuthFlows } from './oauth2.js'
@@ -64,7 +65,10 @@ export function installEmailApplication(ctx:any,config:Config={},dependencies:Ma
   ctx.effect?.(() => cleanupSession)
   ctx.on?.('dispose', cleanupSession)
   installEmailDrafts(ctx, drafts)
-  installEmailMailbox(ctx, new EmailMailboxBackend(runtime, drafts))
+  // One owned address book shared by the reader and the composer. Its actions sit
+  // on the mailbox route because that is the browser channel already authenticated
+  // for mail operations; the store itself is plain local data.
+  installEmailMailbox(ctx, new EmailMailboxBackend(runtime, drafts, undefined, new ContactsStore()))
   installMailTasks(ctx,new MailTaskBackend(runtime))
   installMailConsumers(ctx, new MailConsumerBackend(runtime, config))
   for (const definition of buildEmailTools(runtime, drafts)) {
@@ -92,6 +96,8 @@ export { EmailSettingsBackend, installEmailSettingsWeb, SETTINGS_ROUTE } from '.
 export type { AccountCardData, AccountCardInput } from './web.js'
 export { EmailDraftBackend, installEmailDrafts, EMAIL_DRAFT_ROUTE } from './draft-web.js'
 export { DraftStore, DraftError } from './draft-store.js'
+export { ContactsStore, ContactsError, MAX_AUTO_CONTACTS, MAX_CONTACTS, contactMatchKeys, normalizeAddress, normalizeContactName } from './contacts.js'
+export type { ContactAddress, ContactObserveResult, ContactSaveInput, EmailContact } from './contacts.js'
 export { AgentMailClient } from './agentmail.js'
 export { Pop3Client } from './pop3.js'
 export { EmailService } from './mail-service.js'

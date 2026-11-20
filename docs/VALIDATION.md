@@ -1,5 +1,7 @@
 # dsh-email 验证记录
 
+[未发布 / 通讯录 SQLite 存储与拼音检索](validation/unreleased-contacts-sqlite.md)：主机型、旧通讯录迁移与损坏文件行为，620 项离线测试。
+
 [0.22.0 / 图文、回复与废纸篓](validation-2026-11-05-mailbox.md)：三版官方宿主、六组浏览器操作、受控 IMAP/SMTP 与真实账号边界。
 
 [2026-10-26：IMAP 数字字符串 UID 与 AgentMail ID 的入口回归](validation-2026-10-26.md)。运行时代码与 0.19.0 版本保持不变。

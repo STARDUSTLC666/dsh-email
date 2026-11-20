@@ -22,6 +22,7 @@ Supports safe HTML send/reply/draft previews, reviewed scheduled sends, Google &
 - Use IMAP/POP3/SMTP, Outlook OAuth or AgentMail accounts.
 - Besides built-in providers and server presets, the provider dropdown offers **Custom server (enter details)**: enter IMAP/SMTP endpoints directly for intranet or self-hosted mail servers. A blank outgoing host reuses the incoming host, and blank ports default to 993/465.
 - Read messages, search and download attachments in the workbench.
+- A local address book collects correspondents as you read, renders senders and recipients by contact name, and offers autocomplete for To/Cc by name, address, full pinyin, pinyin initials or 工号 (so `张小`, `zxm`, `zhangxiaoming` and `100123` all reach the same colleague), filling in `Name <address>`; everything stays on this machine in a local SQLite file.
 - Review the sender, To/Cc, content and attachments before confirming.
 - Run in Chinese, English, Spanish, French, German, Japanese, Brazilian Portuguese or Russian, using the DSH locale runtime.
 - Subscribe in-process to mailbox arrivals through `emailTasks`, without reading bodies or starting sessions.

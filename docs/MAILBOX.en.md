@@ -28,6 +28,25 @@ AgentMail HTTPS/data images work; when its API does not provide a matching Conte
 
 Edits preserve the reply reference. Sending retrieves the original `Message-ID` and `References`. IMAP replies are refused if the folder's UIDVALIDITY changed, preventing a reply to a renumbered message. Recipient deny rules and send confirmation still apply.
 
+## Address book and recipient names
+
+The workbench adds a **Contacts** tab. Contacts stay on this machine in `~/.dsh/data/dsh-email/contacts-v2.sqlite3` (the same path under `DSH_HOME`) and are never uploaded anywhere. A `contacts-v1.json` left by an older version is imported once on the first read or write and the original file is kept.
+
+- **Auto-collected**: opening a message list or a message records its senders plus that message's To/Cc (the account's own addresses are always skipped). Each address is stored once with its usage count and last-seen time. Learned entries are capped at 5,000; the least used, least recently seen and last by name are forgotten first.
+- **Search keys**: every entry gets a search string computed on write — the Chinese name, full pinyin syllables, pinyin initials, the mailbox local part (工号) and the department's pinyin, e.g. `张小明(技术二部)` / `100123@example.com` becomes `zhangxiaoming zxm jishuerbu jseb 100123`. Polyphonic surnames are indexed by their surname reading (曾=zeng, 单=shan, 解=xie, 查=zha, 仇=qiu, 区=ou, 朴=piao, 乐=yue, 尉迟=yu chi, 长孙=zhang sun), so 曾伟 is not indexed as `cengwei`.
+- **Added manually**: enter a name, address and optional note in the Contacts tab. Editing a learned entry turns it into a curated one, and from then on message display names never override the name you typed.
+- **Name rendering**: the reader's sender, To and Cc lines and the message list's sender column show a curated name first; without one they use the message's own display name, and only then the learned name or the bare address. Rendering is `Name <address>`.
+- **Safety**: names are stripped of `<`, `>`, quotes, commas, semicolons and control characters before storage so a composed header cannot be injected. A damaged contacts file or database is reported and preserved rather than silently cleared, and it never blocks reading mail.
+
+## Recipient autocomplete while composing
+
+The To and Cc fields of **Compose** use the caret position to identify the one address being edited and suggest contacts for it:
+
+- Type an address prefix (`ali`) or part of a name to filter. Candidates rank as exact address, address prefix, name prefix, pinyin/initials/工号 prefix, then substring, and curated contacts rank before learned ones — so `张小`, `zxm`, `zhangxiaoming` and 工号 `100123` all reach the same colleague.
+- Choose with `↑` / `↓` and fill with `Enter` or `Tab`, or click a suggestion. Typing a known address in full and pressing `Enter` / `Tab` also brings the name in. The field is filled with `Name <address>`, so the recipient sees a person instead of a bare mailbox.
+- Only the address under the caret is completed: in `a@x.com, b` only `b` is completed. `Esc` closes the list, any address can still be typed by hand, and a missing suggestion never blocks sending.
+- Drafts keep storing the plain comma-separated address string, so the existing recipient rules, deny list and send review behave exactly as before.
+
 ## Move to Trash
 
 This workbench feature supports **IMAP**. Select one message in the reader, or select up to 20 on the current page, then choose **Move to Trash**.

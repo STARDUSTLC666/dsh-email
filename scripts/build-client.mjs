@@ -23,6 +23,7 @@ const assets = await build({
       "export { default as settings } from './templates/settings.module.css'",
       "export { default as mailbox } from './templates/panels/mailbox.module.css'",
       "export { default as drafts } from './templates/panels/drafts.module.css'",
+      "export { default as contactBook } from './templates/panels/contacts.module.css'",
       "export { richEmailBody } from './src/rich-body.ts'",
     ].join('\n'),
     resolveDir: root,

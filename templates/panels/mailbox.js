@@ -370,7 +370,7 @@ function MailMessage({ detail, currentRow, account, folder, selected, busy, run,
   const cc = who(detail.cc);
   const subject = detail.subject || dt('（无主题）', '(No subject)');
   const dateText = date(detail.date);
-  const initials = Array.from((detail.from?.[0]?.name || detail.from?.[0]?.address || '?').trim()).slice(0, 2).join('').toUpperCase();
+  const initials = Array.from((contactDisplayName(detail.from?.[0]) || detail.from?.[0]?.address || '?').trim()).slice(0, 2).join('').toUpperCase();
   const rawHeaders = typeof detail.rawHeaders === 'string' ? detail.rawHeaders : '';
   const headerText = rawHeaders || [
     ['From', from], ['To', to], ['Cc', cc], ['Subject', detail.subject], ['Date', detail.date],
@@ -603,6 +603,8 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
   const canTrash = activeAccount?.trashSupported === true;
   const railSplit = W.useResizableSplit({ key: 'dsh-email:rail-width', initial: 224, min: 168, max: 320 });
   const listSplit = W.useResizableSplit({ key: 'dsh-email:list-width', initial: 336, min: 256, max: 520 });
+  // Address book names need to re-render the reader and the list once they land.
+  useContactBook(active);
 
   __stardustUpdatesGuard(React, 'dsh-email.mailbox', { busy: !!trash || foldersOpen });
   __stardustUpdatesGuard(React, 'dsh-email.mailbox-operation', { busy });
@@ -675,7 +677,13 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
     setLoading(true);
     setError("");
     mailboxApi("list", { account, folder, query, offset, unreadOnly: unread, headerScanOffset: scanOffset }, ctrl.signal)
-      .then(value => { if (!ctrl.signal.aborted) setResult(value); })
+      .then(value => {
+        if (ctrl.signal.aborted) return;
+        setResult(value);
+        // The server harvests senders from this page; pull the names it learned so
+        // addresses that carry no display name render as people too.
+        requestContactRefresh();
+      })
       .catch(error => { if (!ctrl.signal.aborted) setError(emailError(error)); })
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false); });
     return () => ctrl.abort();
@@ -701,6 +709,9 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
             messages: old.messages.map(row => row.uid === uid ? { ...row, seen: true } : row),
           });
         }
+        // Reading also teaches the address book the whole conversation, so pull
+        // the resolved names for the sender and recipient lines behind it.
+        requestContactRefresh();
       })
       .catch(error => { if (!ctrl.signal.aborted) setReadError(emailError(error)); })
       .finally(() => { if (!ctrl.signal.aborted) setReading(false); });
@@ -798,7 +809,7 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
     }
   });
 
-  const who = list => (list || []).map(a => a.name && a.address ? a.name + " <" + a.address + ">" : a.address || a.name).filter(Boolean).join(", ");
+  const who = list => formatAddressList(list);
   const rows = result?.messages || [];
   const visibleRows = withAttachments ? rows.filter(row => row.hasAttachments) : rows;
   const currentRow = rows.find(row => row.uid === selected);
@@ -871,7 +882,7 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
                 onClick: event => openMessage(row.uid, event.currentTarget) },
                 h('span', { className: mailCss.messageLine },
                   unseen ? h('span', { className: mailCss.unreadDot, role: 'img', 'aria-label': dt('未读','Unread') }) : null,
-                  h('strong', { className: mailCss.sender, title: from }, row.from?.[0]?.name || from),
+                  h('strong', { className: mailCss.sender, title: from }, senderLabelOf(row.from?.[0]) || from),
                   row.flagged ? h(W.Icon, { name: 'star', size: 13 }) : null,
                   h('time', { className: mailCss.timestamp, dateTime: row.date }, formatDate(row.date))),
                 h('span', { className: mailCss.messageLine }, h('span', { className: mailCss.subject, title: subject }, subject),
