@@ -1,5 +1,10 @@
 # 更新记录
 
+## 未发布 / Unreleased
+
+- **文件夹按层级显示并显示未读数**：左侧文件夹栏改为可折叠的树，按服务器返回的分隔符与父路径缩进（系统文件夹优先），每个文件夹后显示自己的 IMAP `STATUS UNSEEN` 未读数；`email_folders` 同时返回 `delimiter`、`parentPath` 与 `unseen`。服务器不支持 `LIST-STATUS` 时逐个文件夹查询，`STATUS` 失败只隐藏数字、不伪造为 0；POP3 与 AgentMail 没有服务器未读状态，不显示该标记。
+- **Folders render as a tree with unread badges**: the rail now nests by the server's delimiter and parent path (system folders first) with expand/collapse, and shows each folder's own IMAP `STATUS UNSEEN` count; `email_folders` also returns `delimiter`, `parentPath` and `unseen`. Servers without `LIST-STATUS` fall back to per-folder STATUS, a failed STATUS hides the badge instead of faking zero, and POP3/AgentMail (no server unread state) show no badge.
+
 ## 0.30.6 (2026-11-20)
 
 - 关闭绕过宿主会话认证的旧设置与鲸鱼图片 HTTP 入口；设置、邮件、草稿和图片继续使用官方 connection.fetch 认证通道。

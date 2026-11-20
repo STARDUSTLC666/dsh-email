@@ -1542,6 +1542,9 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
         const INLINE_LOCALE_COMPLETION = {
             es: {
                 "System folders": "Carpetas del sistema",
+                "Folders": "Carpetas",
+                "Expand subfolders": "Expandir subcarpetas",
+                "Collapse subfolders": "Contraer subcarpetas",
                 "Custom folders": "Carpetas personalizadas",
                 "Confirm empty": "Confirmar vaciado",
                 "Protected": "Protegida",
@@ -1819,6 +1822,9 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             },
             fr: {
                 "System folders": "Dossiers système",
+                "Folders": "Dossiers",
+                "Expand subfolders": "Développer les sous-dossiers",
+                "Collapse subfolders": "Réduire les sous-dossiers",
                 "Custom folders": "Dossiers personnalisés",
                 "Confirm empty": "Confirmer le vidage",
                 "Protected": "Protégé",
@@ -2096,6 +2102,9 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             },
             de: {
                 "System folders": "Systemordner",
+                "Folders": "Ordner",
+                "Expand subfolders": "Unterordner erweitern",
+                "Collapse subfolders": "Unterordner einklappen",
                 "Custom folders": "Eigene Ordner",
                 "Confirm empty": "Leeren bestätigen",
                 "Protected": "Geschützt",
@@ -2373,6 +2382,9 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             },
             ja: {
                 "System folders": "システムフォルダー",
+                "Folders": "フォルダー",
+                "Expand subfolders": "サブフォルダーを展開",
+                "Collapse subfolders": "サブフォルダーを折りたたむ",
                 "Custom folders": "カスタムフォルダー",
                 "Confirm empty": "空にする",
                 "Protected": "保護済み",
@@ -2650,6 +2662,9 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             },
             pt: {
                 "System folders": "Pastas do sistema",
+                "Folders": "Pastas",
+                "Expand subfolders": "Expandir subpastas",
+                "Collapse subfolders": "Recolher subpastas",
                 "Custom folders": "Pastas personalizadas",
                 "Confirm empty": "Confirmar esvaziamento",
                 "Protected": "Protegida",
@@ -2927,6 +2942,9 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             },
             ru: {
                 "System folders": "Системные папки",
+                "Folders": "Папки",
+                "Expand subfolders": "Развернуть подпапки",
+                "Collapse subfolders": "Свернуть подпапки",
                 "Custom folders": "Пользовательские папки",
                 "Confirm empty": "Подтвердить очистку",
                 "Protected": "Защищённая",

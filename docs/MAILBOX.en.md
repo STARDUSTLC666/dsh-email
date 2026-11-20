@@ -2,6 +2,12 @@
 
 Available in dsh-email 0.22.1, under **Email → Mailbox**. UI language follows DSH.
 
+## Folder tree and unread counts
+
+The folder rail follows the delimiter and parent path returned by the server: system folders come first, custom folders follow by name, and subfolders are indented under their parent with an expand/collapse control. Hovering a folder reveals its full path, and **Manage folders** uses the same nested ordering.
+
+The number after a folder is that folder's own unread count, read from IMAP `STATUS UNSEEN` (returned with `LIST` when the server supports `LIST-STATUS`, otherwise queried folder by folder). Opening a message or changing its read state updates the current folder's badge immediately; reloading the folder list takes the server's value. Servers that cannot report `STATUS` show no badge rather than a fake zero. POP3 and AgentMail have no server-side unread count and therefore no badge.
+
 ## Read formatted messages
 
 The reader preserves paragraphs, lists, tables, links and recognized inline images. Switch to plain text at any time. Messages are rendered as allowlisted React data: scripts, forms, embedded pages, event handlers and sender styles never enter the page.

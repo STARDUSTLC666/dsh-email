@@ -152,6 +152,12 @@ export interface EmailFolderRow {
     path: string;
     specialUse: string;
     subscribed: boolean;
+    /** Hierarchy delimiter reported by LIST; '/' when the server gives none. */
+    delimiter: string;
+    /** Full parent path reported by LIST; '' for top-level folders. */
+    parentPath: string;
+    /** Unread messages reported by STATUS; omitted when the server cannot report it. */
+    unseen?: number;
 }
 export interface EmailFoldersResult {
     account: string;

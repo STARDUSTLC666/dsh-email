@@ -1196,7 +1196,12 @@ export class EmailPool {
   }
   async moveMessages(accountName: string | undefined, folder: string, uids: number[], target: string, uidValidity: number, signal?: AbortSignal) {
     const name = this.resolveName(accountName)
-    return this.withImap(name, folder, client => moveImapMessages(client, folder, uids, target, uidValidity, signal), false, signal)
+    return this.withImap(name, folder, async client => {
+      const result = await moveImapMessages(client, folder, uids, target, uidValidity, signal)
+      // Both source and target unread counts may have changed.
+      this.folderCache.delete(name)
+      return result
+    }, false, signal)
   }
   async mark(accountName: string | undefined, folder: string, uid: number, action: EmailMarkAction, toFolder?: string, signal?: AbortSignal): Promise<EmailMarkResult> {
     const name = this.resolveName(accountName)
@@ -1247,8 +1252,10 @@ export class EmailPool {
         const result: EmailMarkResult = { account: name, uid, folder: folderName, action, seen, flagged, movedTo: target }
         const destUid = (moved as { uidMap?: Map<number, number> })?.uidMap?.get(uid) ?? (moved as { destinationUid?: unknown })?.destinationUid
         if (typeof destUid === 'number') result.movedUid = destUid
+        this.folderCache.delete(name)
         return result
       }
+      this.folderCache.delete(name)
       return { account: name, uid, folder: folderName, action, seen, flagged }
     }, false, signal)
   }
@@ -1316,14 +1323,31 @@ export class EmailPool {
       if (cached !== undefined && Date.now() - cached.at < FOLDER_CACHE_TTL_MS) {
         rows = cached.folders
       } else {
-        const list = await client.list()
+        // Unread counts ride along on the same LIST when the server offers
+        // LIST-STATUS; otherwise ImapFlow issues one bounded STATUS per folder.
+        // Counts are decoration: a rejected STATUS must not hide the folders.
+        let list
+        try {
+          list = await client.list({ statusQuery: { unseen: true } })
+        } catch {
+          signal?.throwIfAborted()
+          list = await client.list()
+        }
         signal?.throwIfAborted()
-        rows = list.map(row => ({
-          name: row.name ?? row.path,
-          path: row.path,
-          specialUse: row.specialUse ?? '',
-          subscribed: row.subscribed !== false,
-        }))
+        rows = list.map(row => {
+          const unseen = row.status !== undefined && Number.isSafeInteger(row.status.unseen) && Number(row.status.unseen) >= 0
+            ? Number(row.status.unseen)
+            : undefined
+          return {
+            name: row.name ?? row.path,
+            path: row.path,
+            specialUse: row.specialUse ?? '',
+            subscribed: row.subscribed !== false,
+            delimiter: typeof row.delimiter === 'string' && row.delimiter !== '' ? row.delimiter : '/',
+            parentPath: typeof row.parentPath === 'string' ? row.parentPath : '',
+            ...(unseen === undefined ? {} : { unseen }),
+          }
+        })
         this.folderCache.set(name, { at: Date.now(), folders: rows })
       }
       return { account: name, folders: rows.filter(row => !subscribedOnly || row.subscribed !== false) }

@@ -18,24 +18,118 @@ const isProtectedFolder = (row, folders) => folders.some(system => isSystemFolde
 
 function folderLabel(row) {
   const leaf = folderLeaf(row);
-  if (row.specialUse === '\Inbox' || /^(inbox|收件箱)$/i.test(leaf)) return dt('收件箱', 'Inbox');
-  if (row.specialUse === '\Sent' || /^(sent(?: messages| items)?|已发送)$/i.test(leaf)) return dt('已发送', 'Sent');
-  if (row.specialUse === '\Trash' || /^(trash|deleted(?: messages| items)?|垃圾箱|废纸篓|已删除)$/i.test(leaf)) return dt('废纸篓', 'Trash');
+  if (row.specialUse === '\\Inbox' || /^(inbox|收件箱)$/i.test(leaf)) return dt('收件箱', 'Inbox');
+  if (row.specialUse === '\\Sent' || /^(sent(?: messages| items)?|已发送)$/i.test(leaf)) return dt('已发送', 'Sent');
+  if (row.specialUse === '\\Trash' || /^(trash|deleted(?: messages| items)?|垃圾箱|废纸篓|已删除)$/i.test(leaf)) return dt('废纸篓', 'Trash');
   if (row.specialUse === '\\Drafts' || /^drafts$/i.test(leaf)) return dt('草稿', 'Drafts');
   return row.name || row.path;
 }
 
+// Machines report flat LIST rows; the rail is a tree. Keep the ordering local
+// and deterministic: system folders first, then names, children under parents.
+function folderSystemRank(row) {
+  const special = String(row.specialUse || '');
+  if (special === '\\Inbox' || /^(inbox|收件箱)$/i.test(folderLeaf(row))) return 0;
+  if (special === '\\Sent' || /^(sent(?: messages| items)?|已发送)$/i.test(folderLeaf(row))) return 1;
+  if (special === '\\Drafts' || /^drafts$/i.test(folderLeaf(row))) return 2;
+  if (special === '\\Junk' || /^(junk(?: e-mail)?|垃圾邮件)$/i.test(folderLeaf(row))) return 3;
+  if (special === '\\Trash' || /^(trash|deleted(?: messages| items)?|垃圾箱|废纸篓|已删除)$/i.test(folderLeaf(row))) return 4;
+  if (special !== '') return 5;
+  return 6;
+}
+
+function buildFolderTree(folders) {
+  const nodes = new Map();
+  for (const row of Array.isArray(folders) ? folders : []) {
+    if (!row || typeof row.path !== 'string' || row.path === '') continue;
+    nodes.set(row.path, { row, depth: 0, orphan: false, children: [] });
+  }
+  const roots = [];
+  for (const node of nodes.values()) {
+    const row = node.row;
+    let parentPath = typeof row.parentPath === 'string' ? row.parentPath : '';
+    if (!parentPath) {
+      const delimiter = row.delimiter || '/';
+      const index = row.path.lastIndexOf(delimiter);
+      if (index > 0) parentPath = row.path.slice(0, index);
+    }
+    const parent = parentPath ? nodes.get(parentPath) : undefined;
+    if (parent && parent !== node) {
+      parent.children.push(node);
+    } else {
+      // A parent the server did not list (or a path outside the namespace):
+      // keep the row reachable as a root and show its full path.
+      node.orphan = Boolean(parentPath);
+      roots.push(node);
+    }
+  }
+  const compare = (left, right) => {
+    const rank = folderSystemRank(left.row) - folderSystemRank(right.row);
+    if (rank !== 0) return rank;
+    return String(left.orphan ? left.row.path : folderLabel(left.row))
+      .localeCompare(String(right.orphan ? right.row.path : folderLabel(right.row)), undefined, { numeric: true, sensitivity: 'base' });
+  };
+  const sort = list => {
+    list.sort(compare);
+    for (const node of list) sort(node.children);
+  };
+  sort(roots);
+  // LIST order is not guaranteed to put a parent before its children, so the
+  // indentation level is assigned from the finished forest, not row order.
+  const assignDepth = (list, depth) => {
+    for (const node of list) {
+      node.depth = depth;
+      assignDepth(node.children, depth + 1);
+    }
+  };
+  assignDepth(roots, 0);
+  return roots;
+}
+
+function flattenFolderTree(nodes, depth = 0, acc = []) {
+  for (const node of nodes) {
+    acc.push({ row: node.row, depth, orphan: node.orphan });
+    flattenFolderTree(node.children, depth + 1, acc);
+  }
+  return acc;
+}
+
 function MailFolderRail({ accounts, account, folder, folders, busy, loading, onAccount, onFolder, onManage }) {
   const current = accounts.find(row => row.name === account);
-  const system = folders.filter(isSystemFolder);
-  const custom = folders.filter(row => !isSystemFolder(row));
+  const [collapsed, setCollapsed] = useState(() => new Set());
+  const forest = buildFolderTree(folders);
   const protocol = row => row.incoming === 'agentmail' ? 'AgentMail' : row.incoming === 'pop3' ? 'POP3' : 'IMAP';
-  const renderFolder = row => h(W.Button, {
-    key: row.path, className: mailCss.folder, variant: 'ghost',
-    icon: row.specialUse === '\Trash' ? 'trash' : row.specialUse === '\Sent' ? 'send' : row.specialUse === '\Inbox' || row.path === 'INBOX' ? 'inbox' : 'folder',
-    disabled: busy, title: row.path, 'aria-current': folder === row.path ? 'location' : undefined,
-    onClick: () => onFolder(row.path),
-  }, h('span', null, folderLabel(row)));
+  const unseenOf = row => Number.isSafeInteger(row.unseen) && row.unseen > 0 ? row.unseen : 0;
+  const toggle = path => setCollapsed(previous => {
+    const next = new Set(previous);
+    const key = account + '\u0000' + path;
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+  const renderNode = node => {
+    const row = node.row, count = unseenOf(row), key = account + '\u0000' + row.path;
+    const isCollapsed = collapsed.has(key), hasChildren = node.children.length > 0;
+    const label = node.orphan ? row.path : folderLabel(row);
+    return h(React.Fragment, { key: row.path },
+      h('div', { className: mailCss.folderNode, style: { '--mail-folder-depth': String(node.depth) } },
+        hasChildren
+          ? h(W.IconButton, {
+              className: mailCss.folderToggle, icon: isCollapsed ? 'right' : 'down',
+              label: isCollapsed ? dt('展开子文件夹', 'Expand subfolders') : dt('收起子文件夹', 'Collapse subfolders'),
+              'aria-expanded': !isCollapsed, onClick: () => toggle(row.path),
+            })
+          : h('span', { className: mailCss.folderToggleSpacer, 'aria-hidden': 'true' }),
+        h(W.Button, {
+          className: mailCss.folder, variant: 'ghost',
+          icon: row.specialUse === '\\Trash' ? 'trash' : row.specialUse === '\\Sent' ? 'send' : row.specialUse === '\\Inbox' || row.path === 'INBOX' ? 'inbox' : 'folder',
+          disabled: busy, title: row.path, 'aria-current': folder === row.path ? 'location' : undefined,
+          ...(count > 0 ? { 'aria-label': label + ' · ' + count + ' ' + dt('未读', 'Unread') } : {}),
+          onClick: () => onFolder(row.path),
+        },
+          h('span', { className: mailCss.folderName }, label),
+          count > 0 ? h('span', { className: mailCss.folderUnread, 'aria-hidden': 'true' }, count > 999 ? '999+' : String(count)) : null)),
+      hasChildren && !isCollapsed ? node.children.map(renderNode) : null);
+  };
 
   return h('aside', { className: mailCss.rail, 'aria-label': dt('账号与文件夹','Accounts and folders') },
     h(W.ChoiceMenu, {
@@ -44,14 +138,10 @@ function MailFolderRail({ accounts, account, folder, folders, busy, loading, onA
       items: accounts.map(row => ({ id: row.name, label: row.name + ' · ' + row.user })),
     }, current ? h('span', { className: mailCss.account }, current.user || current.name,
       h('span', { className: mailCss.accountMeta }, protocol(current) + ' · ' + current.name)) : null),
-    h('nav', { className: mailCss.railGroup, 'aria-label': dt('系统文件夹', 'System folders') },
-      h('div', { className: mailCss.railHeading }, h('h2', null, dt('系统文件夹', 'System folders')), h(W.Icon, { name: 'lock', size: 13 })),
-      system.map(renderFolder)),
-    custom.length > 0 || current?.incoming === 'imap' ?
-      h('nav', { className: mailCss.railGroup, 'aria-label': dt('自建文件夹', 'Custom folders') },
-        h('div', { className: mailCss.railHeading }, h('h2', null, dt('自建文件夹', 'Custom folders')),
-          current?.incoming === 'imap' ? h(W.IconButton, { icon: 'plus', label: dt('管理文件夹', 'Manage folders'), disabled: busy || loading, onClick: onManage }) : null),
-        custom.map(renderFolder)) : null);
+    h('nav', { className: mailCss.railGroup, 'aria-label': dt('文件夹', 'Folders') },
+      h('div', { className: mailCss.railHeading }, h('h2', null, dt('文件夹', 'Folders')),
+        current?.incoming === 'imap' ? h(W.IconButton, { icon: 'plus', label: dt('管理文件夹', 'Manage folders'), disabled: busy || loading, onClick: onManage }) : null),
+      forest.map(renderNode)));
 }
 
 function MailFoldersDialog({ account, folders, busy, onClose, onChanged }) {
@@ -62,6 +152,7 @@ function MailFoldersDialog({ account, folders, busy, onClose, onChanged }) {
   const [working, setWorking] = useState(false);
   const [confirmation, setConfirmation] = useState(null);
   const blocked = busy || working;
+  const ordered = flattenFolderTree(buildFolderTree(folders));
 
   async function act(action, payload) {
     setError('');
@@ -114,7 +205,7 @@ function MailFoldersDialog({ account, folders, busy, onClose, onChanged }) {
         h('form', { className: mailCss.folderForm, onSubmit: event => { event.preventDefault(); if (!blocked && newName.trim()) void act('folderCreate', { path: newName.trim() }); } },
           h(W.Input, { value: newName, 'aria-label': dt('新建文件夹', 'New folder'), placeholder: dt('新建文件夹', 'New folder'), 'data-modal-autofocus': true, disabled: blocked, onChange: event => setNewName(event.target.value) }),
           h(W.Button, { type: 'submit', variant: 'primary', disabled: blocked || !newName.trim() }, dt('创建', 'Create'))),
-        h('ul', { className: mailCss.folderList }, folders.map(row => h('li', { key: row.path, className: mailCss.folderRow },
+        h('ul', { className: mailCss.folderList }, ordered.map(({ row, depth }) => h('li', { key: row.path, className: mailCss.folderRow, style: { paddingInlineStart: (8 + depth * 14) + 'px' } },
           renameOf === row.path ? h(React.Fragment, null,
             h(W.Input, { value: renameValue, 'aria-label': dt('重命名', 'Rename'), disabled: blocked, onChange: event => setRenameValue(event.target.value) }),
             h(W.Button, { variant: 'primary', disabled: blocked || !renameValue.trim(), onClick: () => act('folderRename', { path: row.path, newName: renameValue.trim() }) }, dt('保存', 'Save')),
@@ -560,7 +651,7 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
     mailboxApi("folders", { account }, ctrl.signal).then(value => {
       if (ctrl.signal.aborted) return;
       setFolders(value.folders);
-      setFolder(value.folders.find(row => row.specialUse === '\Inbox')?.path ||
+      setFolder(value.folders.find(row => row.specialUse === '\\Inbox')?.path ||
         value.folders.find(row => row.path === 'INBOX')?.path || value.folders[0]?.path || "");
     }).catch(error => {
       if (!ctrl.signal.aborted) setError(emailError(error));
@@ -614,6 +705,13 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
       busyRef.current = false;
       setBusy(false);
     }
+  }
+
+  function adjustUnread(path, delta) {
+    if (!path || !delta) return;
+    setFolders(rows => rows.map(row => row.path === path && typeof row.unseen === 'number'
+      ? { ...row, unseen: Math.max(0, row.unseen + delta) }
+      : row));
   }
 
   const retry = () => { setAccountReload(n => n + 1); setRefresh(n => n + 1); setReadToken(n => n + 1); };
@@ -765,7 +863,10 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
                     label: row.seen ? dt('标记未读', 'Mark unread') : dt('标记已读', 'Mark read'),
                     onClick: () => run(async valid => {
                       await mailboxApi('mark', { account, folder, uid: row.uid, mark: row.seen ? 'unread' : 'read' });
-                      if (valid()) setResult(old => old && { ...old, messages: old.messages.map(m => m.uid === row.uid ? { ...m, seen: !row.seen } : m) });
+                      if (valid()) {
+                        adjustUnread(folder, row.seen ? 1 : -1);
+                        setResult(old => old && { ...old, messages: old.messages.map(m => m.uid === row.uid ? { ...m, seen: !row.seen } : m) });
+                      }
                     }),
                   }),
                   h(W.IconButton, {
@@ -830,9 +931,12 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
           }, readError) : detail ? h(MailMessage, {
             key: JSON.stringify([account, folder, selected, detail.rich?.images?.[0]?.id]),
             detail, currentRow, account, folder, selected, busy, run, who, date: formatDate, onDraft, canTrash, onTrash: requestTrash,
-            onMark: value => setResult(old => old && { ...old, messages: old.messages.map(row => row.uid === selected ? {
-              ...row, ...(value === 'read' || value === 'unread' ? { seen: value === 'read' } : { flagged: value === 'star' }),
-            } : row) }),
+            onMark: value => {
+              if (value === 'read' || value === 'unread') adjustUnread(folder, value === 'read' ? -1 : 1);
+              setResult(old => old && { ...old, messages: old.messages.map(row => row.uid === selected ? {
+                ...row, ...(value === 'read' || value === 'unread' ? { seen: value === 'read' } : { flagged: value === 'star' }),
+              } : row) });
+            },
           }) : h(W.Empty, { title: dt('选择一封邮件','Select a message') }, dt('打开正文后，可以回复到草稿、标记状态或下载附件。','Open a message to reply in drafts, mark its state or download attachments.')))),
     trash ? h(MailTrashDialog, { account, folder, uids: trash, uidValidity: result?.uidValidity, folders, busy, onClose: () => setTrash(null), onConfirm: confirmTrash }) : null,
     foldersOpen ? h(MailFoldersDialog, { account, folders, busy, onClose: () => setFoldersOpen(false), onChanged: () => setFolderReload(n => n + 1) }) : null);
