@@ -8,7 +8,8 @@ import type { EmailDraftBackend } from './draft-web.js'
 import { parseEmailDay } from './tool-contract.js'
 import { clampInt } from './config.js'
 import { folderPath, type FolderMutationSnapshot } from './imap-folders.js'
-import type { EmailAttachmentMeta, EmailMarkAction, EmailMovePreview, EmailRichBody, EmailReadResult } from './types.js'
+import type { ContactsStore } from './contacts.js'
+import type { AddressEntry, EmailAttachmentMeta, EmailMarkAction, EmailMovePreview, EmailRichBody, EmailReadResult } from './types.js'
 
 interface MoveTicket { kind: 'trash' | 'undo'; account: string; folder: string; target: string; uids: number[]; uidValidity: number; fingerprint: string; expires: number }
 interface ImageTicket { account: string; folder: string; uid: string | number; uidValidity?: number; image: EmailRichBody['images'][number]; attachment?: EmailAttachmentMeta; fingerprint: string; expires: number }
@@ -36,7 +37,37 @@ export class EmailMailboxBackend {
     private runtime: Pick<EmailRuntime, 'getEffectiveSettings' | 'getPool'>,
     private drafts: EmailDraftBackend,
     private download: typeof downloadPublicBytes = downloadPublicBytes,
+    /**
+     * Local address book. Omitted by embedders and protocol fixtures that do not
+     * want a browser-only, filesystem-backed side effect; the contacts actions
+     * then answer with a clear error and message harvesting is skipped.
+     */
+    private contacts?: ContactsStore,
   ) {}
+  /** The browser actions the address book needs; independent of any mail account. */
+  private addressBook(): ContactsStore {
+    if (!this.contacts) throw new Error('通讯录在当前运行环境中不可用 / Contacts are unavailable in this environment')
+    return this.contacts
+  }
+  /** Every address this installation owns, so reading own mail never self-adds. */
+  private selfAddresses(): string[] {
+    const addresses: string[] = []
+    try {
+      for (const account of this.runtime.getEffectiveSettings().accounts.values()) {
+        if (account.user) addresses.push(account.user)
+      }
+    } catch { /* unconfigured installations simply have nothing to skip */ }
+    return addresses
+  }
+  /**
+   * Harvest correspondents for the address book. Best effort by design: an
+   * unreadable address book must never turn a successful mailbox page into an
+   * error, and opening a message should not wait on a second disk write.
+   */
+  private observe(entries: AddressEntry[]): Promise<void> {
+    if (!this.contacts || entries.length === 0) return Promise.resolve()
+    return this.contacts.observe(entries, { self: this.selfAddresses() }).then(() => {}, () => {})
+  }
   private fingerprint(account: string) {
     return createHash('sha256').update(JSON.stringify(this.runtime.getEffectiveSettings().accounts.get(account))).digest('hex')
   }
@@ -82,6 +113,14 @@ export class EmailMailboxBackend {
     body: Record<string, unknown>,
     signal?: AbortSignal,
   ): Promise<unknown> {
+    // The address book is local data: it must stay reachable before any account
+    // exists, so these actions never resolve an account first.
+    if (body.action === 'contacts') return { contacts: await this.addressBook().list() }
+    if (body.action === 'contactSave') return this.addressBook().save(body as Record<string, unknown>, signal)
+    if (body.action === 'contactDelete') {
+      await this.addressBook().remove(body.id, signal)
+      return { ok: true }
+    }
     const settings = this.runtime.getEffectiveSettings(),
       account =
         typeof body.account === 'string' && body.account
@@ -173,8 +212,8 @@ export class EmailMailboxBackend {
             : undefined
       const query = typeof body.query === 'string' ? body.query.trim() : ''
       if (query.length > 500) throw new Error('搜索词过长')
-      return query
-        ? pool.search(
+      const result = query
+        ? await pool.search(
             account,
             query,
             folder,
@@ -192,7 +231,7 @@ export class EmailMailboxBackend {
               ),
             },
           )
-        : pool.list(
+        : await pool.list(
             account,
             folder,
             limit,
@@ -202,6 +241,8 @@ export class EmailMailboxBackend {
             until,
             signal,
           )
+      await this.observe((result.messages ?? []).flatMap(row => row.from ?? []))
+      return result
     }
     const uid = body.uid
     if (
@@ -214,7 +255,12 @@ export class EmailMailboxBackend {
       )
     )
       throw new Error('请从邮件列表重新选择邮件')
-    if (body.action === 'read') return this.present(await pool.read(account, uid, folder, signal), accountFingerprint)
+    if (body.action === 'read') {
+      const message = await pool.read(account, uid, folder, signal)
+      // Learn every party of the conversation, then let the caller render names.
+      await this.observe([...(message.from ?? []), ...(message.to ?? []), ...(message.cc ?? [])])
+      return this.present(message, accountFingerprint)
+    }
     if (body.action === 'mark') {
       if (!['read', 'unread', 'star', 'unstar'].includes(String(body.mark)))
         throw new Error('不支持的邮件状态操作')

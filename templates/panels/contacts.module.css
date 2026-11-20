@@ -1,0 +1,277 @@
+/* Address book panel and the recipient autocomplete shared with the composer. */
+.contacts,
+.book,
+.editor,
+.list {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.contacts {
+  min-width: 0;
+}
+
+.book {
+  gap: 10px;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.toolbar > h2 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 22px;
+}
+
+.count {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.search,
+.fields {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.fields {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.field > span,
+.field > label {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 18px;
+}
+
+.field input,
+.search input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 9px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm, 8px);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+}
+
+.field input:focus-visible,
+.search input:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -1px;
+}
+
+.field input[aria-invalid="true"] {
+  border-color: var(--dsw-alias-state-error-primary);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.hint {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: var(--dsh-control-border-width, 0.5px) solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md, 12px);
+  background: var(--dsw-alias-bg-layer-1);
+  overflow: clip;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 9px 12px;
+}
+
+.row + .row {
+  border-block-start: var(--dsh-control-border-width, 0.5px) solid var(--dsw-alias-border-l2);
+}
+
+.row[data-active="true"] {
+  background: var(--dsw-alias-bg-base);
+}
+
+.identity {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.name {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.address {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.badge {
+  padding: 1px 7px;
+  border-radius: var(--dsw-radius-sm, 8px);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.badge[data-source="manual"] {
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.rowActions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+/* Recipient autocomplete: the list floats under the field, inside its own
+   wrapper so the composer dialog keeps its scroll position. */
+.recipient {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.recipientInput {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 9px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm, 8px);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+}
+
+.recipientInput:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -1px;
+}
+
+.recipientInput[aria-invalid="true"] {
+  border-color: var(--dsw-alias-state-error-primary);
+}
+
+.recipientToken {
+  color: var(--dsw-alias-label-secondary);
+  font-weight: 400;
+}
+
+.suggestions {
+  position: absolute;
+  z-index: 4;
+  inset-inline: 0;
+  inset-block-start: calc(100% + 2px);
+  max-block-size: 224px;
+  overflow: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm, 8px);
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 10px 26px rgb(0 0 0 / 16%);
+}
+
+.suggestion {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--dsw-radius-sm, 8px);
+  cursor: pointer;
+}
+
+.suggestion[data-active="true"] {
+  background: var(--dsw-alias-bg-base);
+}
+
+.suggestionName {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.suggestionAddress {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
+.suggestionEmpty {
+  padding: 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+@media (max-width: 620px) {
+  .fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .contacts {
+    padding-inline: 12px;
+  }
+
+  .row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

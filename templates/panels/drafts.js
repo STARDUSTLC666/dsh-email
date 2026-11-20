@@ -109,7 +109,7 @@ function DraftSendReview({ preview, busy, acknowledged, onAcknowledge }) {
       preview.draft.sendAt ? h('div', null, h('dt', null, dt('定时发送时间', 'Scheduled send time')), h('dd', null, formatDate(preview.draft.sendAt))) : null),
     preview.matching.blocked ? h(W.Status, { tone: 'error' }, dt('有收件人命中禁止规则，无法发送。请修改草稿或收件人规则。', 'A recipient is blocked. Change the draft or recipient rules before sending.')) : null,
     h('ul', { className: draftCss.recipients }, preview.matching.rows.map((row, index) => h('li', { key: index, 'data-blocked': row.blocked },
-      (row.field === 'cc' ? 'Cc: ' : 'To: ') + row.address + ' · ' + (row.blocked ? dt('禁止发送：', 'Blocked: ') + row.value : row.matched ? dt('匹配可信规则', 'Matches a trusted rule') : dt('需要确认', 'Needs confirmation'))))),
+      (row.field === 'cc' ? 'Cc: ' : 'To: ') + contactLabelOf(row.address) + ' · ' + (row.blocked ? dt('禁止发送：', 'Blocked: ') + row.value : row.matched ? dt('匹配可信规则', 'Matches a trusted rule') : dt('需要确认', 'Needs confirmation'))))),
     h(DraftSafeBody, { rich: preview.body?.rich, text: preview.body?.text || preview.draft.text }),
     preview.body?.rich?.nodes?.length ? h('details', { className: draftCss.plainAlternative },
       h('summary', null, dt('查看纯文本备选','View plain-text alternative')), h('pre', null, preview.body.text)) : null,
@@ -142,6 +142,8 @@ function ScheduleDraftField({ value, disabled, onChange }) {
 
 function DraftWorkbench({ active, defaultAccount, composeRequest, onComposeFinished }) {
   const id = React.useId();
+  // Recipient autocomplete and the review list read the shared address book.
+  useContactBook(active);
   const [data, setData] = useState({ drafts: [], accounts: [] });
   const [selected, setSelected] = useState(() => draftUiCache?.selected || null);
   const [form, setForm] = useState(() => draftUiCache?.form || null);
@@ -336,6 +338,23 @@ function DraftWorkbench({ active, defaultAccount, composeRequest, onComposeFinis
         onChange: event => change(key, event.target.value) }));
   }
 
+  /**
+   * To/Cc keep the plain address string the backend already parses, but gain a
+   * contact suggestion list: picking one completes the address and carries its
+   * name into the header, so recipients see a person instead of a mailbox.
+   */
+  function recipientField(key, label, invalid) {
+    const fieldId = id + '-' + key;
+    return h('div', { className: draftCss.field },
+      h('label', { htmlFor: fieldId }, label),
+      h(RecipientField, {
+        id: fieldId, label, value: form[key], invalid,
+        disabled: busy || locked,
+        modalAutofocus: key === 'to' && !locked,
+        onChange: value => change(key, value),
+      }));
+  }
+
   const closeLabel = dt('关闭', 'Close');
   const reviewTitle = dt('发送前预览', 'Review before sending');
   const composeTitle = dt('写邮件', 'Compose');
@@ -379,13 +398,13 @@ function DraftWorkbench({ active, defaultAccount, composeRequest, onComposeFinis
             items: [...(form.account ? [] : [{ id: '', label: sender || dt('请选择已配置账号', 'Choose a configured account'), disabled: true }]),
               ...data.accounts.map(name => ({ id: name, label: name }))],
             onChange: value => change('account', value) })),
-        field('to', dt('收件人 To', 'Recipients To'), denied.some(row => row.field === 'to')),
-        field('cc', dt('抄送 Cc', 'Copy Cc'), denied.some(row => row.field === 'cc')),
+        recipientField('to', dt('收件人 To', 'Recipients To'), denied.some(row => row.field === 'to')),
+        recipientField('cc', dt('抄送 Cc', 'Copy Cc'), denied.some(row => row.field === 'cc')),
         field('subject', dt('主题', 'Subject'))),
       denied.length ? h(W.Status, { tone: 'error' },
         dt('有收件人命中禁止规则，无法发送。请修改草稿或收件人规则。', 'A recipient is blocked. Change the draft or recipient rules before sending.'),
         h('ul', { className: draftCss.recipients }, denied.map(row => h('li', { key: row.field + row.address },
-          (row.field === 'to' ? 'To: ' : 'Cc: ') + row.address + ' · ' + row.value)))) : live?.error ? h(W.Status, { tone: 'warn' }, live.error) : null,
+          (row.field === 'to' ? 'To: ' : 'Cc: ') + contactLabelOf(row.address) + ' · ' + row.value)))) : live?.error ? h(W.Status, { tone: 'warn' }, live.error) : null,
       h(DraftBodyEditor, { id, mode, setMode: changeMode, form, locked, busy, onChange: change }),
       !locked || selected.sendAt ? h(ScheduleDraftField, { key: selected.id, value: form.sendAt, disabled: locked || busy, onChange: value => change('sendAt', value) }) : null,
       selected.state === 'scheduled' ? h(W.Button, { disabled: busy, onClick: () => run(async () => {

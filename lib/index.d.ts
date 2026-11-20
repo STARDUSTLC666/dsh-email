@@ -20,6 +20,8 @@ export { EmailSettingsBackend, installEmailSettingsWeb, SETTINGS_ROUTE } from '.
 export type { AccountCardData, AccountCardInput } from './web.js';
 export { EmailDraftBackend, installEmailDrafts, EMAIL_DRAFT_ROUTE } from './draft-web.js';
 export { DraftStore, DraftError } from './draft-store.js';
+export { ContactsStore, ContactsError, MAX_AUTO_CONTACTS, MAX_CONTACTS, contactMatchKeys, normalizeAddress, normalizeContactName } from './contacts.js';
+export type { ContactAddress, ContactObserveResult, ContactSaveInput, EmailContact } from './contacts.js';
 export { AgentMailClient } from './agentmail.js';
 export { Pop3Client } from './pop3.js';
 export { EmailService } from './mail-service.js';
