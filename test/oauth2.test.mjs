@@ -655,6 +655,65 @@ test('the SMTP transporter is rebuilt with a fresh token after a rejection', asy
   pool.dispose()
 })
 
+test('SMTP diagnostics redact opaque Bearer and named OAuth tokens before returning errors', async t => {
+  const access = 'opaque-access.with-dashes_and-underscores~+', refresh = 'opaque-refresh_with-dashes'
+  writeTokens({ work: { user: 'me@outlook.com', clientId: 'client-1', refreshToken: refresh, accessToken: access, expiresAt: Date.now() + 3600_000 } })
+  const settings = resolveEmailSettings({ accountsYaml: 'work: { provider: outlook, user: me@outlook.com, clientId: client-1 }\n' })
+  const pool = new EmailPool(settings)
+  t.after(() => pool.dispose())
+  mockFetch(t, () => assert.fail('a non-authentication SMTP error must not refresh a token'))
+  for (const diagnostic of [
+    'Bearer ' + access,
+    'auth=Bearer ' + access + '\x01\x01',
+    JSON.stringify({ access_token: access, refresh_token: refresh }),
+    'accessToken=' + access + '; refreshToken=' + refresh,
+  ]) {
+    pool.transporter = () => ({ async sendMail() { throw new Error('Remote SMTP diagnostic: ' + diagnostic) }, close() {} })
+    await assert.rejects(pool.send('work', 'to@x.y', 'subject', 'body', undefined, []), error => {
+      assert.match(error.message, /Remote SMTP diagnostic/, 'keep the actionable context')
+      assert.ok(!error.message.includes(access), 'never return the access token to a tool or settings panel')
+      assert.ok(!error.message.includes(refresh), 'never return the refresh token to a tool or settings panel')
+      return true
+    })
+  }
+})
+
+test('IMAP diagnostics redact OAuth credentials while retaining authentication, folder and DNS guidance', async () => {
+  const secret = 'opaque-imap-review.with-dashes_and_underscores~+'
+  for (const authKind of ['password', 'oauth2']) {
+    for (const [diagnostic, guidance] of [
+      ['Authentication failed; Bearer ' + secret, authKind === 'oauth2' ? /重新登录/ : /邮箱登录失败/],
+      ['Folder does not exist; access_token=' + secret, /找不到邮箱文件夹/],
+      ['getaddrinfo ENOTFOUND mail.example.invalid; refresh_token=' + secret, /ENOTFOUND/],
+    ]) {
+      const settings = resolveEmailSettings({ provider: 'qq', user: 'fixture@qq.com', password: 'fixture-password' })
+      settings.accounts.get('default').authKind = authKind
+      const pool = new EmailPool(settings)
+      pool.imaps.set('default', { client: { usable: true, async mailboxOpen() { throw new Error(diagnostic) }, async logout() {} }, selected: null, selectedReadOnly: true, lastUsed: Date.now(), inUse: 0 })
+      try {
+        await assert.rejects(pool.list('default', 'INBOX', 10, 0, false), error => {
+          assert.match(error.message, guidance)
+          assert.ok(!error.message.includes(secret), 'IMAP errors returned by a mailbox operation must not contain the token')
+          return true
+        })
+      } finally { pool.dispose() }
+    }
+  }
+})
+
+test('Microsoft login error descriptions and transport failures cannot echo OAuth credentials', async t => {
+  const secret = 'opaque-oauth-review.with-dashes_and_underscores~+'
+  const failure = classifyOAuthFailure({ error: 'temporarily_unavailable', error_description: 'Provider diagnostic: Bearer ' + secret + '; client_secret=' + secret }, 503)
+  assert.match(failure.message, /Provider diagnostic/)
+  assert.ok(!failure.message.includes(secret), 'provider descriptions must be sanitized before the login UI receives them')
+  mockFetch(t, async () => { throw new Error('Transport diagnostic: refresh_token=' + secret) })
+  await assert.rejects(startDeviceFlow('diagnostic-fixture', OAUTH_ACCOUNT), error => {
+    assert.match(error.message, /Transport diagnostic/)
+    assert.ok(!error.message.includes(secret), 'transport diagnostics must be sanitized before returning them')
+    return true
+  })
+})
+
 test('cancelling during OAuth refresh settles immediately and never opens SMTP', async t => {
   const { createServer } = await import('node:net')
   const server = createServer()

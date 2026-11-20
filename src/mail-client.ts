@@ -12,6 +12,8 @@ import { basename, extname, join } from 'node:path'
 import type { Readable } from 'node:stream'
 import { draftAttachmentLimit, type AuthKind, type ResolvedEmailConfig, type ResolvedEmailSettings } from './config.js'
 import { getFreshAccessToken, OAuth2Error } from './oauth2.js'
+import { redactCredentials } from './credential-redaction.js'
+export { redactCredentials } from './credential-redaction.js'
 import { prepareMailBody } from './outgoing-body.js'
 import { escapeMailHtml } from './mail-html.js'
 import { attribution, replyDate, replyWords, type ReplyOptions } from './reply-locale.js'
@@ -46,26 +48,6 @@ export class MailError extends Error {
 
 export function messageOf(error: unknown, fallback: string): string {
   return error instanceof Error && error.message !== '' ? error.message : fallback
-}
-
-/**
- * Replace anything credential-shaped in a server's own error text before it
- * reaches a user.
- *
- * IMAP and SMTP servers routinely quote back the authentication string they
- * rejected. For XOAUTH2 that string is `user=…\x01auth=Bearer <token>\x01\x01`,
- * usually base64'd — so the raw message carries a live access token, and these
- * messages are rendered in the settings panel, returned by the mail tools, and
- * pasted into bug reports.
- *
- * Mask JWTs, long base64 authentication blobs and credential assignments.
- * Token replacements retain their length for diagnostics.
- */
-export function redactCredentials(text: string): string {
-  return text
-    .replace(/(["']?(?:password|passwd|authPassword|clientSecret|secret|api[_-]?key)["']?)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s;,)]+)/gi, '$1$2<已隐去的凭据>')
-    .replace(/[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{8,}/g, match => `<已隐去 ${match.length} 字符的令牌>`)
-    .replace(/[A-Za-z0-9+/]{40,}={0,2}/g, match => `<已隐去 ${match.length} 字符的凭据>`)
 }
 
 /** The IMAP auth shape imapflow accepts: a password, or an OAuth2 access token. */
@@ -607,7 +589,7 @@ export class EmailPool {
 
   /** The token store's own errors are already actionable; never dress them as IMAP failures. */
   private oauth2ErrorOf(error: unknown): Error {
-    if (error instanceof OAuth2Error) return new MailError(error.message)
+    if (error instanceof OAuth2Error) return new MailError(redactCredentials(error.message))
     if (error instanceof MailError) return error
     return new MailError(OAUTH2_RELOGIN_MESSAGE + '（' + redactCredentials(messageOf(error, '未知错误')) + '）')
   }
@@ -667,16 +649,17 @@ export class EmailPool {
   private normalizeImapError(error: unknown, folder: string | null, authKind: AuthKind = 'password'): Error {
     const raw = messageOf(error, 'IMAP 操作失败')
     const lower = raw.toLowerCase()
+    const safe = redactCredentials(raw)
     if (lower.includes('authentication') || lower.includes('login')) {
       // An OAuth2 account has no 授权码 to check: the only fix is a new login.
       return new MailError(authKind === 'oauth2'
-        ? OAUTH2_RELOGIN_MESSAGE + '（' + raw + '）'
-        : '邮箱登录失败：' + raw + '（请检查 user 与授权码）')
+        ? OAUTH2_RELOGIN_MESSAGE + '（' + safe + '）'
+        : '邮箱登录失败：' + safe + '（请检查 user 与授权码）')
     }
     if (lower.includes('nonselect') || lower.includes('does not exist') || lower.includes('nonexistent')) {
-      return new MailError('找不到邮箱文件夹 "' + (folder ?? '') + '"：' + raw)
+      return new MailError('找不到邮箱文件夹 "' + (folder ?? '') + '"：' + safe)
     }
-    return new MailError(raw)
+    return new MailError(safe)
   }
 
   private async evictImap(name: string): Promise<void> {

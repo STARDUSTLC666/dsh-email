@@ -23,6 +23,7 @@ import { join } from 'node:path'
 import { clampInt, OUTLOOK_OAUTH2_CLIENT_ID, type ResolvedEmailConfig } from './config.js'
 import { isLegacyOAuth2Document, OAuth2StorageError, readOAuth2Document, writeOAuth2Document } from './oauth2-storage.js'
 import { GoogleOAuth } from './google-oauth.js'
+import { redactCredentials } from './credential-redaction.js'
 
 /** The authority that serves both endpoints. `common` accepts any work/school/personal tenant. */
 export const OAUTH2_TENANT = 'common'
@@ -207,7 +208,7 @@ export function classifyOAuthFailure(payload: unknown, httpStatus = 0): OAuthFai
   const mapped = mapAadstsMessage(aadsts)
   if (mapped !== undefined) return { ...base, message: mapped + '（AADSTS' + aadsts + '）' }
   const detail = description !== '' ? description : (code !== '' ? code : 'HTTP ' + httpStatus)
-  return { ...base, message: '登录失败：' + detail + (aadsts !== '' ? '（AADSTS' + aadsts + '）' : '') }
+  return { ...base, message: redactCredentials('登录失败：' + detail + (aadsts !== '' ? '（AADSTS' + aadsts + '）' : '')) }
 }
 
 // --- token store -------------------------------------------------------------
@@ -328,7 +329,7 @@ async function postForm(url: string, params: Record<string, string>): Promise<To
     })
   } catch (error) {
     const raw = error instanceof Error ? error.message : String(error)
-    throw new OAuth2Error('无法连接微软登录服务（login.microsoftonline.com）：' + raw)
+    throw new OAuth2Error('无法连接微软登录服务（login.microsoftonline.com）：' + redactCredentials(raw))
   }
   let payload: unknown
   try {

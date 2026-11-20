@@ -1,26 +1,13 @@
 import { ImapFlow } from 'imapflow';
 import { type FolderMutationSnapshot } from './imap-folders.js';
 import { type ResolvedEmailConfig, type ResolvedEmailSettings } from './config.js';
+export { redactCredentials } from './credential-redaction.js';
 import { type ReplyOptions } from './reply-locale.js';
 import type { AddressEntry, EmailAttachmentMeta, EmailAttachmentResult, EmailFoldersResult, EmailListResult, EmailMarkAction, EmailMarkResult, EmailReadResult, EmailReplyMode, EmailReplyResult, EmailSearchResult, EmailSearchOptions, EmailSendResult, ListedMessage } from './types.js';
 export declare class MailError extends Error {
     constructor(message: string);
 }
 export declare function messageOf(error: unknown, fallback: string): string;
-/**
- * Replace anything credential-shaped in a server's own error text before it
- * reaches a user.
- *
- * IMAP and SMTP servers routinely quote back the authentication string they
- * rejected. For XOAUTH2 that string is `user=…\x01auth=Bearer <token>\x01\x01`,
- * usually base64'd — so the raw message carries a live access token, and these
- * messages are rendered in the settings panel, returned by the mail tools, and
- * pasted into bug reports.
- *
- * Mask JWTs, long base64 authentication blobs and credential assignments.
- * Token replacements retain their length for diagnostics.
- */
-export declare function redactCredentials(text: string): string;
 /** The IMAP auth shape imapflow accepts: a password, or an OAuth2 access token. */
 export interface ImapAuth {
     user: string;
@@ -238,4 +225,3 @@ export declare class EmailPool {
 export declare function validateAttachmentPaths(paths: string[], maxBytes: number, signal?: AbortSignal): Promise<Array<{
     path: string;
 }>>;
-export {};

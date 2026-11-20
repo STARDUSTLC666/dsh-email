@@ -1,5 +1,11 @@
 # 更新记录
 
+## 0.30.4 (2026-11-20)
+
+- 修复 SMTP、IMAP 与微软 OAuth 错误诊断可能回显不透明 Bearer 令牌或 `access_token` / `refresh_token` / `client_secret` 字段的问题；统一脱敏出口，保留可操作错误信息及既有重试行为。
+- Redact opaque Bearer tokens and named OAuth credentials in mail diagnostics without changing send or retry behavior.
+- 同步共享更新组件 0.2.9，修复取消窗口和失败响应清理，并确保运行中旧协调器在空闲后接管修复。
+
 ## 0.30.3 (2026-11-20)
 
 - 升级共享更新组件至 `@stardustlc/dsh-updates@0.2.7`：对话页「有新版本」提醒浮卡支持无交互 15 秒自动收起（悬停、聚焦、查看记录或确认弹窗时自动暂停，安装成功提示 6 秒收起，安装中/失败/需要重启仍保持常驻不隐藏）。
