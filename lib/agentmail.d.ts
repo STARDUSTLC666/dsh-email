@@ -7,6 +7,8 @@ export declare class AgentMailClient {
     private settings;
     private fetcher;
     private downloader;
+    private watchQueues;
+    private watchGeneration;
     private watches;
     constructor(settings: ResolvedEmailSettings, fetcher?: typeof fetch, downloader?: typeof downloadPublicBytes);
     private account;
@@ -29,5 +31,6 @@ export declare class AgentMailClient {
     downloadAttachment(name: string, folder: string, uid: MessageRef, index: number, workspace?: string, signal?: AbortSignal, byteLimit?: number): Promise<EmailAttachmentResult>;
     sendPaths(name: string, to: string, subject: string, text: string, cc: string, paths: string[], signal?: AbortSignal, html?: string): Promise<EmailSendResult>;
     watch(name: string, folder: string, limit: number, scope: string, signal?: AbortSignal): Promise<EmailWatchResult>;
+    private poll;
     clear(): void;
 }

@@ -46,6 +46,8 @@ const listRow = (m: any): ListedMessage => ({
 
 /** API transport. Endpoint hosts are fixed; redirects never carry credentials elsewhere. */
 export class AgentMailClient {
+  private watchQueues = new Map<string, Promise<unknown>>()
+  private watchGeneration = 0
   private watches = new Map<
     string,
     {
@@ -517,8 +519,25 @@ export class AgentMailClient {
     signal?: AbortSignal,
   ): Promise<EmailWatchResult> {
     signal?.throwIfAborted()
-    const key = JSON.stringify([name, folder, scope]),
-      old = this.watches.get(key)
+    const key = JSON.stringify([name, folder, scope]), generation = this.watchGeneration
+    const task = (this.watchQueues.get(key) ?? Promise.resolve()).catch(() => {}).then(() => {
+      signal?.throwIfAborted()
+      if (generation !== this.watchGeneration) throw new Error('AgentMail 账号已改变或关闭，请重试')
+      return this.poll(name, folder, limit, key, generation, signal)
+    })
+    this.watchQueues.set(key, task)
+    const cleanup = () => { if (this.watchQueues.get(key) === task) this.watchQueues.delete(key) }
+    void task.then(cleanup, cleanup)
+    if (!signal) return task
+    return new Promise((resolve, reject) => {
+      const abort = () => reject(signal.reason)
+      signal.addEventListener('abort', abort, { once: true })
+      task.then(value => { signal.removeEventListener('abort', abort); resolve(value) }, error => { signal.removeEventListener('abort', abort); reject(error) })
+      if (signal.aborted) abort()
+    })
+  }
+  private async poll(name: string, folder: string, limit: number, key: string, generation: number, signal?: AbortSignal): Promise<EmailWatchResult> {
+    const old = this.watches.get(key)
     if (old?.pending.length) {
       const batch = old.pending.splice(0, limit)
       return {
@@ -572,6 +591,7 @@ export class AgentMailClient {
       tokens.add(token)
     }
     signal?.throwIfAborted()
+    if (generation !== this.watchGeneration) throw new Error('AgentMail 账号已改变或关闭，请重试')
     if (old && (old.anchor ? !ids.has(old.anchor) : !!token))
       throw new Error(
         'AgentMail 新邮件基线已超出窗口或被移除，请手动核对邮箱后重新启用提醒',
@@ -601,6 +621,8 @@ export class AgentMailClient {
     }
   }
   clear() {
+    this.watchGeneration++
     this.watches.clear()
+    this.watchQueues.clear()
   }
 }

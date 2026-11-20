@@ -240,6 +240,48 @@ test('new-mail polling drains a backlog without repeats; first call only establi
     25,
   )
 })
+
+test('concurrent API polling of one scope delivers each new message once', async () => {
+  const make = id => ({ message_id: id, subject: id, labels: ['received', 'unread'] })
+  let rows = [make('baseline')]
+  const api = new AgentMailClient(settings(), async () => { await new Promise(resolve => setImmediate(resolve)); return Response.json({ messages: rows }) })
+  await api.watch('default', 'INBOX', 1, 'web')
+  rows = [make('new-2'), make('new-1'), ...rows]
+  const results = await Promise.all([api.watch('default', 'INBOX', 1, 'web'), api.watch('default', 'INBOX', 1, 'web')])
+  assert.deepEqual(results.flatMap(result => result.messages.map(row => row.uid)).sort(), ['new-1', 'new-2'])
+  assert.equal((await api.watch('default', 'INBOX', 1, 'web')).newCount, 0)
+})
+
+test('clearing API polling state cannot let a late response restore a previous baseline', async () => {
+  let release, started
+  const gate = new Promise(resolve => { release = resolve }), pending = new Promise(resolve => { started = resolve })
+  const api = new AgentMailClient(settings(), async () => { started(); await gate; return Response.json({ messages: [{ message_id: 'before-clear', labels: ['received'] }] }) })
+  const stale = api.watch('default', 'INBOX', 10, 'web')
+  const rejected = assert.rejects(stale, /关闭|改变|重试|cleared|changed/i)
+  await pending; api.clear(); release(); await rejected
+  assert.equal((await api.watch('default', 'INBOX', 10, 'web')).firstRun, true)
+})
+test('cancelled queued polls preserve pending messages and other scopes stay independent', async () => {
+  const make = id => ({ message_id: id, subject: id, labels: ['received', 'unread'] })
+  let rows = [make('baseline')], blockNext = false, release, started
+  const gate = new Promise(resolve => { release = resolve }), pending = new Promise(resolve => { started = resolve })
+  const api = new AgentMailClient(settings(), async () => {
+    if (blockNext) { blockNext = false; started(); await gate }
+    return Response.json({ messages: rows })
+  })
+  await api.watch('default', 'INBOX', 1, 'web')
+  rows = [make('new-2'), make('new-1'), ...rows]; blockNext = true
+  const first = api.watch('default', 'INBOX', 1, 'web')
+  await pending
+  const controller = new AbortController()
+  const cancelled = api.watch('default', 'INBOX', 1, 'web', controller.signal)
+  const rejected = assert.rejects(cancelled, /cancel queued poll/)
+  controller.abort(new Error('cancel queued poll')); await rejected
+  assert.equal((await api.watch('default', 'INBOX', 1, 'tool')).firstRun, true)
+  const second = api.watch('default', 'INBOX', 1, 'web')
+  release()
+  assert.deepEqual((await Promise.all([first, second])).flatMap(result => result.messages.map(row => row.uid)).sort(), ['new-1', 'new-2'])
+})
 test('API polling follows opaque pages once and reports partial unread counts honestly', async (t) => {
   const peer = await createAgentMailPeer()
   t.after(() => peer.close())
