@@ -2,6 +2,7 @@ import Pop3Command from 'node-pop3'
 import type { Readable } from 'node:stream'
 import type { ConnectionOptions } from 'node:tls'
 import { isIP, type Socket } from 'node:net'
+import { mailCaCertificates } from './mail-tls.js'
 import type { ResolvedEmailConfig } from './config.js'
 
 export class Pop3WireError extends Error {}
@@ -63,7 +64,10 @@ export async function withPop3<T>(cfg: ResolvedEmailConfig, task: (wire: Pop3Wir
   if (/[\r\n\0]/.test(cfg.authUser + cfg.authPassword)) throw new Error('POP3 登录凭据不能包含换行')
   const cancel = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(options.timeoutMs ?? 120000)])
   cancel.throwIfAborted()
-  const tlsOptions = { ...options.tlsOptions, servername: isIP(endpoint.host) ? undefined : endpoint.host, rejectUnauthorized: true, minVersion: 'TLSv1.2' as const }
+  // Trust the OS store as well as Node's bundled roots (see mail-tls.ts); an
+  // explicit caller-supplied CA still wins.
+  const ca = options.tlsOptions?.ca ?? mailCaCertificates()
+  const tlsOptions = { ...options.tlsOptions, ...(ca !== undefined ? { ca } : {}), servername: isIP(endpoint.host) ? undefined : endpoint.host, rejectUnauthorized: true, minVersion: 'TLSv1.2' as const }
   const client = new BoundedPop3({ host: endpoint.host, port: endpoint.port, tls: endpoint.secure,
     timeout: Math.min(60000, Math.max(1000, endpoint.socketTimeoutMs ?? 15000)),
     user: cfg.authUser, password: cfg.authPassword, parseStreamToString: false,

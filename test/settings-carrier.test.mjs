@@ -4,7 +4,7 @@ import { Readable } from 'node:stream'
 import { EmailSettingsBackend, installEmailSettingsWeb, SETTINGS_API_ROUTE, WHALE_API_ROUTE } from '../lib/web.js'
 import { EmailSettingsSchema } from '../lib/settings.js'
 
-const host = '192.168.36.49:3080'
+const host = '10.0.0.10:3080'
 function fixture() {
   let value = EmailSettingsSchema({}), revision = 0, writes = 0
   const ctx = { settings: { writable: true, describe: () => [{ ns: 'dsh-email', revision, user: value }], async replace(_ns, next, expected) {

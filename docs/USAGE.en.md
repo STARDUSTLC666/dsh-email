@@ -145,6 +145,7 @@ When an intranet or self-hosted mail server is not among the built-in providers 
 
 - Then enter the IMAP incoming server (host, port, SSL/TLS) and the SMTP outgoing server (host, port, SSL/TLS) directly on the card.
 - Leave the outgoing host blank to reuse the incoming host; leave a port blank to use 993 (IMAP) / 465 (SMTP).
+- Enter the plain server host (e.g. `mail.corp.example`). A pasted provider URL such as `https://mail.corp.example/imap` or `host:993` is reduced to its hostname automatically. Certificates issued by a corporate private CA are validated against the operating system's trust store, so importing the root into Node is usually unnecessary.
 - The account still only needs the email address and authorization code / app password; fill them in and click that card's **Test connection** to verify.
 - In `accountsYaml`, such accounts omit `provider` and carry the endpoints in the account's `imap` / `smtp` sections; when the incoming protocol is POP3, the endpoints live in the `pop3` / `smtp` sections instead (the outgoing server may stay blank for receiving only):
 

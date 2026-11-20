@@ -176,7 +176,7 @@ test('the reserved custom-server name cannot be used as a preset name', () => {
 // ---------------------------------------------------------------------------
 // Host settings backend: account cards -> accountsYaml round trip.
 // ---------------------------------------------------------------------------
-const host = '192.168.36.49:3080'
+const host = '10.0.0.10:3080'
 function fixture(accountsYaml = '') {
   let value = EmailSettingsSchema({ accountsYaml })
   const writes = []
@@ -219,6 +219,19 @@ test('a custom-server card writes its endpoints into the account and no provider
   assert.equal(resolved.imap.port, 1993)
   assert.equal(resolved.smtp.host, 'smtp.corp.example')
   assert.equal(resolved.authKind, 'password')
+})
+
+test('a pasted URL host is saved as the bare hostname, never as a URL', async () => {
+  const { backend } = fixture()
+  const yaml = await serialize(backend, [{
+    name: 'corp', user: 'me@corp.example', password: 'fixture-only',
+    receiveProtocol: 'imap',
+    imap: { host: 'https://imap.corp.example/imap', port: 993, secure: true },
+    smtp: { host: 'https://smtp.corp.example:465', port: 465, secure: true },
+  }])
+  const account = parseAccountsYaml(yaml).map.corp
+  assert.deepEqual(account.imap, { host: 'imap.corp.example', port: 993, secure: true })
+  assert.deepEqual(account.smtp, { host: 'smtp.corp.example', port: 465, secure: true })
 })
 
 test('a provider-backed card never freezes the snapshot endpoints into YAML', async () => {

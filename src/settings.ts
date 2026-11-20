@@ -1,5 +1,5 @@
 import z from 'schemastery'
-import { ENDPOINT_DEFAULTS, MAX_ATTACHMENT_BYTES, MIN_ATTACHMENT_BYTES, normalizeAttachmentLimit, normalizeSettingsEndpoint, PROVIDER_NAMES, type EmailConfig } from './config.js'
+import { ENDPOINT_DEFAULTS, MAX_ATTACHMENT_BYTES, mailHostProblem, MIN_ATTACHMENT_BYTES, normalizeAttachmentLimit, normalizeSettingsEndpoint, PROVIDER_NAMES, splitMailHost, type EmailConfig } from './config.js'
 import { parseRecipientPolicies } from './recipient-policy.js'
 import { normalizeMailConsumers } from './mail-consumers.js'
 
@@ -291,6 +291,19 @@ export function validateSettingsValue(value: EmailSettingsValue, extraProviders:
   const smtpPort = endpointPort(draft.smtp)
   if (portOutOfRange(smtpPort)) {
     throw new Error('SMTP 端口必须在 1-65535 之间，收到 ' + describeValue(smtpPort))
+  }
+  // A host field may carry a pasted URL (resolution strips the wrapper), but a
+  // genuinely unusable value must fail here with the field's name instead of a
+  // DNS error at connection time.
+  for (const [label, endpoint] of [['IMAP', draft.imap], ['SMTP', draft.smtp], ['POP3', draft.pop3]] as const) {
+    if (endpoint === undefined || endpoint === null) continue
+    const rawHost = (endpoint as { host?: unknown }).host
+    if (rawHost === undefined) continue
+    if (typeof rawHost !== 'string') throw new Error(label + ' 主机地址无效')
+    const { host } = splitMailHost(rawHost)
+    if (host === '') continue
+    const problem = mailHostProblem(host)
+    if (problem !== undefined) throw new Error(label + ' 主机地址无效（' + problem + '）；只填服务器地址，例如 mail.example.com')
   }
   if (isSet(draft.maxBodyChars) && (draft.maxBodyChars < 1000 || draft.maxBodyChars > 200000)) {
     throw new Error('正文截断上限必须在 1000-200000 之间，收到 ' + describeValue(draft.maxBodyChars))

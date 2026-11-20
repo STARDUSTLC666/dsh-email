@@ -145,6 +145,7 @@ dsh plugin --profile web remove dsh-email
 
 - 选中后直接在卡片里填 IMAP 收信服务器（主机、端口、SSL/TLS）和 SMTP 发信服务器（主机、端口、SSL/TLS）。
 - 发信服务器主机留空时沿用收信服务器主机；端口留空分别按 993（IMAP）/ 465（SMTP）处理。
+- 主机只填服务器地址（如 `mail.corp.example`）。即使粘贴的是服务商文档里的 `https://mail.corp.example/imap` 或带 `:993` 的地址，也会自动去掉协议、路径与内嵌端口再连接。企业私有 CA 签发的证书按操作系统信任库校验，通常无需再把根证书导入 Node。
 - 账号仍然只需要「邮箱地址 + 授权码 / 应用密码」，填好后点该卡片的「测试连接」验证。
 - 这类账号在 `accountsYaml` 里不写 `provider`，端点直接写在账号的 `imap` / `smtp` 段；如果收信协议选的是 POP3，端点写在 `pop3` / `smtp` 段（发信服务器可以留空，只收信也能用）：
 
