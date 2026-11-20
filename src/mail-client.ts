@@ -370,6 +370,16 @@ function toIso(date: Date | null | undefined): string {
   return date instanceof Date ? date.toISOString() : ''
 }
 
+/**
+ * \Seen out of a FETCH response, or undefined when the server (or a test double)
+ * did not report flags: unknown is not the same as unread.
+ */
+function seenFlag(flags: unknown): boolean | undefined {
+  if (flags instanceof Set) return flags.has('\\Seen')
+  if (Array.isArray(flags)) return flags.includes('\\Seen')
+  return undefined
+}
+
 function listedFrom(envelope: any, size: number | undefined, hasAttachments: boolean): ListedMessage {
   return {
     uid: envelope.uid as number,
@@ -1129,18 +1139,20 @@ export class EmailPool {
         .sort((a, b) => Number(b.uid) - Number(a.uid))
   }
 
-  async read(accountName: string | undefined, uid: number, folder: string, signal?: AbortSignal): Promise<EmailReadResult> {
+  async read(accountName: string | undefined, uid: number, folder: string, signal?: AbortSignal, options: { markRead?: boolean } = {}): Promise<EmailReadResult> {
     const name = this.resolveName(accountName)
     const cfg = this.account(name)
     const folderName = folder || cfg.inboxFolder
-    return this.withImap(name, folderName, async (client) => {
+    const result = await this.withImap(name, folderName, async (client) => {
       // 先只要信封与 MIME 结构，正文按 text/* 分段下载：带 20 MiB 附件的邮件
       // 只为看正文时不再整封拉下来，附件元数据直接复用 bodyStructure。
-      const message = await client.fetchOne(uid, { uid: true, envelope: true, bodyStructure: true }, { uid: true })
+      // flags 顺带取回：判断「打开即已读」是否需要一次 STORE，不用第二条命令。
+      const message = await client.fetchOne(uid, { uid: true, envelope: true, bodyStructure: true, flags: true }, { uid: true })
       if (message === false || message === undefined) {
         throw new MailError('找不到 uid=' + uid + ' 的邮件（可能已被删除，或不在文件夹 "' + folderName + '"；可用 email_list 重新获取 uid）')
       }
       signal?.throwIfAborted()
+      const seen = seenFlag(message.flags)
       if (message.source === undefined && message.envelope !== undefined && message.bodyStructure !== undefined) {
         try {
           let rawHtml: string | undefined
@@ -1177,6 +1189,7 @@ export class EmailPool {
               ...(rich ? { rich } : {}),
               attachments,
               truncated: limited.truncated,
+              ...(seen === undefined ? {} : { seen }),
             }
           }
         } catch (error) {
@@ -1193,8 +1206,36 @@ export class EmailPool {
       const body = await parseRawMessage(full.source, this.settings.maxBodyChars)
       signal?.throwIfAborted()
       this.rememberRead(name, folderName, this.uidValidityOf(client), uid, { attachments: body.attachments, parts: collectAttachmentParts(full.bodyStructure) })
-      return { account: name, uid, folder: folderName, uidValidity: this.uidValidityOf(client), ...body }
+      return { account: name, uid, folder: folderName, uidValidity: this.uidValidityOf(client), ...body, ...(seen === undefined ? {} : { seen }) }
     }, true, signal)
+    return this.afterOpen(name, folderName, uid, result, options.markRead === true, signal)
+  }
+
+  /**
+   * 打开邮件即标记已读（普通邮件客户端的行为），可用 markReadOnOpen=false 关闭。
+   *
+   * 读正文本身仍然走只读打开的邮箱与 BODY.PEEK[]，所以这是唯一一次 STORE；它是
+   * 尽力而为的：共享/只读邮箱拒绝写入、或邮件在两次命令之间被删除，都不能让已经
+   * 读到的正文变成一次失败。
+   */
+  private async afterOpen(
+    name: string,
+    folder: string,
+    uid: number,
+    result: EmailReadResult,
+    markRead: boolean,
+    signal?: AbortSignal,
+  ): Promise<EmailReadResult> {
+    if (!markRead || result.seen === true) return result
+    try {
+      await this.withImap(name, folder, client => client.messageFlagsAdd(uid, ['\\Seen'], { uid: true }), false, signal)
+      signal?.throwIfAborted()
+      result.seen = true
+      result.markedRead = true
+    } catch (error) {
+      signal?.throwIfAborted()
+    }
+    return result
   }
 
   async previewTrash(accountName: string | undefined, folder: string, uids: number[], target?: string, signal?: AbortSignal) {

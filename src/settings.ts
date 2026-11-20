@@ -31,6 +31,7 @@ export const EmailSettingsSchema: z = z.object({
   uiLocale: z.union(['auto', 'zh', 'en']).default('auto'),
   replyTimeZone: z.string().default(''),
   newMailPopup: z.boolean().default(true),
+  markReadOnOpen: z.boolean().default(true),
   trustedRecipientsYaml: z.string().default(''),
   maxBodyChars: z.number().default(20000),
   maxAttachmentBytes: z.number(),
@@ -74,6 +75,7 @@ export interface EmailSettingsValue {
   uiLocale?: UiLocale
   replyTimeZone?: string
   newMailPopup?: boolean
+  markReadOnOpen?: boolean
   trustedRecipientsYaml?: string
   maxBodyChars: number
   maxAttachmentBytes?: number
@@ -102,6 +104,7 @@ export function toSettingsBase(config: EmailConfig): Partial<EmailSettingsValue>
     ...(config.uiLocale !== undefined ? { uiLocale: config.uiLocale } : {}),
     ...(config.replyTimeZone !== undefined ? { replyTimeZone: config.replyTimeZone } : {}),
     ...(config.newMailPopup !== undefined ? { newMailPopup: config.newMailPopup } : {}),
+    ...(config.markReadOnOpen !== undefined ? { markReadOnOpen: config.markReadOnOpen } : {}),
     ...(config.trustedRecipientsYaml !== undefined ? { trustedRecipientsYaml: config.trustedRecipientsYaml } : {}),
     ...(config.maxBodyChars !== undefined ? { maxBodyChars: config.maxBodyChars } : {}),
     ...(config.maxAttachmentBytes !== undefined ? { maxAttachmentBytes: normalizeAttachmentLimit(config.maxAttachmentBytes) } : {}),
@@ -193,6 +196,7 @@ export function toEmailConfig(value: EmailSettingsValue, user?: Partial<EmailSet
   if (has('replyLocale')) set('replyLocale', draft.replyLocale)
   // uiLocale is global UI state; do not project it into a resolved mail account.
   if (has('replyTimeZone')) set('replyTimeZone', draft.replyTimeZone)
+  if (has('markReadOnOpen')) set('markReadOnOpen', draft.markReadOnOpen)
   if (has('trustedRecipientsYaml')) set('trustedRecipientsYaml', draft.trustedRecipientsYaml)
   if (has('maxBodyChars')) set('maxBodyChars', draft.maxBodyChars)
   if (has('maxAttachmentBytes')) set('maxAttachmentBytes', draft.maxAttachmentBytes)
@@ -270,6 +274,9 @@ export function validateSettingsValue(value: EmailSettingsValue, extraProviders:
   if (portOutOfRange(endpointPort(draft.pop3))) throw new Error('POP3 端口必须在 1-65535 之间')
   if (draft.newMailPopup !== undefined && typeof draft.newMailPopup !== 'boolean') {
     throw new Error('新邮件弹窗开关必须为布尔值')
+  }
+  if (draft.markReadOnOpen !== undefined && typeof draft.markReadOnOpen !== 'boolean') {
+    throw new Error('打开邮件标记已读开关必须为布尔值')
   }
   if (draft.trustedRecipientsYaml !== undefined) {
     if (typeof draft.trustedRecipientsYaml !== 'string') throw new Error('可信收件人规则必须为文本')

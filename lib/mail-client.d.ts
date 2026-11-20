@@ -191,7 +191,17 @@ export declare class EmailPool {
     /** Client-side scan of the tail of the mailbox, newest first. */
     private searchBodies;
     private fetchListed;
-    read(accountName: string | undefined, uid: number, folder: string, signal?: AbortSignal): Promise<EmailReadResult>;
+    read(accountName: string | undefined, uid: number, folder: string, signal?: AbortSignal, options?: {
+        markRead?: boolean;
+    }): Promise<EmailReadResult>;
+    /**
+     * 打开邮件即标记已读（普通邮件客户端的行为），可用 markReadOnOpen=false 关闭。
+     *
+     * 读正文本身仍然走只读打开的邮箱与 BODY.PEEK[]，所以这是唯一一次 STORE；它是
+     * 尽力而为的：共享/只读邮箱拒绝写入、或邮件在两次命令之间被删除，都不能让已经
+     * 读到的正文变成一次失败。
+     */
+    private afterOpen;
     previewTrash(accountName: string | undefined, folder: string, uids: number[], target?: string, signal?: AbortSignal): Promise<import("./types.js").EmailMovePreview>;
     moveMessages(accountName: string | undefined, folder: string, uids: number[], target: string, uidValidity: number, signal?: AbortSignal): Promise<import("./types.js").EmailMoveResult>;
     mark(accountName: string | undefined, folder: string, uid: number, action: EmailMarkAction, toFolder?: string, signal?: AbortSignal): Promise<EmailMarkResult>;

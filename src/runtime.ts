@@ -125,7 +125,12 @@ export function createEmailRuntime(
     }
     // Rules change without disrupting an IMAP connection or watch cursor. The
     // pool reads this shared settings object at its SMTP submission boundary.
-    if (poolSettings) poolSettings.recipientPolicies = effective.recipientPolicies
+    if (poolSettings) {
+      poolSettings.recipientPolicies = effective.recipientPolicies
+      // Read-on-open is a per-read policy, so flipping the switch must not tear
+      // down live connections: hand the new value to the pool in place.
+      poolSettings.markReadOnOpen = effective.markReadOnOpen
+    }
     return pool
   }
 

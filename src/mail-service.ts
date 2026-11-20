@@ -119,7 +119,10 @@ export class EmailService {
     return { ...options, locale: options.locale || configured || this.locale() || 'zh', timeZone: options.timeZone || cfg.replyTimeZone || undefined }
   }
   async prepareReply(account: string | undefined, folder: string, uid: MessageRef, mode: EmailReplyMode, text: string, to: string, cc?: string, signal?: AbortSignal, options: ReplyOptions = {}) {
-    const name = this.name(account), cfg = this.settings.accounts.get(name)!, original = await this.read(name, uid, folder, signal)
+    // 组一封回复草稿不是「用户打开了邮件」：审批预览（approval）会在用户按下
+    // 同意之前就先准备这一封，用户还能拒绝；拒绝后原邮件仍是未读。所以这里必须
+    // 显式 markRead:false，否则未读数、email_watch 与弹窗都会先被清掉。
+    const name = this.name(account), cfg = this.settings.accounts.get(name)!, original = await this.read(name, uid, folder, signal, { markRead: false })
     const built = buildReplyMessage({ ...original, messageId: '', references: '' }, mode, [cfg.user, cfg.authUser], text, to, this.replyOptions(name, options))
     return { ...built, account: name, cc: replyCc(built, cc), reply: { uid, folder: original.folder, ...(original.uidValidity ? { uidValidity: original.uidValidity } : {}), mode } }
   }
@@ -161,7 +164,13 @@ export class EmailService {
     uid: MessageRef,
     folder: string,
     signal?: AbortSignal,
+    options: { markRead?: boolean } = {},
   ) {
+    // 打开即已读默认开启（普通客户端行为）；POP3 没有服务器标志位，客户端的
+    // read 也不接受这个选项，所以只在 IMAP/AgentMail 分支传递。
+    // 后台自动任务（mail-tasks）显式传 markRead:false：它们只是处理邮件，
+    // 不能替用户把未读清掉。
+    const markRead = options.markRead ?? this.settings.markReadOnOpen !== false
     if (this.usesPop3(account)) return this.pop3.read(this.name(account), uid, this.folder(account, folder), signal)
     return this.usesApi(account)
       ? this.api.read(
@@ -169,8 +178,9 @@ export class EmailService {
           uid,
           this.folder(account, folder),
           signal,
+          { markRead },
         )
-      : this.imap.read(account, this.number(uid), folder, signal)
+      : this.imap.read(account, this.number(uid), folder, signal, { markRead })
   }
   search(
     account: string | undefined,

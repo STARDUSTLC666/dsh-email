@@ -289,6 +289,7 @@ export class AgentMailClient {
     uid: MessageRef,
     folder: string,
     signal?: AbortSignal,
+    options: { markRead?: boolean } = {},
   ): Promise<EmailReadResult> {
     const m = await this.original(name, uid, signal),
       rich = richEmailBody(m.html),
@@ -296,7 +297,8 @@ export class AgentMailClient {
         m.text ?? m.extracted_text ?? stripHtml(m.html ?? ''),
         this.settings.maxBodyChars,
       )
-    return {
+    const seen = !labels(m).includes('unread')
+    const result: EmailReadResult = {
       account: name,
       uid: this.id(uid),
       folder,
@@ -308,6 +310,7 @@ export class AgentMailClient {
       subject: m.subject ?? '',
       text: body.text,
       truncated: body.truncated,
+      seen,
       attachments: (m.attachments ?? []).map((a: any) => ({
         filename: a.filename ?? 'attachment',
         contentType: a.content_type ?? 'application/octet-stream',
@@ -315,6 +318,19 @@ export class AgentMailClient {
         part: String(a.attachment_id),
       })),
     }
+    // 打开即已读：普通客户端的行为，可用 markReadOnOpen=false 关闭。失败不能让
+    // 已经拿到的正文变成错误——这只是一次状态同步。
+    if (options.markRead === true && !seen) {
+      try {
+        await this.mark(name, folder, uid, 'read', undefined, signal)
+        signal?.throwIfAborted()
+        result.seen = true
+        result.markedRead = true
+      } catch (error) {
+        signal?.throwIfAborted()
+      }
+    }
+    return result
   }
   async mark(
     name: string,

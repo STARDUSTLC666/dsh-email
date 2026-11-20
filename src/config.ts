@@ -209,6 +209,12 @@ export interface EmailConfig extends AccountConfig {
   uiLocale?: 'auto' | 'zh' | 'en'
   /** Show browser new-mail notifications. UI policy only; default true. */
   newMailPopup?: boolean
+  /**
+   * Mark a message as read once it has been opened (email_read or the mailbox
+   * reader). Default true: every ordinary mail client does this. POP3 cannot
+   * store flags, so it is ignored there.
+   */
+  markReadOnOpen?: boolean
   /** Per-account recipient rules, independent of IMAP/SMTP connection settings. */
   trustedRecipientsYaml?: string
   /** Ask the user for approval before email_send. Default true. */
@@ -355,6 +361,7 @@ export interface ResolvedEmailSettings {
   accounts: Map<string, ResolvedEmailConfig>
   defaultAccount: string
   sendApproval: boolean
+  markReadOnOpen: boolean
   maxBodyChars: number
   downloadDir: string
   /** Whether downloadDir was set explicitly (vs. the default). */
@@ -603,6 +610,7 @@ export function resolveEmailSettings(config: EmailConfig | undefined, onlyAccoun
     recipientPolicies: parseRecipientPolicies(raw.trustedRecipientsYaml),
     defaultAccount: defaultName,
     sendApproval: raw.sendApproval !== false,
+    markReadOnOpen: raw.markReadOnOpen !== false,
     maxBodyChars: clampInt(raw.maxBodyChars, 20000, 1000, 200000),
     downloadDir: raw.downloadDir?.trim() || defaultDownloadDir(),
     downloadDirExplicit: (raw.downloadDir?.trim() ?? '') !== '',

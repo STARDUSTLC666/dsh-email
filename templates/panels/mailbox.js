@@ -593,7 +593,19 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
     const ctrl = new AbortController();
     setReading(true);
     mailboxApi("read", { account, folder, uid: selected }, ctrl.signal)
-      .then(value => { if (!ctrl.signal.aborted) setDetail(value); })
+      .then(value => {
+        if (ctrl.signal.aborted) return;
+        setDetail(value);
+        // 打开即已读：后端确实改了服务器状态才把这一行的未读点点掉，否则列表会
+        // 一直说这封还没读，而邮箱里已经读过了。
+        if (value && value.markedRead === true) {
+          const uid = selected;
+          setResult(old => old && {
+            ...old,
+            messages: old.messages.map(row => row.uid === uid ? { ...row, seen: true } : row),
+          });
+        }
+      })
       .catch(error => { if (!ctrl.signal.aborted) setReadError(emailError(error)); })
       .finally(() => { if (!ctrl.signal.aborted) setReading(false); });
     return () => ctrl.abort();
