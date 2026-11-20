@@ -93,6 +93,10 @@ export interface EmailReadResult extends ReadMessageBody {
   uid: number | string
   folder: string
   uidValidity?: number
+  /** Server-side \Seen (IMAP) / label (AgentMail) state seen while reading; undefined when unknown (POP3). */
+  seen?: boolean
+  /** True when this read set the message to seen, i.e. the open changed server state. */
+  markedRead?: boolean
 }
 
 export interface EmailSearchOptions {

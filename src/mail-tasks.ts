@@ -253,7 +253,7 @@ export class MailTaskBackend {
             const latest = await this.store.read();
             if (!latest.config.enabled || row.policy !== this.connection(latest.config).policy)
                 throw new Error('Configuration changed');
-            const pool = this.runtime.getPool(), original = await pool.read(row.account, row.uid, row.folder, signal);
+            const pool = this.runtime.getPool(), original = await pool.read(row.account, row.uid, row.folder, signal, { markRead: false });
             if (row.uidValidity && row.uidValidity !== original.uidValidity || original.from.length !== 1 || canonicalAddress(original.from[0].address || '').toLowerCase() !== row.sender)
                 throw new Error('Original mail changed');
             await assertRecipientsAllowed(row.sender, '', parseRecipientPolicies(this.runtime.getSettingsValue().trustedRecipientsYaml).get(row.account));
@@ -315,7 +315,7 @@ export class MailTaskBackend {
                     const key = digest([binding, page.uidValidity, item.uid]);
                     if (doc.records.some(r => r.mailKey === key))
                         continue;
-                    const mail = await pool.read(c.account, item.uid, c.folder, activeSignal);
+                    const mail = await pool.read(c.account, item.uid, c.folder, activeSignal, { markRead: false });
                     if (page.uidValidity && mail.uidValidity !== page.uidValidity)
                         throw new Error('Mailbox changed during task scan');
                     await this.dispatch(c, mail, key, activeSignal);

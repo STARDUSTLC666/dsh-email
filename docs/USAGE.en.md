@@ -21,7 +21,7 @@ See the [draft workbench](DRAFTS.en.md) for editable drafts and per-account trus
 | Tool | Purpose |
 |---|---|
 | `email_list` | List the newest mail in a folder (unread filter, pagination, summaries only, no body) |
-| `email_read` | Read one message's full text by uid (HTML auto-converted to plain text, oversized bodies truncated) |
+| `email_read` | Read one message's full text by uid (HTML auto-converted to plain text, oversized bodies truncated); the open marks it read per `markReadOnOpen` |
 | `email_search` | Search subject/sender/recipient/CC by keyword, verify server candidates and fall back to a batched header scan (default 5000 messages). Returns coverage and an older-window cursor; optional body search remains limited to recent messages. |
 | `email_send` | Send mail on your behalf (attachments supported). **Prompts for confirmation before sending by default**, showing recipients, subject and attachment count; only sends after you approve |
 | `email_draft` | Prepare a local draft without sending; edit, save, inspect the preview and manually confirm in Settings → Email → Drafts |
@@ -184,6 +184,7 @@ The existing **Server presets (custom providers, advanced)** feature is unchange
 | `smtp.host/port/secure` | per preset | Outgoing server; with no preset enter it directly; in the settings page a blank host reuses the incoming host |
 | `inboxFolder` | `INBOX` | Default folder for read/send tools |
 | `sendApproval` | `true` | Confirm before sending (strongly recommended) |
+| `markReadOnOpen` | `true` | Write the read state when a message is opened (web reader or `email_read`); POP3 accounts have no such state and are unaffected |
 | `maxBodyChars` | `20000` | Body truncation limit for `email_read` (1000–200000) |
 | `accounts` | — | Named account map; account-level fields override top-level shorthand |
 | `accountsYaml` | — | YAML text of the account map, written by the settings-page card editor; overrides `accounts` when non-empty |

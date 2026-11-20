@@ -60,7 +60,9 @@ export declare class EmailService {
         references?: string;
     }>;
     list(account: string | undefined, folder: string, limit: number, offset: number, unread: boolean, since?: Date, until?: Date, signal?: AbortSignal): Promise<import("./types.js").EmailListResult>;
-    read(account: string | undefined, uid: MessageRef, folder: string, signal?: AbortSignal): Promise<import("./types.js").EmailReadResult>;
+    read(account: string | undefined, uid: MessageRef, folder: string, signal?: AbortSignal, options?: {
+        markRead?: boolean;
+    }): Promise<import("./types.js").EmailReadResult>;
     search(account: string | undefined, query: string, folder: string, limit: number, offset: number, since?: Date, until?: Date, signal?: AbortSignal, options?: EmailSearchOptions): Promise<import("./types.js").EmailSearchResult>;
     mark(account: string | undefined, folder: string, uid: MessageRef, action: EmailMarkAction, target?: string, signal?: AbortSignal): Promise<import("./types.js").EmailMarkResult>;
     folders(account: string | undefined, subscribed: boolean, signal?: AbortSignal): Promise<EmailFoldersResult>;

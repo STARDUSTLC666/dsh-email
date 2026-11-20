@@ -21,6 +21,7 @@ export const Config: z = z.object({
   allowTrustedReply: z.boolean().volatile(),
   replyLocale: z.string().volatile(), uiLocale: z.union(['auto', 'zh', 'en']).volatile(), replyTimeZone: z.string().volatile(),
   newMailPopup: z.boolean().volatile(),
+  markReadOnOpen: z.boolean().volatile(),
   maxBodyChars: z.number().volatile(), downloadDir: z.string().volatile(),
   accounts: z.dict(z.any()).role('secret').volatile(), defaultAccount: z.string().volatile(),
   accountsYaml: z.string().role('secret').volatile(), serverPresets: z.string().volatile(),

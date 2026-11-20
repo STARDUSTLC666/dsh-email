@@ -19,7 +19,9 @@ export declare class AgentMailClient {
     search(name: string, query: string, folder: string, limit: number, offset: number, since?: Date, until?: Date, signal?: AbortSignal): Promise<EmailSearchResult>;
     private id;
     private original;
-    read(name: string, uid: MessageRef, folder: string, signal?: AbortSignal): Promise<EmailReadResult>;
+    read(name: string, uid: MessageRef, folder: string, signal?: AbortSignal, options?: {
+        markRead?: boolean;
+    }): Promise<EmailReadResult>;
     mark(name: string, folder: string, uid: MessageRef, action: EmailMarkAction, target?: string, signal?: AbortSignal): Promise<EmailMarkResult>;
     send(name: string, to: string, subject: string, text: string, cc: string, attachments: Array<{
         filename: string;

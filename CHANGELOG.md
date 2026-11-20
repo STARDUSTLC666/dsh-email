@@ -1,5 +1,10 @@
 # 更新记录
 
+## 未发布 / Unreleased
+
+- **修复打开邮件不标记已读**：网页读信和 `email_read` 过去在只读会话里取正文（IMAP `EXAMINE` + `BODY.PEEK[]`），从不写 `\Seen`，读完的邮件在服务器上仍是未读。现在正文解析成功后按新设置 `markReadOnOpen`（默认开启，设置页「打开邮件后标记为已读」）补一次 `STORE \Seen`，AgentMail 账号摘掉 `unread` 标签；写状态失败只记为该次未改动，不会让已经读到的正文变成错误。POP3 没有服务器已读标志，行为不变。工作台的未读圆点随打开即时消失，`email_read` 的输出会说明这次是否真的改了状态。
+- **Fix messages staying unread after they are opened**: the web reader and `email_read` fetched bodies on a read-only session (`EXAMINE` + `BODY.PEEK[]`) and never wrote `\Seen`, so an opened message stayed unread on the server. After the body is parsed they now issue one `STORE \Seen` (AgentMail drops the `unread` label) according to the new `markReadOnOpen` setting (on by default, exposed as「Mark messages as read when opened」). A refused write is reported as an unchanged message and never turns a successful read into an error; POP3 has no server read state and keeps its old behaviour. The workbench clears the unread dot immediately and `email_read` says whether the open actually changed the state.
+
 ## 0.30.6 (2026-11-20)
 
 - 关闭绕过宿主会话认证的旧设置与鲸鱼图片 HTTP 入口；设置、邮件、草稿和图片继续使用官方 connection.fetch 认证通道。

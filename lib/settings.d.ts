@@ -28,6 +28,7 @@ export interface EmailSettingsValue {
     uiLocale?: UiLocale;
     replyTimeZone?: string;
     newMailPopup?: boolean;
+    markReadOnOpen?: boolean;
     trustedRecipientsYaml?: string;
     maxBodyChars: number;
     maxAttachmentBytes?: number;

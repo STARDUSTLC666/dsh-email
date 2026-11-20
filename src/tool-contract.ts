@@ -237,7 +237,13 @@ export function renderRead(value: EmailReadResult): TextBlock[] {
   const attach = value.attachments.length > 0
     ? '\n附件：' + value.attachments.map((a, i) => '#' + i + ' ' + a.filename + '（' + a.contentType + '，' + a.size + ' 字节）').join('；') + '\n（用 email_attachment 配合 uid 与序号下载）'
     : ''
-  return oneText('账号 ' + value.account + '，主题：' + (value.subject || '(无主题)') + '\n来自：' + from + '\n时间：' + (value.date || '(未知)') + attach + '\n\n' + value.text)
+  // 打开邮件会按设置写回已读状态：把这次是否真的改了状态说清楚，模型才不会在
+  // 「刚读过的邮件还算不算未读」上瞎猜。POP3 没有标志位，显示状态未知。
+  const state = value.markedRead === true ? '打开后已标记为已读'
+    : value.seen === true ? '已读'
+      : value.seen === false ? '未读'
+        : '状态未知（POP3 不提供服务器已读标志）'
+  return oneText('账号 ' + value.account + '，主题：' + (value.subject || '(无主题)') + '\n来自：' + from + '\n时间：' + (value.date || '(未知)') + '\n状态：' + state + attach + '\n\n' + value.text)
 }
 
 export function renderSearch(value: EmailSearchResult): TextBlock[] {
@@ -380,7 +386,7 @@ export const watchSchema = {
 
 export const descriptions = {
   "email_list": 'IMAP uid is a positive integer; AgentMail uid is an opaque string message_id. AgentMail returns page counts: inspect hasMore/countExact instead of assuming mailbox totals. List recent emails in a mailbox folder (newest first). Returns uid, date, sender, subject and flags without message bodies; use email_read with a uid to fetch the full text. Optional since/until (dates like 2026-08-01) filter by received date.',
-  "email_read": 'Read one full email message by its uid (from email_list or email_search). Returns the plain-text body (HTML mail is converted; oversized bodies are truncated) plus attachment metadata; use email_attachment to download one.',
+  "email_read": 'Read one full email message by its uid (from email_list or email_search). Returns the plain-text body (HTML mail is converted; oversized bodies are truncated) plus attachment metadata; use email_attachment to download one. Opening a message also marks it read on the server, as ordinary mail clients do, unless the plugin setting markReadOnOpen is off; POP3 accounts cannot store flags and stay unchanged.',
   "email_mark": 'AgentMail supports flags and only INBOX-to-Archive label archiving; arbitrary IMAP moves are not supported there. Change an existing message: mark it read/unread, star/unstar it, or move it to another folder. Use after email_list/email_search when the user wants to tidy the mailbox (archive, clear unread, flag important mail). Moving uses the server MOVE/COPY so the uid changes; the new uid is reported when the server provides it.',
   "email_search": 'AgentMail accounts use API relevance search (searchSource=api), exclude spam/trash/blocked/unauthenticated mail, and page with offset; headerScanOffset and IMAP fallbacks do not apply. For IMAP: Search sender, recipients and subject; verify server candidates against envelopes and arrival dates. In server results count is the number of candidates, not verified matches. hasMore is true when there is a verified match beyond this page, false when candidates are exhausted, and omitted when verification stopped at its limit. If server SEARCH is empty, fails, or has no confirmed matches, scan local headers in batches without downloading bodies/attachments (default newest 5000, max 20000). headerScanOffset/Limit select an older header window; use headerScan.nextScanOffset to continue. offset pages MATCHES within that window. If no headers match and headerScanOffset=0, optional body fallback scans only bodySearchLimit recent arrivals. Inspect searchSource/headerScan/bodyScan: partial or zero results never prove the whole mailbox has no match. Results use descending mailbox UID arrival order, not Date-header or INTERNALDATE sorting. since/until filter INTERNALDATE (Date header only if unavailable).',
   "email_send": 'AgentMail has a plugin limit of 10 attachments / 4 MiB total and uses its inbox API; a receipt means submission, not delivery. Send an email from a configured account, optionally with file attachments (absolute paths, or relative to the current session workspace; process cwd is the fallback without a session). Saved blocked-address/domain rules reject To/Cc recipients even when sendApproval is off. Plugin confirmation is required by default, unless sendApproval is disabled or every To/Cc recipient matches saved trust rules with skipApproval enabled. Host permissions still apply. Full Access refuses a send that still requires plugin confirmation; use email_draft for human review and explicit sending. Never invent recipients or content without the user\'s instruction.',
