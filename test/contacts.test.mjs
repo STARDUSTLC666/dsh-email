@@ -19,6 +19,16 @@ async function tempHome(t) {
   return root
 }
 
+async function storedContactRows(store) {
+  const { DatabaseSync } = await import('node:sqlite')
+  const db = new DatabaseSync(join(store.root, 'contacts-v2.sqlite3'), { readOnly: true })
+  try {
+    return db.prepare('SELECT * FROM contact ORDER BY id').all()
+  } finally {
+    db.close()
+  }
+}
+
 test('the address book stores curated contacts, sanitizes input and dedupes by address', async (t) => {
   const store = new ContactsStore(await tempHome(t))
   assert.deepEqual(await store.list(), [])
@@ -55,6 +65,79 @@ test('the address book stores curated contacts, sanitizes input and dedupes by a
   await store.remove(moved.id)
   assert.deepEqual((await store.list()).map(row => row.address).sort(), ['alice@example.invalid', 'mallory@example.invalid'])
   await assert.rejects(() => store.remove(moved.id), ContactsError)
+})
+
+test('editing a manual contact cannot merge away another manual contact', async (t) => {
+  const home = await tempHome(t), store = new ContactsStore(home)
+  const alice = await store.save({ name: 'Alice', address: 'alice@example.invalid', note: 'Alice note' })
+  const bob = await store.save({ name: 'Bob', address: 'bob@example.invalid', note: 'Bob note' })
+  const before = await store.list()
+  const storedBefore = await storedContactRows(store)
+
+  await assert.rejects(
+    () => store.save({ id: alice.id, name: 'Alice changed', address: ' BOB@EXAMPLE.INVALID ', note: 'Overwrite attempt' }),
+    error => error instanceof ContactsError && error.code === 'contact-conflict' && /另一位手工联系人/.test(error.message),
+  )
+
+  assert.equal(before.length, 2)
+  assert.ok(before.some(row => row.id === bob.id))
+  assert.deepEqual(await store.list(), before, 'both complete records remain unchanged after rejection')
+  assert.deepEqual(await new ContactsStore(home).list(), before, 'reopening the book still has both curated records')
+  assert.deepEqual(await storedContactRows(store), storedBefore, 'the SQLite rows, including names and notes, are unchanged')
+})
+
+test('editing can clear name and note while omitted fields preserve existing values', async (t) => {
+  const home = await tempHome(t), store = new ContactsStore(home)
+  const contact = await store.save({ name: 'Alice', address: 'alice@example.invalid', note: 'Keep this note' })
+
+  const omitted = await store.save({ id: contact.id, address: contact.address })
+  assert.equal(omitted.name, 'Alice')
+  assert.equal(omitted.note, 'Keep this note')
+  assert.equal((await new ContactsStore(home).list())[0].note, 'Keep this note')
+
+  const clearedName = await store.save({ id: contact.id, address: contact.address, name: '' })
+  assert.equal(clearedName.name, '')
+  assert.equal(clearedName.note, 'Keep this note', 'clearing name does not clear an omitted note')
+
+  const restoredName = await store.save({ id: contact.id, address: contact.address, name: 'Alice' })
+  assert.equal(restoredName.note, 'Keep this note')
+  const clearedNote = await store.save({ id: contact.id, address: contact.address, note: '' })
+  assert.equal(clearedNote.name, 'Alice', 'clearing note does not clear an omitted name')
+  assert.equal(Object.hasOwn(clearedNote, 'note'), false, 'the response omits a cleared optional note')
+
+  const cleared = await store.save({ id: contact.id, address: contact.address, name: '', note: '' })
+  assert.equal(cleared.name, '')
+  assert.equal(Object.hasOwn(cleared, 'note'), false)
+
+  const reopened = await new ContactsStore(home).list()
+  assert.equal(reopened.length, 1)
+  assert.equal(reopened[0].name, '')
+  assert.equal(reopened[0].note, undefined)
+  const [stored] = await storedContactRows(store)
+  assert.equal(stored.name, '')
+  assert.equal(stored.note, '', 'SQLite persists the explicit clear instead of the previous note')
+  assert.equal(stored.keys, 'alice', 'cleared names no longer contribute search keys')
+})
+
+test('editing a manual contact may safely absorb its duplicate auto-collected row', async (t) => {
+  const home = await tempHome(t), store = new ContactsStore(home)
+  const alice = await store.save({ name: 'Alice', address: 'alice@example.invalid', note: 'Curated note' })
+  await store.observe([{ name: 'Alice From Header', address: 'colleague@example.invalid' }])
+  const learned = (await store.list()).find(row => row.address === 'colleague@example.invalid')
+  assert.ok(learned)
+
+  const updated = await store.save({ id: alice.id, name: 'Alice', address: learned.address })
+  assert.equal(updated.id, alice.id)
+  assert.equal(updated.source, 'manual')
+  assert.equal(updated.note, 'Curated note', 'an omitted note remains curated')
+  const rows = await store.list()
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0].id, alice.id)
+  assert.equal(rows[0].address, learned.address)
+  assert.equal(rows[0].note, 'Curated note')
+  assert.equal(rows[0].uses, learned.uses)
+  assert.deepEqual(await new ContactsStore(home).list(), rows)
+  assert.equal((await storedContactRows(store)).length, 1)
 })
 
 test('suggestions rank exact and prefix matches, then curated entries before learned ones', async (t) => {
@@ -238,6 +321,23 @@ test('the mailbox route exposes address-book actions without requiring a mail ac
   const bad = await request({ action: 'contactSave', name: 'x', address: 'nope' })
   assert.equal(bad.status, 400)
   assert.equal((await request({ action: 'contacts' }, { 'x-dsh-email-mailbox': '' })).status, 403)
+})
+
+test('the mailbox route reports a manual address conflict and keeps both contacts', async (t) => {
+  const f = await mailboxFixture(t)
+  const alice = await f.contacts.save({ name: 'Alice', address: 'alice@example.invalid', note: 'Alice note' })
+  const bob = await f.contacts.save({ name: 'Bob', address: 'bob@example.invalid', note: 'Bob note' })
+  const before = await f.contacts.list()
+
+  const conflict = await f.request({
+    action: 'contactSave', id: alice.id, name: 'Alice changed', address: bob.address, note: 'Overwrite attempt',
+  })
+  assert.equal(conflict.status, 400)
+  const result = await conflict.json()
+  assert.equal(result.ok, false)
+  assert.match(result.error.message, /另一位手工联系人.*未保存任何更改/)
+  assert.deepEqual(await f.contacts.list(), before)
+  assert.equal((await storedContactRows(f.contacts)).length, 2)
 })
 
 test('listing and reading mail teaches the address book the whole conversation', async (t) => {

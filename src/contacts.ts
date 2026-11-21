@@ -309,6 +309,12 @@ export class ContactsStore {
 
   async save(input: ContactSaveInput, signal?: AbortSignal): Promise<EmailContact> {
     const address = normalizeAddress(input.address)
+    // The contacts panel always sends name/note, including explicit empty
+    // strings when a user clears them. Keep property presence separate from
+    // normalization so an omitted field preserves the stored value while an
+    // explicitly cleared field does not.
+    const nameProvided = Object.hasOwn(input, 'name') && typeof input.name === 'string'
+    const noteProvided = Object.hasOwn(input, 'note') && typeof input.note === 'string'
     const name = normalizeContactName(input.name)
     const note = normalizeNote(input.note)
     const wantedId = typeof input.id === 'string' && input.id !== '' ? input.id : null
@@ -321,6 +327,11 @@ export class ContactsStore {
         : (db.prepare(`SELECT ${COLUMNS} FROM contact WHERE id = ?`).get(wantedId) as ContactRow | undefined)
       if (wantedId !== null && !target) throw new ContactsError('联系人不存在或已被移除', 'contact-missing')
       if (target && byAddress && byAddress.id !== target.id) {
+        // Never merge away an explicitly curated entry. Only auto-collected
+        // duplicates may be folded into the record the user is editing.
+        if (byAddress.source !== 'auto') {
+          throw new ContactsError('该邮箱已属于另一位手工联系人，未保存任何更改', 'contact-conflict')
+        }
         // The user typed an address that is already collected under its automatic
         // entry: fold that row into the edited one instead of leaving a duplicate.
         db.prepare('UPDATE contact SET uses = MAX(uses, ?), last_seen_at = ? WHERE id = ?')
@@ -341,19 +352,20 @@ export class ContactsStore {
         )
         return toContact(row)
       }
-      const nextName = name !== '' ? name : target.name
+      const nextName = nameProvided ? name : target.name
+      const nextNote = noteProvided ? note : target.note
       db.prepare(`UPDATE contact SET source = 'manual', name = ?, address = ?, note = ?, keys = ?, updated_at = ? WHERE id = ?`).run(
-        nextName, address, note !== '' ? note : target.note, contactMatchKeys(nextName, address), now, target.id,
+        nextName, address, nextNote, contactMatchKeys(nextName, address), now, target.id,
       )
-      return {
-        ...toContact(target),
+      return toContact({
+        ...target,
         name: nextName,
         address,
-        ...(note !== '' ? { note } : {}),
+        note: nextNote,
         source: 'manual',
-        updatedAt: now,
+        updated_at: now,
         keys: contactMatchKeys(nextName, address),
-      }
+      })
     }, signal)
   }
 
