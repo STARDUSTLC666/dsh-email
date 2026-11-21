@@ -122,6 +122,19 @@ test('Trash confirmation rejects UIDVALIDITY changes, expired previews and accou
   p=await f.backend.action(args);f.backend.moves.get(p.id).expires=Date.now()-1;await assert.rejects(confirm(p.id),/过期/);
   p=await f.backend.action(args);f.settings.accounts.get('default').password='changed';await assert.rejects(confirm(p.id),/改变/);assert.equal(f.peer.folders.get('INBOX').messages.length,2)
 })
+test('real IMAP mailbox actions refresh source and target unread counts after move, undo and explicit refresh', { timeout: 20000 }, async t => {
+  const f = await fixture(t)
+  const counts = async refresh => Object.fromEntries((await f.backend.action({ action: 'folders', account: 'default', refresh })).folders.map(row => [row.path, row.unseen]))
+  assert.deepEqual(await counts(false), { INBOX: 2, Trash: 0 })
+  const preview = await f.backend.action({ action: 'trashPreview', account: 'default', folder: 'INBOX', uids: [7] })
+  const moved = await f.backend.action({ action: 'trashConfirm', account: 'default', folder: 'INBOX', receipt: preview.id, confirmed: true })
+  assert.deepEqual(await counts(false), { INBOX: 1, Trash: 1 })
+  await f.backend.action({ action: 'undoTrash', account: 'default', folder: 'Trash', receipt: moved.undo, confirmed: true })
+  assert.deepEqual(await counts(false), { INBOX: 2, Trash: 0 })
+  f.peer.folders.get('INBOX').messages[0].seen = true
+  assert.deepEqual(await counts(false), { INBOX: 2, Trash: 0 }, 'passive requests reuse the cache')
+  assert.deepEqual(await counts(true), { INBOX: 1, Trash: 0 }, 'explicit workbench refresh bypasses the cache')
+})
 test('Trash enforces valid UID sets, existing destination and safe server capabilities before writes',async()=>{
   const calls=[],client={mailbox:{uidValidity:1},capabilities:new Set(),list:async()=>[{path:'INBOX'},{path:'Trash',specialUse:'\\Trash',flags:new Set()}],fetchOne:async uid=>({uid}),messageMove:async()=>{calls.push('move')}};
   await assert.rejects(previewImapTrash(client,'default','INBOX',[7]),/MOVE\/UIDPLUS/);client.capabilities.add('MOVE');await assert.rejects(previewImapTrash(client,'default','INBOX',[7,7]),/编号/);await assert.rejects(previewImapTrash(client,'default','INBOX',Array.from({length:21},(_,i)=>i+1)),/1–20/);await assert.rejects(moveImapMessages(client,'INBOX',[7],'Missing',1),/不存在/);assert.deepEqual(calls,[])

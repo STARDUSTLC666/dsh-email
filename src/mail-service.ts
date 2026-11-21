@@ -252,10 +252,11 @@ export class EmailService {
     account: string | undefined,
     subscribed: boolean,
     signal?: AbortSignal,
+    options: { refresh?: boolean } = {},
   ): Promise<EmailFoldersResult> {
     if (this.usesPop3(account)) { signal?.throwIfAborted(); return { account: this.name(account), folders: [{ name: 'INBOX', path: 'INBOX', specialUse: '\\Inbox', subscribed: true, delimiter: '/', parentPath: '' }] } }
     if (!this.usesApi(account))
-      return this.imap.folders(account, subscribed, signal)
+      return this.imap.folders(account, subscribed, signal, options)
     signal?.throwIfAborted()
     return {
       account: this.name(account),

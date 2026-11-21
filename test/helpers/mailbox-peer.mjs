@@ -16,7 +16,7 @@ export function messageSource(subject='季度汇报 · 图文与回复') {
   return Buffer.from(['From: sender@example.invalid','To: local@example.invalid','Subject: '+subject,'Date: Thu, 05 Nov 2026 08:00:00 +0000','Message-ID: <original@fixture.invalid>','References: <earlier@fixture.invalid>','MIME-Version: 1.0','Content-Type: multipart/mixed; boundary="mailbox-fixture"','','--mailbox-fixture','Content-Type: text/plain; charset=utf-8','',originalText,'--mailbox-fixture','Content-Type: text/html; charset=utf-8','',originalHtml,'--mailbox-fixture','Content-Type: image/png; name="chart.png"','Content-ID: <chart@fixture>','Content-Disposition: inline; filename="chart.png"','Content-Transfer-Encoding: base64','',imageBytes.toString('base64'),'--mailbox-fixture--',''].join('\r\n'))
 }
 const quote = value => '"' + value.replaceAll('\\','\\\\').replaceAll('"','\\"') + '"'
-export async function createMailboxPeer({ capabilities=['IMAP4rev1','UIDPLUS','MOVE'], noTrash=false }={}) {
+export async function createMailboxPeer({ capabilities=['IMAP4rev1','UIDPLUS','MOVE'], noTrash=false, refuseStore=false, onOpen }={}) {
   const commands=[],sockets=new Set(),sent=[],folders=new Map([['INBOX',{validity:11,next:10,messages:[{uid:7,subject:'Quarterly report',source:messageSource('Quarterly report'),seen:false},{uid:8,subject:'Second report',source:messageSource('Second report'),seen:false}]}],...(!noTrash?[['Trash',{validity:22,next:100,messages:[]}]]:[])]);
   const server=createServer(socket=>{
     sockets.add(socket);socket.on('error',()=>{});socket.on('close',()=>sockets.delete(socket));socket.write('* PREAUTH [CAPABILITY '+capabilities.join(' ')+'] mailbox fixture\r\n');let input='',selected='INBOX';
@@ -26,8 +26,14 @@ export async function createMailboxPeer({ capabilities=['IMAP4rev1','UIDPLUS','M
       const ranges=(range,uid)=>box().messages.filter((m,i)=>range.split(',').some(part=>{const [lo,hi=lo]=part.split(':').map(n=>n==='*'?(uid?box().next-1:box().messages.length):Number(n));return (uid?m.uid:i+1)>=lo&&(uid?m.uid:i+1)<=hi}));
       if(/^CAPABILITY/i.test(cmd))send('* CAPABILITY '+capabilities.join(' '));
       else if(/^LIST /i.test(cmd)){if(/ ""$/.test(cmd))send('* LIST (\\Noselect) "/" ""');else for(const[name]of folders)send('* LIST ('+(name==='INBOX'?'\\Inbox':name==='Trash'?'\\Trash':'')+') "/" '+quote(name))}
+      else if(/^STATUS /i.test(cmd)){
+        const match=cmd.match(/^STATUS ("(?:[^"\\]|\\.)*"|\S+) /i),path=match?.[1].replace(/^"|"$/g,'').replace(/\\(["\\])/g,'$1'),state=folders.get(path);
+        if(!state){send(tag+' NO folder missing');continue}
+        send('* STATUS '+quote(path)+' (MESSAGES '+state.messages.length+' UIDVALIDITY '+state.validity+' UIDNEXT '+state.next+' UNSEEN '+state.messages.filter(m=>!m.seen).length+')');
+      }
       else if(/^(EXAMINE|SELECT) /i.test(cmd)){
         selected=cmd.replace(/^(EXAMINE|SELECT) /i,'').replace(/ .*/,'').replace(/^"|"$/g,'');if(!folders.has(selected)){send(tag+' NO folder missing');continue}
+        onOpen?.({ path:selected, readOnly:/^EXAMINE /i.test(cmd), mailbox:box() });
         send('* FLAGS (\\Seen \\Flagged \\Deleted)');send('* '+box().messages.length+' EXISTS');send('* OK [UIDVALIDITY '+box().validity+'] stable');send('* OK [UIDNEXT '+box().next+'] next');
       }else if(/^(UID )?SEARCH /i.test(cmd)){send('* SEARCH '+box().messages.filter(m=>!cmd.includes('UNSEEN')||!m.seen).map(m=>m.uid).join(' '))}
       else if(/^(UID )?FETCH /i.test(cmd)){
@@ -47,7 +53,7 @@ export async function createMailboxPeer({ capabilities=['IMAP4rev1','UIDPLUS','M
       }else if(/^UID MOVE /i.test(cmd)){
         const match=cmd.match(/^UID MOVE ([0-9:,*]+) (.+)$/i),target=folders.get(match?.[2].replace(/^"|"$/g,''));if(!target){send(tag+' NO target missing');continue}
         const moving=ranges(match[1],true),from=moving.map(m=>m.uid),to=moving.map(m=>{const next=target.next++;target.messages.push({...m,uid:next});return next});for(const m of moving){send('* '+(box().messages.indexOf(m)+1)+' EXPUNGE');box().messages.splice(box().messages.indexOf(m),1)}send(tag+' OK [COPYUID '+target.validity+' '+from.join(',')+' '+to.join(',')+'] moved');continue;
-      }else if(/^UID STORE /i.test(cmd)){const match=cmd.match(/^UID STORE ([0-9:,*]+) ([+-])FLAGS/);for(const m of ranges(match[1],true)){if(cmd.includes('\\Seen'))m.seen=match[2]==='+'}}
+      }else if(/^UID STORE /i.test(cmd)){if(refuseStore){send(tag+' NO Permission denied');continue}const match=cmd.match(/^UID STORE ([0-9:,*]+) ([+-])FLAGS/);for(const m of ranges(match[1],true)){if(cmd.includes('\\Seen'))m.seen=match[2]==='+'}}
       else if(/^LOGOUT/i.test(cmd)){send('* BYE done');send(tag+' OK logout');socket.end();continue}
       else if(!/^(NOOP|CLOSE|UNSELECT)/i.test(cmd)){send(tag+' BAD unsupported fixture command');continue}
       send(tag+' OK'+(/^(EXAMINE|SELECT)/i.test(cmd)?' [READ-WRITE]':'')+' completed')

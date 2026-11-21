@@ -65,7 +65,9 @@ export declare class EmailService {
     }): Promise<import("./types.js").EmailReadResult>;
     search(account: string | undefined, query: string, folder: string, limit: number, offset: number, since?: Date, until?: Date, signal?: AbortSignal, options?: EmailSearchOptions): Promise<import("./types.js").EmailSearchResult>;
     mark(account: string | undefined, folder: string, uid: MessageRef, action: EmailMarkAction, target?: string, signal?: AbortSignal): Promise<import("./types.js").EmailMarkResult>;
-    folders(account: string | undefined, subscribed: boolean, signal?: AbortSignal): Promise<EmailFoldersResult>;
+    folders(account: string | undefined, subscribed: boolean, signal?: AbortSignal, options?: {
+        refresh?: boolean;
+    }): Promise<EmailFoldersResult>;
     readInlineAttachment(ref: InlineAttachmentRef, byteLimit: number, signal?: AbortSignal): Promise<Buffer>;
     downloadAttachment(account: string | undefined, folder: string, uid: MessageRef, index: number, workspace?: string, signal?: AbortSignal, byteLimit?: number, expectedValidity?: number): Promise<import("./types.js").EmailAttachmentResult>;
     send(account: string | undefined, to: string, subject: string, text: string | undefined, cc: string | undefined, paths: string[] | undefined, signal?: AbortSignal, html?: string): Promise<import("./types.js").EmailSendResult>;

@@ -65,7 +65,7 @@ test('a server without LIST-STATUS still lists folders', async () => {
   assert.equal('unseen' in result.folders[0], false)
 })
 
-test('marking or opening mail invalidates the cached unread count', async () => {
+test('marking mail invalidates the cached unread count', async () => {
   const pool = new EmailPool(settings())
   let lists = 0
   const client = {
@@ -86,6 +86,30 @@ test('marking or opening mail invalidates the cached unread count', async () => 
   await pool.folders(undefined, false)
   assert.equal(lists, 2, 'a real flag change must not keep the old count')
   pool.dispose()
+})
+
+test('opening invalidates folder counts before another account operation can consume the cache', async t => {
+  const pool = new EmailPool(settings())
+  t.after(() => pool.dispose())
+  const flags = new Set()
+  let queuedCount, lists = 0
+  const client = {
+    mailbox: { uidValidity: 7 },
+    async list() { lists++; return [row('INBOX', { status: { unseen: flags.has('\\Seen') ? 0 : 1 } })] },
+    async fetchOne(uid) { return { uid, flags: new Set(flags), source: Buffer.from('Subject: fixture\r\n\r\nbody') } },
+    async messageFlagsAdd() { flags.add('\\Seen'); return true },
+  }
+  pool.withImap = async (_account, _folder, run, readOnly) => {
+    const result = await run(client)
+    // A queued folder read can start as the writable callback completes, before
+    // the outer read() promise resumes. It must never reuse the pre-STORE count.
+    if (readOnly === false) queuedCount = (await pool.folders(undefined, false)).folders[0].unseen
+    return result
+  }
+  assert.equal((await pool.folders(undefined, false)).folders[0].unseen, 1)
+  assert.equal((await pool.read(undefined, 7, 'INBOX', undefined, { markRead: true })).markedRead, true)
+  assert.equal(queuedCount, 0)
+  assert.equal(lists, 2)
 })
 
 test('email_folders text reports unread counts next to the path', () => {

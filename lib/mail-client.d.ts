@@ -212,7 +212,9 @@ export declare class EmailPool {
     createFolder(accountName: string | undefined, path: string, signal?: AbortSignal): Promise<void>;
     deleteFolder(accountName: string | undefined, path: string, expected: FolderMutationSnapshot, signal?: AbortSignal): Promise<void>;
     renameFolder(accountName: string | undefined, path: string, newPath: string, signal?: AbortSignal): Promise<void>;
-    folders(accountName: string | undefined, subscribedOnly: boolean, signal?: AbortSignal): Promise<EmailFoldersResult>;
+    folders(accountName: string | undefined, subscribedOnly: boolean, signal?: AbortSignal, options?: {
+        refresh?: boolean;
+    }): Promise<EmailFoldersResult>;
     private attachmentLimit;
     private downloadPart;
     /** Read the MIME section selected by the server-issued CID ticket. */

@@ -1228,8 +1228,19 @@ export class EmailPool {
   ): Promise<EmailReadResult> {
     if (!markRead || result.seen === true) return result
     try {
-      await this.withImap(name, folder, client => client.messageFlagsAdd(uid, ['\\Seen'], { uid: true }), false, signal)
+      const marked = await this.withImap(name, folder, async client => {
+        // SELECT can reveal a replaced mailbox after the read-only open. A UID
+        // only identifies the original message while UIDVALIDITY still matches.
+        if (!result.uidValidity || this.uidValidityOf(client) !== result.uidValidity) return false
+        signal?.throwIfAborted()
+        const stored = await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true })
+        // Invalidate before releasing the account queue to a pending folders call.
+        if (stored === true) this.folderCache.delete(name)
+        return stored
+      }, false, signal)
       signal?.throwIfAborted()
+      // ImapFlow returns false (rather than throwing) for a refused STORE.
+      if (marked !== true) return result
       result.seen = true
       result.markedRead = true
     } catch (error) {
@@ -1363,12 +1374,12 @@ export class EmailPool {
     }, true, signal)
   }
 
-  async folders(accountName: string | undefined, subscribedOnly: boolean, signal?: AbortSignal): Promise<EmailFoldersResult> {
+  async folders(accountName: string | undefined, subscribedOnly: boolean, signal?: AbortSignal, options: { refresh?: boolean } = {}): Promise<EmailFoldersResult> {
     const name = this.resolveName(accountName)
     return this.withImap(name, null, async (client) => {
       const cached = this.folderCache.get(name)
       let rows: EmailFolderRow[]
-      if (cached !== undefined && Date.now() - cached.at < FOLDER_CACHE_TTL_MS) {
+      if (!options.refresh && cached !== undefined && Date.now() - cached.at < FOLDER_CACHE_TTL_MS) {
         rows = cached.folders
       } else {
         // Unread counts ride along on the same LIST when the server offers

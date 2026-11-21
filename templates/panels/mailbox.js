@@ -645,13 +645,17 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
     setFolders([]);
     setOffset(0);
     setScanOffset(0);
+  }, [active, account]);
+
+  useEffect(() => {
     if (!active || !account) { setFoldersLoading(false); return; }
     const ctrl = new AbortController();
     setFoldersLoading(true);
-    mailboxApi("folders", { account }, ctrl.signal).then(value => {
+    mailboxApi("folders", { account, refresh: true }, ctrl.signal).then(value => {
       if (ctrl.signal.aborted) return;
       setFolders(value.folders);
-      setFolder(value.folders.find(row => row.specialUse === '\\Inbox')?.path ||
+      setFolder(old => value.folders.some(row => row.path === old) ? old :
+        value.folders.find(row => row.specialUse === '\\Inbox')?.path ||
         value.folders.find(row => row.path === 'INBOX')?.path || value.folders[0]?.path || "");
     }).catch(error => {
       if (!ctrl.signal.aborted) setError(emailError(error));
@@ -691,6 +695,7 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
         // 一直说这封还没读，而邮箱里已经读过了。
         if (value && value.markedRead === true) {
           const uid = selected;
+          adjustUnread(folder, -1);
           setResult(old => old && {
             ...old,
             messages: old.messages.map(row => row.uid === uid ? { ...row, seen: true } : row),
@@ -727,6 +732,10 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
   }
 
   const retry = () => { setAccountReload(n => n + 1); setRefresh(n => n + 1); setReadToken(n => n + 1); };
+  function refreshMailbox() {
+    setFolderReload(n => n + 1);
+    setRefresh(n => n + 1);
+  }
   function reset() {
     setChecked([]);
     setOffset(0);
@@ -775,7 +784,7 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
         setTrash(null);
         setChecked([]);
         setOffset(0);
-        setRefresh(n => n + 1);
+        refreshMailbox();
       }
     }
   });
@@ -785,7 +794,7 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
     try {
       await mailboxApi('undoTrash', { account: operation.account, folder: operation.target, receipt: operation.undo, confirmed: true });
     } finally {
-      if (valid()) { setOffset(0); setRefresh(n => n + 1); }
+      if (valid()) { setOffset(0); refreshMailbox(); }
     }
   });
 
@@ -835,7 +844,7 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
           h('form', { className: mailCss.search, onSubmit: event => { event.preventDefault(); if (!folder || busy || listLoading) return; reset(); setUnread(false); setQuery(input.trim()); setRefresh(n => n + 1); } },
             h(W.Input, { icon: 'search', type: 'search', 'aria-label': dt('搜索当前文件夹','Search current folder'), placeholder: dt('搜索当前文件夹','Search current folder'), value: input, maxLength: 500, disabled: busy, onChange: event => setInput(event.target.value) }),
             h(W.IconButton, { icon: 'search', label: dt('搜索','Search'), type: 'submit', disabled: listLoading || busy || !folder }),
-            h(W.IconButton, { icon: 'refresh', label: dt('刷新邮件','Refresh mail'), 'aria-busy': listLoading || undefined, disabled: listLoading || busy || !folder, onClick: () => setRefresh(n => n + 1) })),
+            h(W.IconButton, { icon: 'refresh', label: dt('刷新邮件','Refresh mail'), 'aria-busy': listLoading || undefined, disabled: listLoading || busy || !folder, onClick: refreshMailbox })),
           h('div', { className: mailCss.filters },
             !isPop3 ? h(W.Button, { variant: unread ? 'primary' : 'outline', disabled: busy || !!query, 'aria-pressed': unread,
               onClick: () => { reset(); setUnread(value => !value); } }, dt('只看未读','Unread only')) : null,
