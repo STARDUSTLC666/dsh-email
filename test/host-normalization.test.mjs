@@ -23,6 +23,8 @@ test('scheme, path, credentials and port suffix are stripped', () => {
   assert.deepEqual(splitMailHost('https://user:pass@mail.corp.example:1993/imap?x=1'), { host: 'mail.corp.example', port: 1993 })
   assert.deepEqual(splitMailHost('  imap.corp.example  '), { host: 'imap.corp.example' })
   assert.deepEqual(splitMailHost('//mail.corp.example'), { host: 'mail.corp.example' })
+  assert.deepEqual(splitMailHost('::1'), { host: '::1' })
+  assert.deepEqual(splitMailHost('2001:db8::1'), { host: '2001:db8::1' })
   assert.deepEqual(splitMailHost('[2001:db8::1]:993'), { host: '[2001:db8::1]', port: 993 })
   assert.deepEqual(splitMailHost(''), { host: '' })
 })
@@ -54,8 +56,25 @@ test('an unusable host fails with an actionable account error, not a DNS failure
     smtp: { host: 'smtp.corp.example' },
   }), /imap\.host 不是有效主机名.*包含空格/)
   assert.equal(mailHostProblem('mail.corp.example'), undefined)
+  assert.equal(mailHostProblem('::1'), undefined)
+  assert.equal(mailHostProblem('2001:db8::1'), undefined)
   assert.equal(mailHostProblem('[2001:db8::1]'), undefined)
-  assert.equal(mailHostProblem('mail:993'), '包含主机名不允许的字符')
+  assert.equal(mailHostProblem('[192.0.2.1]'), 'IPv6 地址无效')
+  assert.equal(mailHostProblem('2001:db8::not-an-ip'), 'IPv6 地址无效')
+  assert.equal(mailHostProblem('mail:993'), 'IPv6 地址无效')
+})
+
+test('valid bare and bracketed IPv6 literals resolve without changing their stored host', () => {
+  for (const host of ['::1', '[::1]', '2001:db8::1', '[2001:db8::1]']) {
+    const cfg = resolveEmailSettings({
+      ...DEFAULT_LIMITS,
+      user: 'me@corp.example', password: 'fixture-only',
+      imap: { host, port: 993, secure: true },
+      smtp: { host, port: 465, secure: true },
+    }).accounts.get('default')
+    assert.equal(cfg.imap.host, host)
+    assert.equal(cfg.smtp.host, host)
+  }
 })
 
 test('server presets are normalized when parsed, including an embedded port', () => {

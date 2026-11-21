@@ -1,7 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { EmailSettingsBackend, SETTINGS_API_ROUTE } from '../lib/web.js'
 import { EmailSettingsSchema } from '../lib/settings.js'
 import { parseAccountsYaml, parseServerPresets, resolveEmailSettings } from '../lib/index.js'
@@ -219,6 +222,114 @@ test('a custom-server card writes its endpoints into the account and no provider
   assert.equal(resolved.imap.port, 1993)
   assert.equal(resolved.smtp.host, 'smtp.corp.example')
   assert.equal(resolved.authKind, 'password')
+})
+
+test('saving a custom-server card retains ports pasted in host URLs unless an explicit port overrides them', async () => {
+  const { backend } = fixture()
+  const yaml = await serialize(backend, [{
+    name: 'corp', user: 'me@corp.example', password: 'fixture-only', receiveProtocol: 'imap',
+    imap: { host: 'https://mail.corp.example:1993/imap' },
+    smtp: { host: 'smtp.corp.example:2465' },
+  }])
+  const parsed = parseAccountsYaml(yaml).map.corp
+  assert.deepEqual(parsed.imap, { host: 'mail.corp.example', port: 1993 })
+  assert.deepEqual(parsed.smtp, { host: 'smtp.corp.example', port: 2465 })
+  const resolved = resolveEmailSettings({ accountsYaml: yaml }).accounts.get('corp')
+  assert.equal(resolved.imap.port, 1993)
+  assert.equal(resolved.smtp.port, 2465)
+
+  const explicitYaml = await serialize(backend, [{
+    name: 'corp', user: 'me@corp.example', password: 'fixture-only', receiveProtocol: 'imap',
+    imap: { host: 'https://mail.corp.example:1993/imap', port: 143 },
+    smtp: { host: 'smtp.corp.example:2465', port: 587 },
+  }])
+  const explicit = parseAccountsYaml(explicitYaml).map.corp
+  assert.deepEqual(explicit.imap, { host: 'mail.corp.example', port: 143 })
+  assert.deepEqual(explicit.smtp, { host: 'smtp.corp.example', port: 587 })
+  const explicitResolved = resolveEmailSettings({ accountsYaml: explicitYaml }).accounts.get('corp')
+  assert.equal(explicitResolved.imap.port, 143)
+  assert.equal(explicitResolved.smtp.port, 587)
+})
+
+test('custom endpoints survive serialize, settings save, and reloading an isolated YAML config file', async () => {
+  // Keep the temporary config beside this test rather than touching a user's
+  // DSH profile. Only the settings-provider boundary is supplied by the fixture.
+  const dir = mkdtempSync(join(dirname(fileURLToPath(import.meta.url)), '.pr60-config-'))
+  const configFile = join(dir, 'cordis.yml')
+  const readValue = () => EmailSettingsSchema(parseYaml(readFileSync(configFile, 'utf8'))['dsh-email'])
+  let revision = 0
+  const ctx = {
+    settings: {
+      writable: true,
+      describe: () => [{ ns: 'dsh-email', revision, user: readValue() }],
+      async replace(namespace, next, expectedRevision) {
+        assert.equal(namespace, 'dsh-email')
+        assert.equal(expectedRevision, revision)
+        writeFileSync(configFile, stringifyYaml({ 'dsh-email': next }), 'utf8')
+        revision++
+      },
+    },
+  }
+  const backend = () => new EmailSettingsBackend(ctx, { get: readValue }, {})
+  writeFileSync(configFile, stringifyYaml({ 'dsh-email': EmailSettingsSchema({}) }), 'utf8')
+  try {
+    const cases = [
+      {
+        receiveProtocol: 'imap',
+        imap: { host: 'https://mail.corp.example:1993/imap', secure: true },
+        smtp: { host: 'smtp.corp.example:2465', secure: true },
+        expected: { imap: { host: 'mail.corp.example', port: 1993, secure: true }, smtp: { host: 'smtp.corp.example', port: 2465, secure: true } },
+      },
+      {
+        receiveProtocol: 'imap',
+        imap: { host: 'https://mail.corp.example:1993/imap', port: 143, secure: false },
+        smtp: { host: 'smtp.corp.example:2465', port: 587, secure: false },
+        expected: { imap: { host: 'mail.corp.example', port: 143, secure: false }, smtp: { host: 'smtp.corp.example', port: 587, secure: false } },
+      },
+      {
+        receiveProtocol: 'imap',
+        imap: { host: '::1', port: 993, secure: true },
+        smtp: { host: '::1', port: 465, secure: true },
+        expected: { imap: { host: '::1', port: 993, secure: true }, smtp: { host: '::1', port: 465, secure: true } },
+      },
+      {
+        receiveProtocol: 'pop3',
+        pop3: { host: 'pop3s://[::1]:1995/inbox', secure: true },
+        smtp: { host: 'smtps://[::1]:2465/send', secure: true },
+        expected: { pop3: { host: '[::1]', port: 1995, secure: true }, smtp: { host: '[::1]', port: 2465, secure: true } },
+      },
+      {
+        receiveProtocol: 'pop3',
+        pop3: { host: 'pop.corp.example:1995', port: 110, secure: false },
+        smtp: { host: 'smtp.corp.example:2465', port: 25, secure: false },
+        expected: { pop3: { host: 'pop.corp.example', port: 110, secure: false }, smtp: { host: 'smtp.corp.example', port: 25, secure: false } },
+      },
+    ]
+    for (const { expected, ...endpoints } of cases) {
+      const activeBackend = backend()
+      const accountsYaml = await serialize(activeBackend, [{ name: 'corp', user: 'me@corp.example', password: 'fixture-only', ...endpoints }], readValue().accountsYaml)
+      const response = await activeBackend.fetch(request({
+        action: 'save', expectedRevision: revision,
+        value: EmailSettingsSchema({ accountsYaml }),
+      }))
+      assert.equal(response.status, 200, JSON.stringify(await response.json()))
+      // Construct a fresh backend and reread the file, so no in-memory draft
+      // can satisfy the persistence assertions.
+      const reopened = backend()
+      const snapshot = await reopened.snapshot()
+      const stored = parseAccountsYaml(snapshot.settings.value.accountsYaml).map.corp
+      const resolved = resolveEmailSettings(readValue()).accounts.get('corp')
+      for (const [kind, endpoint] of Object.entries(expected)) {
+        assert.deepEqual(stored[kind], endpoint)
+        assert.equal(resolved[kind].host, endpoint.host)
+        assert.equal(resolved[kind].port, endpoint.port)
+        assert.equal(resolved[kind].secure, endpoint.secure)
+      }
+      assert.equal(resolved.authKind, 'password')
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })
 
 test('a pasted URL host is saved as the bare hostname, never as a URL', async () => {

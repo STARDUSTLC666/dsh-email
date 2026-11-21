@@ -1,3 +1,4 @@
+import { isIP } from 'node:net'
 import { homedir } from 'node:os'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { join } from 'node:path'
@@ -136,9 +137,13 @@ export function mailHostProblem(host: string): string | undefined {
   if (host.startsWith('[')) {
     if (!host.endsWith(']')) return 'IPv6 地址缺少右括号'
     const inner = host.slice(1, -1)
-    if (!/^[0-9a-f:.]+$/i.test(inner) || !inner.includes(':')) return 'IPv6 地址无效'
+    if (isIP(inner) !== 6) return 'IPv6 地址无效'
     return undefined
   }
+  // Keep valid pre-existing unbracketed IPv6 literals working. `isIP`
+  // rejects malformed colon-separated strings without weakening hostname
+  // validation for other inputs.
+  if (host.includes(':')) return isIP(host) === 6 ? undefined : 'IPv6 地址无效'
   if (!/^[a-z0-9._-]+$/i.test(host)) return '包含主机名不允许的字符'
   return undefined
 }
