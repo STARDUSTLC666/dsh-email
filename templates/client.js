@@ -3820,19 +3820,21 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 if (draft.smtp) input.smtp = endpoint(draft.smtp);
             } else if (String(draft.provider || '') === CUSTOM_SERVER_PROVIDER) {
                 // 自定义服务器：端点直接写进账号的 imap/smtp 段（后端 resolveAccount 的
-                // 「省略 provider 直接填 imap.host 与 smtp.host」路径）。端口留空时把
-                // 默认值显式写下去（IMAP 993 / SMTP 465），避免「文档说 993、YAML 里
-                // 却没有 port、连接层只能靠隐式默认」的歧义。
-                const endpointWithDefault = (value, defaultPort) => ({
+                // 「省略 provider 直接填 imap.host 与 smtp.host」路径）。端口留空时，
+                // 让后端优先使用地址自带的端口，再回退到协议默认端口。
+                const customEndpoint = value => ({
                     host: String(value?.host || '').trim(),
-                    port: String(value?.port ?? '') !== '' ? Number(value.port) : defaultPort,
+                    port: String(value?.port ?? '') !== '' ? Number(value.port) : null,
                     secure: value?.secure !== false,
                 });
-                const imap = endpointWithDefault(draft.imap, 993);
-                const smtp = endpointWithDefault(draft.smtp, 465);
+                const imap = customEndpoint(draft.imap);
+                const smtp = customEndpoint(draft.smtp);
                 // 发信服务器主机留空时沿用收信服务器：内网/自建邮箱通常同一台机器，
-                // 用户只需要填一次地址。
-                if (smtp.host === '') smtp.host = imap.host;
+                // 用户只需要填一次地址。SMTP 仍使用自己的端口。
+                if (smtp.host === '') {
+                    smtp.host = imap.host;
+                    smtp.port ??= 465;
+                }
                 input.imap = imap;
                 input.smtp = smtp;
             }

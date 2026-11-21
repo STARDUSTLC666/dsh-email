@@ -175,12 +175,19 @@ interface Endpoint {
   secure: boolean
 }
 
+interface CardEndpointInput {
+  host?: string
+  /** Null selects an embedded port or the protocol default. Omission leaves a stored port alone. */
+  port?: number | null
+  secure?: boolean
+}
+
 /** One account card as the editor sends it back; every field is optional. */
 export interface AccountCardInput {
   /** Empty clears the override; direct disables environment proxies; absent preserves it. */
   proxy?: string
   receiveProtocol?: 'imap' | 'pop3'
-  pop3?: { host?: string; port?: number; secure?: boolean }
+  pop3?: CardEndpointInput
   name?: string
   /** Persisted account key before a UI rename. */
   originalName?: string
@@ -226,8 +233,8 @@ export interface AccountCardInput {
    */
   authKind?: string
   inboxFolder?: string
-  imap?: { host?: string; port?: number; secure?: boolean }
-  smtp?: { host?: string; port?: number; secure?: boolean }
+  imap?: CardEndpointInput
+  smtp?: CardEndpointInput
 }
 
 /**
@@ -545,31 +552,30 @@ function washEndpoint(account: YAMLMap, key: 'imap' | 'smtp'): void {
  * about this endpoint", so the key is removed rather than left behind pointing
  * at the server the user just cleared.
  */
-function writeEndpoint(doc: Document, account: YAMLMap, key: 'imap' | 'smtp' | 'pop3', endpoint: NonNullable<AccountCardInput['imap']>): void {
-  if (endpoint.port !== undefined) {
-    if (!Number.isInteger(endpoint.port) || endpoint.port < 1 || endpoint.port > 65535) throw new Error(key.toUpperCase() + ' 端口必须在 1-65535 之间')
+function normalizeCardEndpoint(key: 'imap' | 'smtp' | 'pop3', endpoint: CardEndpointInput): { host: string; port?: number; secure?: boolean } | undefined {
+  const { port: explicitPort } = endpoint
+  if (explicitPort != null && (!Number.isInteger(explicitPort) || explicitPort < 1 || explicitPort > 65535)) {
+    throw new Error(key.toUpperCase() + ' 端口必须在 1-65535 之间')
   }
   if (endpoint.secure !== undefined && typeof endpoint.secure !== 'boolean') throw new Error('TLS 开关必须为布尔值')
   if (endpoint.host !== undefined && typeof endpoint.host !== 'string') throw new Error(key.toUpperCase() + ' 主机地址无效')
-  // Store the hostname a paste actually names: a scheme, a path or a port
-  // suffix would come back as a DNS failure on the next connection.
   const { host, port: embeddedPort } = splitMailHost(endpoint.host)
-  if (host === '') {
+  if (host === '') return undefined
+  const problem = mailHostProblem(host)
+  if (problem !== undefined) throw new Error(key.toUpperCase() + ' 主机地址无效（' + problem + '）；只填服务器地址，例如 mail.example.com')
+  const defaultPort = key === 'imap' ? IMAP_FALLBACK.port : key === 'smtp' ? SMTP_FALLBACK.port : 995
+  const port = explicitPort ?? embeddedPort ?? (explicitPort === null ? defaultPort : undefined)
+  return { host, ...(port !== undefined ? { port } : {}), ...(endpoint.secure !== undefined ? { secure: endpoint.secure } : {}) }
+}
+
+function writeEndpoint(doc: Document, account: YAMLMap, key: 'imap' | 'smtp' | 'pop3', endpoint: CardEndpointInput): void {
+  const normalized = normalizeCardEndpoint(key, endpoint)
+  if (!normalized) {
     account.delete(key)
     return
   }
-  const problem = mailHostProblem(host)
-  if (problem !== undefined) throw new Error(key.toUpperCase() + ' 主机地址无效（' + problem + '）；只填服务器地址，例如 mail.example.com')
   const target = ensureMap(doc, account, key)
-  target.set('host', host)
-  // Preserve a port pasted as part of the host when the editor did not submit
-  // its separate port field. An explicit port remains authoritative.
-  const port = endpoint.port ?? embeddedPort
-  if (port !== undefined) {
-    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(key.toUpperCase() + ' 端口必须在 1-65535 之间')
-    target.set('port', port)
-  }
-  if (endpoint.secure !== undefined) target.set('secure', endpoint.secure)
+  for (const [field, value] of Object.entries(normalized)) target.set(field, value)
 }
 
 /**
@@ -624,8 +630,14 @@ function normalizeCardForYaml(
   if (card.proxy === undefined) { if (inheritedProxy !== undefined) out.proxy = inheritedProxy }
   else if (card.proxy.trim() !== '') out.proxy = card.proxy.trim()
   if (card.receiveProtocol !== undefined) out.receiveProtocol = card.receiveProtocol
-  if (card.pop3 !== undefined) out.pop3 = card.pop3
-  if (card.receiveProtocol === 'pop3' && card.smtp !== undefined && card.smtp.host?.trim() !== '') out.smtp = card.smtp
+  if (card.pop3 !== undefined) {
+    const pop3 = normalizeCardEndpoint('pop3', card.pop3)
+    if (pop3) out.pop3 = pop3
+  }
+  if (card.receiveProtocol === 'pop3' && card.smtp !== undefined) {
+    const smtp = normalizeCardEndpoint('smtp', card.smtp)
+    if (smtp) out.smtp = smtp
+  }
   const provider = persistedProvider(card.provider, customNames)
   if (provider !== undefined) out.provider = provider
   // A custom-server account (no provider) carries its endpoints itself: there is
@@ -638,13 +650,8 @@ function normalizeCardForYaml(
       for (const key of ['imap', 'smtp'] as const) {
         const endpoint = card[key]
         if (endpoint === undefined) continue
-        if (endpoint.port !== undefined && (!Number.isInteger(endpoint.port) || endpoint.port < 1 || endpoint.port > 65535)) {
-          throw new Error(key.toUpperCase() + ' 端口必须在 1-65535 之间')
-        }
-        if (endpoint.secure !== undefined && typeof endpoint.secure !== 'boolean') throw new Error('TLS 开关必须为布尔值')
-        const host = typeof endpoint.host === 'string' ? endpoint.host.trim() : ''
-        if (host === '') continue
-        out[key] = { host, ...(endpoint.port !== undefined ? { port: endpoint.port } : {}), ...(endpoint.secure !== undefined ? { secure: endpoint.secure } : {}) }
+        const normalized = normalizeCardEndpoint(key, endpoint)
+        if (normalized) out[key] = normalized
       }
     }
   }

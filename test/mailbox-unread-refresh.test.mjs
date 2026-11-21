@@ -9,7 +9,7 @@ function workbench({ refuseRead = false } = {}) {
   const template = readFileSync(new URL('../templates/panels/mailbox.js', import.meta.url), 'utf8')
   const source = template.slice(template.indexOf('function MailboxWorkbench(')) + '\nthis.Workbench = MailboxWorkbench;'
   const slots = [], effects = [], calls = []
-  let cursor = 0, dirty = false, view, undo
+  let cursor = 0, dirty = false, view, undo, contactRefreshes = 0
   const folders = new Map([
     ['INBOX', [{ uid: 1, seen: false }]],
     ['Work', [{ uid: 7, seen: false }, { uid: 8, seen: false }]],
@@ -37,6 +37,9 @@ function workbench({ refuseRead = false } = {}) {
     },
     AbortController, setTimeout: fn => ({ fn }), clearTimeout() {}, requestAnimationFrame: fn => fn(),
     __stardustUpdatesGuard() {}, dt: (_zh, en) => en, emailError: error => String(error), formatDate: () => '',
+    useContactBook() {}, requestContactRefresh() { contactRefreshes++ },
+    senderLabelOf: () => 'Fixture sender',
+    formatAddressList: list => (list || []).map(item => item.address).join(', '),
     clsx: (...values) => values.filter(Boolean).join(' '), mailCss: css, uiCss: css, moveMailSpotlight() {},
     MailFolderRail: 'MailFolderRail', MailMessage: 'MailMessage', MailWorkflowBar: 'MailWorkflowBar',
     MailTrashDialog: 'MailTrashDialog', MailFoldersDialog: 'MailFoldersDialog',
@@ -90,7 +93,7 @@ function workbench({ refuseRead = false } = {}) {
     assert.fail('Workbench effects did not settle; possible request loop')
   }
   const rail = () => find(node => node.type === 'MailFolderRail').props
-  return { settle, find, calls, folders, rail,
+  return { settle, find, calls, folders, rail, contactRefreshes: () => contactRefreshes,
     count: action => calls.filter(call => call.action === action).length,
     unseen: path => rail().folders.find(row => row.path === path).unseen,
     open: uid => find(node => node.props.className === 'messageRow' && node.props.key === uid).children
@@ -105,7 +108,7 @@ test('automatic read updates the selected folder count once without a folder/lis
   await ui.settle()
   ui.rail().onFolder('Work'); await ui.settle()
   assert.equal(ui.unseen('Work'), 2)
-  const before = { folders: ui.count('folders'), list: ui.count('list') }
+  const before = { folders: ui.count('folders'), list: ui.count('list'), contacts: ui.contactRefreshes() }
   ui.open(7); await ui.settle()
   assert.equal(ui.unseen('Work'), 1)
   assert.equal(ui.unseen('INBOX'), 1)
@@ -113,6 +116,7 @@ test('automatic read updates the selected folder count once without a folder/lis
   assert.equal(ui.count('folders'), before.folders)
   assert.equal(ui.count('list'), before.list)
   assert.equal(ui.count('read'), 1)
+  assert.equal(ui.contactRefreshes(), before.contacts + 1)
   assert.equal(ui.find(node => node.props.className === 'messageRow' && node.props.key === 7).props['data-unread'], false)
   assert.equal(ui.find(node => node.type === 'MailMessage').props.selected, 7)
 })

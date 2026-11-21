@@ -125,7 +125,7 @@ test('a stored custom-server account loads back into the custom-server editor', 
     'both endpoints are stored, so the card is complete')
 })
 
-test('an outgoing host may stay blank and blank ports fall back to 993/465', () => {
+test('the account editor uses pasted ports when blank and preserves independent protocol defaults', async () => {
   const saves = []
   const states = []
   const view = editor({
@@ -140,21 +140,30 @@ test('an outgoing host may stay blank and blank ports fall back to 993/465', () 
   assert.equal(states.at(-1), false)
   assert.equal(saves.length, 1)
 
-  // Clearing both port fields still saves: blank falls back to 993 (IMAP) / 465 (SMTP),
-  // and the defaults are written explicitly so the stored account is unambiguous.
+  // Clearing both port fields lets the serializer select the actual port.
   numberInputs(view)[0].props.onChange({ target: { value: '' } })
   numberInputs(view)[1].props.onChange({ target: { value: '' } })
   assert.equal(states.at(-1), false)
-  const portDefaulted = JSON.parse(JSON.stringify(saves.at(-1)[0][0]))
+  const { backend } = fixture()
+  const savedAccount = async () => Object.values(parseAccountsYaml(await serialize(
+    backend, JSON.parse(JSON.stringify(saves.at(-1)[0])),
+  )).map)[0]
+  const portDefaulted = await savedAccount()
   assert.deepEqual(portDefaulted.imap, { host: 'imap.corp.example', port: 993, secure: true })
   assert.deepEqual(portDefaulted.smtp, { host: 'imap.corp.example', port: 465, secure: true })
+
+  textInput(view, 'IMAP 收信服务器').props.onChange({ target: { value: 'imap://imap.corp.example:1993/INBOX' } })
+  textInput(view, 'SMTP 发信服务器（留空沿用收信服务器）').props.onChange({ target: { value: 'smtp.corp.example:2465' } })
+  const pasted = await savedAccount()
+  assert.deepEqual(pasted.imap, { host: 'imap.corp.example', port: 1993, secure: true })
+  assert.deepEqual(pasted.smtp, { host: 'smtp.corp.example', port: 2465, secure: true })
 
   // The outgoing host is explicitly documented as optional: clearing it must not
   // mark the account incomplete, and the saved card reuses the incoming host.
   textInput(view, 'SMTP 发信服务器（留空沿用收信服务器）').props.onChange({ target: { value: '' } })
   assert.equal(states.at(-1), false, 'a blank outgoing host keeps the account complete')
-  const outgoingBlank = JSON.parse(JSON.stringify(saves.at(-1)[0][0]))
-  assert.equal(outgoingBlank.smtp.host, 'imap.corp.example')
+  const outgoingBlank = await savedAccount()
+  assert.deepEqual(outgoingBlank.smtp, { host: 'imap.corp.example', port: 465, secure: true })
 })
 
 test('a custom POP3 account shows its POP3 endpoint in the card meta', () => {
@@ -249,6 +258,35 @@ test('saving a custom-server card retains ports pasted in host URLs unless an ex
   const explicitResolved = resolveEmailSettings({ accountsYaml: explicitYaml }).accounts.get('corp')
   assert.equal(explicitResolved.imap.port, 143)
   assert.equal(explicitResolved.smtp.port, 587)
+})
+
+test('cleared and omitted port fields remain distinct across normal and fallback account saves', async () => {
+  const { backend } = fixture()
+  const source = 'corp: {user: me@corp.example, password: fixture-only, imap: {host: old.corp.example, port: 143, socketTimeoutMs: 60000}, smtp: {host: old.corp.example, port: 587}}\n'
+  const card = { name: 'corp', user: 'me@corp.example', password: 'fixture-only',
+    imap: { host: 'mail.corp.example' }, smtp: { host: 'mail.corp.example' } }
+  const unchanged = parseAccountsYaml(await serialize(backend, [card], source)).map.corp
+  assert.equal(unchanged.imap.port, 143)
+  assert.equal(unchanged.smtp.port, 587)
+
+  const cleared = parseAccountsYaml(await serialize(backend, [{
+    ...card, imap: { ...card.imap, port: null }, smtp: { ...card.smtp, port: null },
+  }], source)).map.corp
+  assert.equal(cleared.imap.port, 993)
+  assert.equal(cleared.smtp.port, 465)
+  assert.equal(cleared.imap.socketTimeoutMs, 60000)
+
+  for (const seed of ['', source, '[broken']) {
+    const saved = parseAccountsYaml(await serialize(backend, [{
+      ...card,
+      imap: { host: 'imap://mail.corp.example:1993/INBOX', port: null, secure: true },
+      smtp: { host: 'smtp://mail.corp.example:2465', port: null, secure: false },
+    }], seed)).map.corp
+    assert.equal(saved.imap.host, 'mail.corp.example')
+    assert.equal(saved.imap.port, 1993)
+    assert.equal(saved.smtp.host, 'mail.corp.example')
+    assert.equal(saved.smtp.port, 2465)
+  }
 })
 
 test('custom endpoints survive serialize, settings save, and reloading an isolated YAML config file', async () => {

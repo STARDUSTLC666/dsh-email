@@ -86,16 +86,18 @@ interface Endpoint {
     port: number;
     secure: boolean;
 }
+interface CardEndpointInput {
+    host?: string;
+    /** Null selects an embedded port or the protocol default. Omission leaves a stored port alone. */
+    port?: number | null;
+    secure?: boolean;
+}
 /** One account card as the editor sends it back; every field is optional. */
 export interface AccountCardInput {
     /** Empty clears the override; direct disables environment proxies; absent preserves it. */
     proxy?: string;
     receiveProtocol?: 'imap' | 'pop3';
-    pop3?: {
-        host?: string;
-        port?: number;
-        secure?: boolean;
-    };
+    pop3?: CardEndpointInput;
     name?: string;
     /** Persisted account key before a UI rename. */
     originalName?: string;
@@ -141,16 +143,8 @@ export interface AccountCardInput {
      */
     authKind?: string;
     inboxFolder?: string;
-    imap?: {
-        host?: string;
-        port?: number;
-        secure?: boolean;
-    };
-    smtp?: {
-        host?: string;
-        port?: number;
-        secure?: boolean;
-    };
+    imap?: CardEndpointInput;
+    smtp?: CardEndpointInput;
 }
 /**
  * Verdict on the `Host` header: `undefined` to proceed, otherwise the reason to
