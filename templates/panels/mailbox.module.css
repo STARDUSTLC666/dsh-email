@@ -858,3 +858,1184 @@
     min-height: 0;
   }
 }
+
+/* ==========================================================================
+ * Letter Desk + Triage Deck (`信桌` default mode) & View Mode Toggle
+ * ========================================================================== */
+
+.listModeRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.listFolderTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 650;
+  color: var(--dsw-alias-label-primary);
+}
+
+.listFolderCount {
+  color: var(--dsw-alias-label-tertiary);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.viewToggle {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--dsw-radius-sm, 8px);
+  border: var(--dsh-control-border-width, 0.5px) solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.viewToggleBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: var(--dsw-radius-xs, 6px);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 11.5px;
+  line-height: 16px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.viewToggleBtn[aria-pressed="true"] {
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font-weight: 650;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.viewToggleBtn:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -1px;
+}
+
+@media (hover: hover) {
+  .viewToggleBtn:hover:not(:disabled):not([aria-pressed="true"]) {
+    color: var(--dsw-alias-label-primary);
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+/* Tactile stationery desk surface */
+.letterDesk {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  position: relative;
+  background:
+    radial-gradient(ellipse 84% 70% at 50% 38%, var(--dsw-alias-bg-base) 0%, var(--dsw-alias-bg-layer-1) 66%, var(--dsw-alias-bg-layer-2) 100%);
+}
+
+/* Top compact control ribbon */
+.deskRibbon {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 10px;
+  padding: 8px 14px;
+  border-block-end: var(--dsh-control-border-width, 0.5px) solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.deskScope,
+.deskSearchGroup,
+.deskSearchForm,
+.deskFilterPills,
+.deskMetaGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.deskScope,
+.deskSearchGroup,
+.deskFilterPills {
+  flex-wrap: wrap;
+}
+
+.deskSearchGroup {
+  flex: 1 1 280px;
+  justify-content: center;
+}
+
+.deskSearchForm {
+  flex: 1 1 190px;
+  max-width: 340px;
+}
+
+.deskSearchInput {
+  flex: 1;
+  min-width: 120px;
+}
+
+.deskPillWrap {
+  flex: none;
+  min-width: 0;
+  max-width: 240px;
+}
+
+.deskPillMenu {
+  width: auto;
+  max-width: 240px;
+}
+
+.deskPillWrap.deskPillWrap button {
+  width: auto;
+  max-width: 240px;
+  min-height: 28px;
+  padding: 3px 8px;
+  background: var(--dsw-alias-bg-base);
+  border: var(--dsh-control-border-width, 0.5px) solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm, 8px);
+}
+
+.deskAccountPill,
+.deskFolderPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.deskPillText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 132px;
+}
+
+.deskProtoTag {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: var(--dsw-radius-xs, 5px);
+  background: var(--dsw-alias-state-business-tertiary, rgba(65, 118, 230, 0.12));
+  color: var(--dsw-alias-state-business-primary);
+  font: 600 10px/14px var(--dsh-font-mono, ui-monospace);
+  letter-spacing: 0.03em;
+}
+
+.deskFilterBtn {
+  min-height: 26px;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.deskMetaGroup {
+  flex: none;
+  margin-inline-start: auto;
+}
+
+.deskCounter {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: var(--dsh-control-border-width, 0.5px) solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11.5px;
+  line-height: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Main desk stage */
+.deskMain {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 10px;
+  gap: 14px;
+}
+
+.deskStage {
+  flex: 1;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  min-height: 332px;
+  padding: 6px 4px 36px;
+}
+
+.deskSkeletonCard,
+.deskEmptyCard,
+.deskCompleteCard {
+  width: min(600px, 100%);
+  border-radius: var(--dsw-radius-lg, 16px);
+  border: var(--dsh-control-border-width, 1px) solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-base));
+  box-shadow: var(--dsw-elevation-panel);
+  overflow: clip;
+}
+
+.deskSkeletonCard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+}
+
+/* Physical 3-deep letter stack */
+.letterStack {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  width: min(650px, 100%);
+  perspective: 1100px;
+  transform-style: preserve-3d;
+}
+
+.letterCardShell {
+  grid-area: 1 / 1;
+  width: 100%;
+  min-width: 0;
+  position: relative;
+  will-change: transform, opacity;
+}
+
+.letterCardActive {
+  z-index: 3;
+  touch-action: pan-y;
+  cursor: grab;
+  outline: none;
+}
+
+.letterCardActive[data-dragging="true"] {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.letterCardActive[data-flipped="true"] {
+  cursor: default;
+}
+
+.letterCardActive:focus-visible .letterPaper {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 3px;
+}
+
+.letterCardLayer {
+  pointer-events: none;
+  user-select: none;
+  align-self: stretch;
+  max-height: 100%;
+  overflow: visible;
+  opacity: 0.94;
+  transform-origin: 50% 80%;
+}
+
+.letterCardLayer > .letterPaper {
+  height: 100%;
+  border-color: color-mix(in oklab, var(--dsw-alias-border-l2) 78%, var(--dsw-alias-label-tertiary) 22%);
+  box-shadow:
+    0 12px 28px rgba(15, 23, 42, 0.10),
+    0 2px 6px rgba(15, 23, 42, 0.05);
+}
+
+.letterCardLayer[data-letter-layer="1"] {
+  z-index: 2;
+  transform: translate3d(10px, 16px, 0px) scale(0.95) rotate(2.2deg);
+}
+
+.letterCardLayer[data-letter-layer="2"] {
+  z-index: 1;
+  opacity: 0.85;
+  transform: translate3d(-12px, 28px, 0px) scale(0.90) rotate(-2.6deg);
+}
+
+.letterCardExiting {
+  z-index: 4;
+  pointer-events: none;
+  user-select: none;
+  animation: letterFlyLeft 210ms var(--dsh-ease-out, cubic-bezier(0.22, 1, 0.36, 1)) forwards;
+}
+
+@keyframes letterFlyLeft {
+  0% {
+    transform: translate3d(0px, 0px, 0px) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(-112%, 18px, 0px) rotate(-13deg);
+    opacity: 0;
+  }
+}
+
+/* Directional drag stamps */
+.dragStampLeft,
+.dragStampRight {
+  position: absolute;
+  inset-block-start: 24px;
+  z-index: 6;
+  pointer-events: none;
+  padding: 5px 12px;
+  border-radius: var(--dsw-radius-xs, 6px);
+  border: 2px solid currentColor;
+  font-family: var(--dsh-font-display);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-base));
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14);
+  opacity: 0;
+}
+
+.dragStampLeft {
+  inset-inline-end: 20px;
+  color: var(--dsw-alias-state-warn-label, #b45309);
+  transform: rotate(7deg);
+}
+
+.dragStampRight {
+  inset-inline-start: 20px;
+  color: var(--dsw-alias-state-business-primary);
+  transform: rotate(-7deg);
+}
+
+.dragStampLeft[data-ready="true"],
+.dragStampRight[data-ready="true"] {
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.22);
+}
+
+/* 3D Flipper container */
+.letterFlipper {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  transform-style: preserve-3d;
+}
+
+.letterFlipper[data-flipped="true"] {
+  transform: rotateY(180deg);
+}
+
+.letterFlipper[data-flipped="false"] .letterFaceBack,
+.letterFlipper[data-flipped="true"] .letterFaceFront {
+  pointer-events: none;
+}
+
+/* Stationery paper sheet card */
+.letterPaper {
+  box-sizing: border-box;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 22px 16px;
+  border-radius: var(--dsw-radius-lg, 16px);
+  border: var(--dsh-control-border-width, 1px) solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-base));
+  box-shadow: var(--dsw-elevation-prominent, 0 14px 36px rgba(15, 23, 42, 0.12));
+  overflow: clip;
+}
+
+.letterFaceFront,
+.letterFaceBack {
+  grid-area: 1 / 1;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.letterFaceBack {
+  transform: rotateY(180deg);
+  max-height: 470px;
+  overflow: auto;
+}
+
+/* Airmail / stationery edge trim */
+.letterTrim {
+  height: 5px;
+  margin-inline: -22px;
+  flex: none;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--dsw-alias-state-business-primary) 0 10px,
+    transparent 10px 16px,
+    var(--dsw-alias-state-error-primary) 16px 26px,
+    transparent 26px 32px
+  );
+  opacity: 0.55;
+}
+
+.letterTopRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-block-start: 2px;
+}
+
+.letterSenderGroup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+/* Tactile wax seal / monogram stamp */
+.waxSeal {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  corner-shape: round;
+  background: var(--dsw-alias-state-business-primary);
+  color: var(--dsw-alias-button-primary-ink, #ffffff);
+  font-family: var(--dsh-font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  box-shadow:
+    inset 0 0 0 3px rgba(255, 255, 255, 0.28),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.18),
+    0 2px 6px rgba(15, 23, 42, 0.18);
+}
+
+.letterSenderInfo {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.letterSenderLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.letterSenderName {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 650;
+  color: var(--dsw-alias-label-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.letterSenderAddr {
+  font-size: 11.5px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.letterStar {
+  flex: none;
+  color: var(--dsw-alias-state-warn-primary, #d97706);
+}
+
+/* Circular / stamped postmark date badge */
+.postmark {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 68px;
+  padding: 5px 9px;
+  border-radius: var(--dsw-radius-md, 12px);
+  border: 1.5px dashed var(--dsw-alias-border-l3, var(--dsw-alias-border-l2));
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  transform: rotate(2.5deg);
+}
+
+.postmarkTag {
+  font: 700 9px/12px var(--dsh-font-mono, ui-monospace);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.postmark > strong {
+  font-family: var(--dsh-font-mono, ui-monospace);
+  font-size: 14px;
+  line-height: 18px;
+  font-weight: 700;
+  color: var(--dsw-alias-label-primary);
+}
+
+.postmark > small {
+  font-size: 10px;
+  line-height: 13px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.letterBadgeRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.letterMetaChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: var(--dsw-radius-xs, 6px);
+  border: var(--dsh-control-border-width, 0.5px) solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+}
+
+.letterMetaChip[data-tone="accent"] {
+  background: var(--dsw-alias-state-business-tertiary, rgba(65, 118, 230, 0.14));
+  border-color: var(--dsw-alias-state-business-primary);
+  color: var(--dsw-alias-state-business-primary);
+  font-weight: 650;
+}
+
+.letterFullDate {
+  margin-inline-start: auto;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.letterSubject {
+  margin: 0;
+  font-size: 20px;
+  line-height: 28px;
+  letter-spacing: -0.01em;
+  color: var(--dsw-alias-label-primary);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.letterExcerptBox {
+  padding: 12px 14px;
+  border-radius: var(--dsw-radius-sm, 10px);
+  border: var(--dsh-control-border-width, 0.5px) solid var(--dsw-alias-border-l1, var(--dsw-alias-border-l2));
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0 23px,
+      var(--dsw-alias-border-l1, rgba(148, 163, 184, 0.14)) 23px 24px
+    ),
+    var(--dsw-alias-bg-layer-1);
+}
+
+.letterExcerpt {
+  margin: 0;
+  font-size: 13px;
+  line-height: 24px;
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.letterEnvelopeNote {
+  display: grid;
+  gap: 2px;
+  font-size: 12.5px;
+  line-height: 24px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.letterEnvelopeNote > p {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.letterExcerptHint {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11.5px;
+  white-space: normal !important;
+}
+
+.letterAttachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.attachmentChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: var(--dsh-control-border-width, 0.5px) solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-size: 11.5px;
+  line-height: 16px;
+}
+
+.attachmentChip > svg {
+  flex: none;
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.attachmentChip > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachmentChip > small {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.letterCardFoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-block-start: 8px;
+  border-block-start: var(--dsh-control-border-width, 0.5px) dashed var(--dsw-alias-border-l2);
+}
+
+.letterDragCue {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.inlineFlipBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--dsw-radius-xs, 6px);
+  border: var(--dsh-control-border-width, 0.5px) solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 11.5px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.inlineFlipBtn:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 1px;
+}
+
+@media (hover: hover) {
+  .inlineFlipBtn:hover:not(:disabled) {
+    color: var(--dsw-alias-label-primary);
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+/* Back face: Envelope & server metadata */
+.letterBackHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.letterBackTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.letterBackTitle > h3 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.envelopeMetaGrid {
+  display: grid;
+  grid-template-columns: minmax(90px, auto) minmax(0, 1fr);
+  gap: 5px 12px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--dsw-radius-sm, 8px);
+  border: var(--dsh-control-border-width, 0.5px) solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.envelopeMetaGrid > dt {
+  color: var(--dsw-alias-label-tertiary);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.envelopeMetaGrid > dd {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.letterRawBlock {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.letterRawBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+  font-weight: 600;
+}
+
+.letterRawFetchBtn {
+  min-height: 22px;
+  font-size: 11px;
+}
+
+.letterRawPre {
+  margin: 0;
+  max-height: 112px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: var(--dsw-radius-xs, 6px);
+  border: var(--dsh-control-border-width, 0.5px) solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font: 11px/1.55 var(--dsh-font-mono, ui-monospace);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.letterBackFoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-block-start: 4px;
+}
+
+/* Floating action dock */
+.deskDock {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 10px;
+  max-width: 100%;
+  border-radius: var(--dsw-radius-md, 14px);
+  border: var(--dsh-control-border-width, 0.5px) solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-base));
+  box-shadow: var(--dsw-elevation-panel);
+}
+
+.deskFooter {
+  flex: none;
+  width: 100%;
+  max-width: 780px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  padding: 2px 4px 4px;
+}
+
+.deskFooterLeft,
+.deskFooterPages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+}
+
+/* Centered unfolded stationery reader sheet */
+.stationeryStage {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  padding: 16px 20px 24px;
+  overflow: auto;
+  outline: none;
+}
+
+.stationerySheet {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: min(780px, 100%);
+  min-height: 0;
+  max-height: 100%;
+  border-radius: var(--dsw-radius-lg, 16px);
+  border: var(--dsh-control-border-width, 1px) solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-base));
+  box-shadow: var(--dsw-elevation-prominent, 0 16px 42px rgba(15, 23, 42, 0.14));
+  overflow: clip;
+}
+
+.stationerySheet > .letterTrim {
+  margin-inline: 0;
+}
+
+.stationeryBar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 8px 14px;
+  border-block-end: var(--dsh-control-border-width, 0.5px) solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.foldBackBtn {
+  font-weight: 600;
+}
+
+.stationeryPos,
+.stationeryNav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stationeryCount {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stationeryBody {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ==========================================================================
+ * Motion & View Transitions (`prefers-reduced-motion` compliant)
+ * ========================================================================== */
+@media (prefers-reduced-motion: no-preference) {
+  .letterCardActive[data-dragging="false"] {
+    transition: transform 240ms var(--dsh-ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
+  }
+
+  .letterCardLayer {
+    transition:
+      transform 220ms var(--dsh-ease-out, cubic-bezier(0.22, 1, 0.36, 1)),
+      opacity 220ms var(--dsh-ease-out, cubic-bezier(0.22, 1, 0.36, 1));
+  }
+
+  .letterFlipper {
+    transition: transform 380ms var(--dsh-ease-out, cubic-bezier(0.22, 1, 0.36, 1));
+  }
+
+  .dragStampLeft,
+  .dragStampRight {
+    transition: opacity 90ms linear;
+  }
+
+  .letterCardActive {
+    view-transition-name: dsh-email-letter-sheet;
+  }
+
+  .stationerySheet {
+    view-transition-name: dsh-email-letter-sheet;
+  }
+
+  ::view-transition-old(dsh-email-letter-sheet),
+  ::view-transition-new(dsh-email-letter-sheet) {
+    animation-duration: 220ms;
+    animation-timing-function: var(--dsh-ease-out, cubic-bezier(0.22, 1, 0.36, 1));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .letterCardActive,
+  .letterCardLayer,
+  .letterCardExiting,
+  .letterFlipper,
+  .dragStampLeft,
+  .dragStampRight,
+  .stationerySheet {
+    animation: none !important;
+    transition: opacity 90ms ease !important;
+  }
+
+  .letterFlipper[data-flipped="true"],
+  .letterFaceBack {
+    transform: none !important;
+  }
+
+  .letterFlipper[data-flipped="false"] .letterFaceBack {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .letterFlipper[data-flipped="true"] .letterFaceFront {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .letterFlipper[data-flipped="true"] .letterFaceBack {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* ==========================================================================
+ * 13 `[data-dsh-style]` Bespoke Letter Desk Materiality Adaptations
+ * ========================================================================== */
+
+:global(body[data-ds-dark-theme]) :global([data-dsh-style="harness"]) .letterDesk {
+  background:
+    radial-gradient(ellipse 84% 72% at 50% 38%, #262c36 0%, #1f232b 66%, #1a1e26 100%);
+}
+
+:global([data-dsh-style="cream"]) .letterPaper,
+:global([data-dsh-style="cream"]) .stationerySheet {
+  box-shadow: var(--dsh-card-shadow), 0 12px 28px rgba(68, 52, 32, 0.10);
+}
+
+:global([data-dsh-style="cream"]) .waxSeal,
+:global([data-dsh-style="claude"]) .waxSeal {
+  background: #a65e2e;
+}
+
+:global([data-dsh-style="pixel8bit"]) .letterPaper,
+:global([data-dsh-style="pixel8bit"]) .stationerySheet,
+:global([data-dsh-style="pixel8bit"]) .deskDock,
+:global([data-dsh-style="pixel8bit"]) .viewToggle,
+:global([data-dsh-style="pixel8bit"]) .viewToggleBtn,
+:global([data-dsh-style="pixel8bit"]) .waxSeal,
+:global([data-dsh-style="pixel8bit"]) .postmark,
+:global([data-dsh-style="pixel8bit"]) .deskCounter,
+:global([data-dsh-style="pixel8bit"]) .attachmentChip,
+:global([data-dsh-style="pixel8bit"]) .deskCompleteCard,
+:global([data-dsh-style="pixel8bit"]) .deskEmptyCard {
+  border-radius: 0px !important;
+  corner-shape: square;
+}
+
+:global([data-dsh-style="pixel8bit"]) .letterPaper,
+:global([data-dsh-style="pixel8bit"]) .stationerySheet {
+  border: 2px solid #1e2826;
+  box-shadow: 4px 4px 0 #1e2826;
+}
+
+:global([data-dsh-style="pixel8bit"]) .deskDock {
+  border: 2px solid #1e2826;
+  box-shadow: 3px 3px 0 #1e2826;
+}
+
+:global([data-dsh-style="win98"]) .letterPaper,
+:global([data-dsh-style="win98"]) .stationerySheet,
+:global([data-dsh-style="win98"]) .deskDock,
+:global([data-dsh-style="win98"]) .viewToggle,
+:global([data-dsh-style="win98"]) .viewToggleBtn,
+:global([data-dsh-style="win98"]) .postmark,
+:global([data-dsh-style="win98"]) .waxSeal,
+:global([data-dsh-style="win98"]) .deskCounter {
+  border-radius: 0px !important;
+}
+
+:global([data-dsh-style="win98"]) .letterPaper,
+:global([data-dsh-style="win98"]) .stationerySheet,
+:global([data-dsh-style="win98"]) .deskDock {
+  border: 1px solid #808080;
+  box-shadow: inset 1px 1px 0 #ffffff, inset -1px -1px 0 #808080, 2px 2px 0 rgba(0, 0, 0, 0.25);
+}
+
+:global([data-dsh-style="win98"]) .letterTrim {
+  height: 6px;
+  background: linear-gradient(90deg, #000080 0%, #1084d0 100%);
+  opacity: 1;
+}
+
+:global([data-dsh-style="songhui"]) .waxSeal {
+  border-radius: 4px;
+  background: #b83b2a;
+  box-shadow: inset 0 0 0 2px #f7f3e8, 0 0 0 1px #b83b2a;
+}
+
+:global([data-dsh-style="songhui"]) .letterTrim {
+  height: 4px;
+  background: #b83b2a;
+  border-block-end: 1px solid #b83b2a;
+  opacity: 0.85;
+}
+
+:global([data-dsh-style="gazette"]) .letterPaper,
+:global([data-dsh-style="gazette"]) .stationerySheet,
+:global([data-dsh-style="gazette"]) .deskDock {
+  border-radius: 2px;
+  border: 1px solid #161514;
+}
+
+:global([data-dsh-style="gazette"]) .letterTrim {
+  height: 6px;
+  background: #161514;
+  border-block-end: 2px solid #9b1c1c;
+  opacity: 0.92;
+}
+
+:global([data-dsh-style="gazette"]) .waxSeal {
+  background: #9b1c1c;
+}
+
+:global([data-dsh-style="blueprint"]) .letterDesk {
+  background:
+    linear-gradient(to right, rgba(13, 59, 102, 0.07) 1px, transparent 1px) 0 0 / 24px 24px,
+    linear-gradient(to bottom, rgba(13, 59, 102, 0.07) 1px, transparent 1px) 0 0 / 24px 24px,
+    var(--dsw-alias-bg-base);
+}
+
+:global([data-dsh-style="blueprint"]) .letterPaper,
+:global([data-dsh-style="blueprint"]) .stationerySheet {
+  border: 1.5px solid #0d3b66;
+}
+
+:global([data-dsh-style="blueprint"]) .waxSeal {
+  background: #e05a2b;
+}
+
+:global([data-dsh-style="risograph"]) .letterPaper,
+:global([data-dsh-style="risograph"]) .stationerySheet {
+  border: 2px solid #18181b;
+  box-shadow: 5px 5px 0 #ff3e7f, -2px -2px 0 #2563eb;
+}
+
+:global([data-dsh-style="eink"]) .letterPaper,
+:global([data-dsh-style="eink"]) .stationerySheet,
+:global([data-dsh-style="eink"]) .deskDock {
+  border: 1.5px solid #171716;
+  box-shadow: none;
+}
+
+:global([data-dsh-style="eink"]) .letterTrim {
+  background: #171716;
+  height: 3px;
+  opacity: 0.9;
+}
+
+:global([data-dsh-style="glass"]) .letterPaper,
+:global([data-dsh-style="glass"]) .stationerySheet,
+:global([data-dsh-style="frutiger"]) .letterPaper,
+:global([data-dsh-style="frutiger"]) .stationerySheet {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), var(--dsw-elevation-prominent);
+}
+
+/* Container responsiveness for narrow panels */
+@container (max-width: 760px) {
+  .deskRibbon {
+    padding: 8px 10px;
+  }
+
+  .deskSearchGroup {
+    order: 3;
+    flex-basis: 100%;
+    justify-content: flex-start;
+  }
+
+  .deskMain {
+    padding: 12px 10px 8px;
+  }
+
+  .letterPaper {
+    padding: 0 14px 12px;
+  }
+
+  .letterTrim {
+    margin-inline: -14px;
+  }
+
+  .letterSubject {
+    font-size: 17px;
+    line-height: 24px;
+  }
+
+  .stationeryStage {
+    padding: 10px;
+  }
+
+  .envelopeMetaGrid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+}

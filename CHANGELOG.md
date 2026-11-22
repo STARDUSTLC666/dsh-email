@@ -1,5 +1,12 @@
 # 更新记录
 
+## 0.32.0 (2026-11-22)
+
+- **全新「信桌（Letter Desk）」默认交互工作台**：收发邮件默认采用实体航空信封叠卡流，支持直接左滑跳过、右滑展开、点击「翻面看信封头」查看 3D 背面完整投递元信息、点击「展开信纸全文」阅读信纸正文并自动按设置标记已读、同步扣减文件夹未读计数；顶栏提供 `信桌 / 三栏` 一键切换，可随时切回经典三栏布局（完整保留层级文件夹未读数与本地 SQLite 通讯录姓名显示/拼音补全）。
+- **更新 5 步 `? 引导`（Coachmark Tour）与文档配图**：5 步聚光灯引导精准覆盖「信桌/三栏切换与紧凑筛选带」「实体叠卡手势与 3D 翻面」「鲸鱼娘信使」「13 风格 × 8 双层字体切换（默认幼圆等宽）」「写信与草稿」；同步更新 `README`、`USAGE`、`WORKBENCH`、`MAILBOX` 文档、中英工作流示意图与最新界面截图。
+- **Bespoke Letter Desk (`信桌`) Default Workbench**: Reading mail now opens in a tactile airmail envelope stack by default—drag left to skip, drag right or click to unfold the stationery sheet (honoring `markReadOnOpen` and per-folder unread count updates), or flip 3D to inspect full envelope headers. Switch back to the classic 3-pane layout in one click via the `Letter Desk / 3-Pane` toggle while keeping hierarchical folder unread counts and local SQLite address book display/autocomplete intact.
+- **Refreshed 5-Step `? Tour` & Docs**: Updated the 5-step spotlight tour anchors for the new Letter Desk workflow (`Letter Desk / 3-Pane` & filter ribbon, physical letter stack & 3D flip, Whale-Girl Courier, 13 light themes × 8 dual-layer font pairings defaulting to YouYuan Mono, and Compose/Drafts), alongside refreshed bilingual docs, workflow diagrams, and UI screenshots.
+
 ## 0.31.0 (2026-11-21)
 
 - 自定义邮件服务器支持粘贴带协议、路径或端口的地址，也接受 IPv6。填写了独立端口时优先使用它，否则保留地址中的端口。IMAP、SMTP 和 POP3 校验证书时同时使用系统信任库、Node 根证书和 `NODE_EXTRA_CA_CERTS`。

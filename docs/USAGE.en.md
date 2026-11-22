@@ -8,7 +8,7 @@ For 0.22.0, see [formatted mail, threaded replies and Trash](MAILBOX.en.md) for 
 
 ## Current improvements
 
-Mailbox now provides Inbox/Sent browsing, paging/search, plain-text reading, attachment downloads, read/star flags and replies saved to drafts for review. Both IMAP/SMTP and AgentMail US/EU accounts are supported. See [AgentMail setup and limits](AGENTMAIL.en.md) for opaque message IDs, API relevance search, attachment caps and simulated acceptance. The header fallback and numeric UID descriptions below apply to IMAP.
+**Mailbox** opens in the tactile **Letter Desk (`Desk`)** by default (compact account/folder-tree ribbon with unread counts, search, Unread/Attachments filters, remaining count, and 1-click **Desk / 3-Pane** toggle; 3-deep stacked airmail Letter Cards supporting drag-left skip, drag-right unfold, 3D **Envelope header** flip, and **Unfold full letter** reading), with 1-click toggle back to classic 3-Pane, plus 13 bright styles, 8 dual-layer fonts (default: YouYuan Mono), interactive Whale-Girl **Courier**, and `? Tour` in the topbar. Both IMAP/SMTP, POP3 and AgentMail US/EU accounts are supported. See [AgentMail setup and limits](AGENTMAIL.en.md) for opaque message IDs, API relevance search, attachment caps and simulated acceptance. The header fallback and numeric UID descriptions below apply to IMAP.
 
 Relative attachment paths in `email_send` and `email_draft` resolve against the current session workspace, avoiding a same-name file in the DSH startup directory after switching workspaces. Absolute paths remain exact; calls without session context retain startup-directory fallback.
 

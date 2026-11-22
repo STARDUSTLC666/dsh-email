@@ -565,7 +565,494 @@ function MailWorkflowBar({ account, folder, selected, detail, currentRow, who })
         }, announcement))));
 }
 
+const LETTER_DRAG_THRESHOLD = 90;
+
+function prefersReducedMotion() {
+  try {
+    return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
+}
+
+function runViewTransition(update) {
+  if (!prefersReducedMotion() && typeof document !== 'undefined' && typeof document.startViewTransition === 'function') {
+    try {
+      return document.startViewTransition(update);
+    } catch {
+      // Fall back cleanly when view transitions are unavailable or interrupted.
+    }
+  }
+  update();
+  return null;
+}
+
+function scheduleFocus(fn) {
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(fn);
+  } else {
+    fn();
+  }
+}
+
+function protocolLabel(accountRow) {
+  return accountRow?.incoming === 'agentmail' ? 'AgentMail' : accountRow?.incoming === 'pop3' ? 'POP3' : 'IMAP';
+}
+
+function senderInitials(from) {
+  const raw = (contactDisplayName(from?.[0]) || from?.[0]?.name || from?.[0]?.address || '?').trim();
+  if (!raw) return '?';
+  const parts = raw.split(/[\s._-]+/).filter(Boolean);
+  if (parts.length >= 2 && /^[A-Za-z0-9]/.test(parts[0]) && /^[A-Za-z0-9]/.test(parts[1])) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return Array.from(raw).slice(0, 2).join('').toUpperCase();
+}
+
+function formatLetterBytes(size) {
+  const value = Number(size);
+  if (!Number.isFinite(value) || value <= 0) return '';
+  if (value < 1024) return value + ' B';
+  if (value < 1024 * 1024) return Math.max(1, Math.round(value / 1024)) + ' KiB';
+  return (value / (1024 * 1024)).toFixed(1) + ' MiB';
+}
+
+function postmarkStamp(value) {
+  const parsed = value ? new Date(value) : null;
+  if (!parsed || Number.isNaN(parsed.getTime())) {
+    return { monthDay: '--.--', year: '', full: value || dt('时间未知', 'Unknown date') };
+  }
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getDate()).padStart(2, '0');
+  return {
+    monthDay: month + '.' + day,
+    year: String(parsed.getFullYear()),
+    full: formatDate(value),
+  };
+}
+
+function letterSnippet(row, cached) {
+  const raw = row?.preview || row?.snippet || row?.excerpt || cached?.text || row?.text || '';
+  if (typeof raw !== 'string' || !raw.trim()) return '';
+  const compact = raw.replace(/\s+/g, ' ').trim();
+  return compact.length > 220 ? compact.slice(0, 220).trimEnd() + '…' : compact;
+}
+
+function isInteractiveTarget(target) {
+  return Boolean(target?.closest?.('button, a, input, select, textarea, summary, [role="button"], [role="menuitem"], [data-no-drag]'));
+}
+
+function MailViewToggle({ viewMode, onChange, disabled }) {
+  return h('div', {
+    className: mailCss.viewToggle,
+    role: 'group',
+    'aria-label': dt('视图模式', 'View mode'),
+    'data-email-view-toggle': 'true',
+    'data-view-mode': viewMode,
+    'data-no-drag': 'true',
+  },
+    h('button', {
+      type: 'button',
+      className: mailCss.viewToggleBtn,
+      'aria-pressed': viewMode === 'desk',
+      'data-view-option': 'desk',
+      disabled,
+      onClick: () => { if (viewMode !== 'desk') onChange('desk'); },
+    }, h(W.Icon, { name: 'layers', size: 13 }), h('span', null, dt('信桌', 'Desk'))),
+    h('button', {
+      type: 'button',
+      className: mailCss.viewToggleBtn,
+      'aria-pressed': viewMode === '3pane',
+      'data-view-option': '3pane',
+      disabled,
+      onClick: () => { if (viewMode !== '3pane') onChange('3pane'); },
+    }, h(W.Icon, { name: 'columns', size: 13 }), h('span', null, dt('三栏', '3-Pane'))));
+}
+
+function MailDeskRibbon({
+  accounts, account, activeAccount, folder, folders, folderName,
+  busy, listLoading, foldersLoading, isPop3,
+  input, query, unread, withAttachments, remainingCount, viewMode,
+  onAccount, onFolder, onManageFolders, onInput, onSearch, onRefresh,
+  onToggleUnread, onToggleAttachments, onClearSearch, onViewMode,
+}) {
+  const proto = protocolLabel(activeAccount);
+  const orderedFolders = flattenFolderTree(buildFolderTree(folders));
+  const folderIcon = folders.find(row => row.path === folder);
+  const folderUnseen = Number.isSafeInteger(folderIcon?.unseen) && folderIcon.unseen > 0 ? folderIcon.unseen : 0;
+  const folderGlyph = folderIcon?.specialUse === '\\Trash' ? 'trash'
+    : folderIcon?.specialUse === '\\Sent' ? 'send'
+    : folderIcon?.specialUse === '\\Inbox' || folder === 'INBOX' ? 'inbox' : 'folder';
+
+  return h('div', { className: mailCss.deskRibbon, 'data-desk-ribbon': 'true', 'data-tour': 'mail-filter' },
+    h('div', { className: mailCss.deskScope },
+      h('div', { className: mailCss.deskPillWrap },
+        h(W.ChoiceMenu, {
+          className: mailCss.deskPillMenu,
+          label: dt('邮箱账号', 'Account') + (activeAccount ? ' · ' + activeAccount.name : ''),
+          value: account,
+          disabled: busy,
+          onChange: onAccount,
+          items: accounts.map(row => ({ id: row.name, label: row.name + ' · ' + (row.user || protocolLabel(row)) })),
+        }, activeAccount ? h('span', { className: mailCss.deskAccountPill },
+          h(W.Icon, { name: 'mail', size: 13 }),
+          h('span', { className: mailCss.deskPillText }, activeAccount.user || activeAccount.name),
+          h('span', { className: mailCss.deskProtoTag }, proto)) : null)),
+      h('div', { className: mailCss.deskPillWrap },
+        h(W.ChoiceMenu, {
+          className: mailCss.deskPillMenu,
+          label: dt('文件夹', 'Folder') + (folderName ? ' · ' + folderName : ''),
+          value: folder,
+          disabled: busy || foldersLoading || folders.length === 0,
+          onChange: onFolder,
+          items: orderedFolders.map(({ row, depth, orphan }) => {
+            const base = orphan ? row.path : folderLabel(row);
+            const prefix = depth > 0 ? '\u00A0\u00A0'.repeat(depth) + '↳ ' : '';
+            const count = Number.isSafeInteger(row.unseen) && row.unseen > 0 ? ' (' + (row.unseen > 999 ? '999+' : String(row.unseen)) + ')' : '';
+            return { id: row.path, label: prefix + base + count };
+          }),
+        }, h('span', { className: mailCss.deskFolderPill },
+          h(W.Icon, { name: folderGlyph, size: 13 }),
+          h('span', { className: mailCss.deskPillText }, folderName || dt('收件箱', 'Inbox')),
+          folderUnseen > 0 ? h('span', { className: mailCss.folderUnread, 'aria-hidden': 'true' }, folderUnseen > 999 ? '999+' : String(folderUnseen)) : null))),
+      activeAccount?.incoming === 'imap'
+        ? h(W.IconButton, { icon: 'plus', label: dt('管理文件夹', 'Manage folders'), disabled: busy || foldersLoading, onClick: onManageFolders })
+        : null),
+    h('div', { className: mailCss.deskSearchGroup },
+      h('form', { className: mailCss.deskSearchForm, onSubmit: onSearch },
+        h(W.Input, {
+          icon: 'search',
+          type: 'search',
+          className: mailCss.deskSearchInput,
+          'aria-label': dt('搜索当前文件夹', 'Search current folder'),
+          placeholder: dt('搜索当前文件夹', 'Search current folder'),
+          value: input,
+          maxLength: 500,
+          disabled: busy,
+          onChange: event => onInput(event.target.value),
+        }),
+        h(W.IconButton, { icon: 'search', label: dt('搜索', 'Search'), type: 'submit', disabled: listLoading || busy || !folder }),
+        h(W.IconButton, { icon: 'refresh', label: dt('刷新邮件', 'Refresh mail'), 'aria-busy': listLoading || undefined, disabled: listLoading || busy || !folder, onClick: onRefresh })),
+      h('div', { className: mailCss.deskFilterPills },
+        !isPop3 ? h(W.Button, {
+          variant: unread ? 'primary' : 'outline',
+          className: mailCss.deskFilterBtn,
+          disabled: busy || !!query,
+          'aria-pressed': unread,
+          onClick: onToggleUnread,
+        }, dt('只看未读', 'Unread only')) : null,
+        h(W.Button, {
+          variant: withAttachments ? 'primary' : 'outline',
+          className: mailCss.deskFilterBtn,
+          disabled: busy,
+          'aria-pressed': withAttachments,
+          onClick: onToggleAttachments,
+        }, dt('本页有附件', 'With attachments')),
+        query ? h(W.Button, {
+          variant: 'ghost',
+          className: mailCss.deskFilterBtn,
+          disabled: busy,
+          onClick: onClearSearch,
+        }, dt('清除搜索', 'Clear search')) : null)),
+    h('div', { className: mailCss.deskMetaGroup },
+      h('span', {
+        className: mailCss.deskCounter,
+        'data-desk-counter': 'true',
+        role: 'status',
+      }, dt('待阅 ', '') + remainingCount + dt(' 封', ' to read')),
+      h(MailViewToggle, { viewMode, onChange: onViewMode, disabled: busy })));
+}
+
+function MailLetterStackCard({ row, layer, who, dragProgress = 0, exiting = false }) {
+  const subject = row.subject || dt('（无主题）', '(No subject)');
+  const sender = senderLabelOf(row.from?.[0]) || who(row.from) || dt('未知发件人', 'Unknown sender');
+  const initials = senderInitials(row.from);
+  const stamp = postmarkStamp(row.date);
+  let style;
+  if (!exiting) {
+    if (layer === 1) {
+      const scale = (0.95 + dragProgress * 0.035).toFixed(3);
+      const tilt = (2.2 - dragProgress * 1.4).toFixed(2);
+      const ty = Math.round(16 - dragProgress * 8);
+      const tx = Math.round(10 - dragProgress * 6);
+      style = { transform: 'translate3d(' + tx + 'px, ' + ty + 'px, 0px) scale(' + scale + ') rotate(' + tilt + 'deg)' };
+    } else if (layer === 2) {
+      const scale = (0.90 + dragProgress * 0.03).toFixed(3);
+      const tilt = (-2.6 + dragProgress * 0.6).toFixed(2);
+      const ty = Math.round(28 - dragProgress * 6);
+      style = { transform: 'translate3d(-12px, ' + ty + 'px, 0px) scale(' + scale + ') rotate(' + tilt + 'deg)' };
+    }
+  }
+  return h('div', {
+    className: clsx(mailCss.letterCardShell, exiting ? mailCss.letterCardExiting : mailCss.letterCardLayer),
+    'data-letter-card': exiting ? 'exiting' : 'stack',
+    'data-letter-layer': exiting ? 'exit' : String(layer),
+    'data-letter-uid': String(row.uid),
+    'aria-hidden': 'true',
+    style,
+  },
+    h('div', { className: mailCss.letterPaper },
+      h('div', { className: mailCss.letterTrim }),
+      h('div', { className: mailCss.letterTopRow },
+        h('div', { className: mailCss.letterSenderGroup },
+          h('span', { className: mailCss.waxSeal }, initials),
+          h('div', { className: mailCss.letterSenderInfo },
+            h('strong', { className: mailCss.letterSenderName }, sender),
+            h('span', { className: mailCss.letterSenderAddr }, who(row.from)))),
+        h('span', { className: mailCss.postmark },
+          h('strong', null, stamp.monthDay),
+          stamp.year ? h('small', null, stamp.year) : null)),
+      h('h2', { className: mailCss.letterSubject, 'data-dsh-serif': '' }, subject)));
+}
+
+function MailLetterCard({
+  row, cached, account, activeAccount, folder, folderName, uidValidity,
+  flipped, drag, busy, who, cardRef, pointerHandlers, onKeyDown,
+  onToggleFlip, onUnfold, onQuickReply, onLoadHeaders, loadingHeaders,
+}) {
+  const subject = row.subject || dt('（无主题）', '(No subject)');
+  const fromList = cached?.from || row.from;
+  const fromFull = who(fromList) || dt('未知发件人', 'Unknown sender');
+  const senderDisplay = senderLabelOf(fromList?.[0]) || fromFull;
+  const toFull = who(cached?.to || row.to) || (activeAccount?.user ? activeAccount.user + ' (' + dt('当前账号', 'Current account') + ')' : account);
+  const ccFull = who(cached?.cc || row.cc);
+  const initials = senderInitials(fromList);
+  const stamp = postmarkStamp(row.date);
+  const proto = protocolLabel(activeAccount);
+  const unseen = row.flagsSupported !== false && !row.seen;
+  const sizeLabel = formatLetterBytes(row.size);
+  const snippet = letterSnippet(row, cached);
+  const attachments = cached?.attachments || row.attachments || [];
+  const hasAttachments = attachments.length > 0 || Boolean(row.hasAttachments);
+  const rawHeaders = typeof cached?.rawHeaders === 'string' && cached.rawHeaders ? cached.rawHeaders : '';
+  const synthesizedHeaders = [
+    ['From', fromFull],
+    ['To', toFull],
+    ['Cc', ccFull],
+    ['Subject', row.subject || dt('（无主题）', '(No subject)')],
+    ['Date', row.date || stamp.full],
+    ['X-DSH-Account', account],
+    ['X-DSH-Folder', folder],
+    ['X-DSH-Protocol', proto],
+    ['X-DSH-UID', String(row.uid) + (uidValidity ? ' (UIDVALIDITY ' + uidValidity + ')' : '')],
+    ['X-DSH-Flags', row.flagsSupported === false ? 'unsupported (POP3)' : [row.seen ? 'Seen' : 'Unseen', row.flagged ? 'Flagged' : ''].filter(Boolean).join(', ')],
+  ].filter(([, value]) => value).map(([k, v]) => k + ': ' + v).join('\n');
+  const headerText = rawHeaders || synthesizedHeaders;
+
+  const leftOpacity = drag.x < -14 ? Math.min(1, (-drag.x - 14) / (LETTER_DRAG_THRESHOLD - 14)) : 0;
+  const rightOpacity = drag.x > 14 ? Math.min(1, (drag.x - 14) / (LETTER_DRAG_THRESHOLD - 14)) : 0;
+  const rot = Math.max(-13, Math.min(13, drag.x * 0.055));
+  const dragStyle = drag.active || drag.x !== 0 || drag.y !== 0
+    ? { transform: 'translate3d(' + Math.round(drag.x) + 'px, ' + Math.round(drag.y * 0.16) + 'px, 0px) rotate(' + rot.toFixed(2) + 'deg)' }
+    : undefined;
+
+  return h('div', {
+    ref: cardRef,
+    tabIndex: 0,
+    role: 'region',
+    'aria-label': dt('当前书信卡片：', 'Current letter card: ') + subject,
+    className: clsx(mailCss.letterCardShell, mailCss.letterCardActive),
+    'data-letter-card': 'active',
+    'data-tour': 'mail-letter-card',
+    'data-letter-layer': '0',
+    'data-letter-uid': String(row.uid),
+    'data-flipped': flipped ? 'true' : 'false',
+    'data-dragging': drag.active ? 'true' : 'false',
+    'data-unread': unseen ? 'true' : 'false',
+    style: dragStyle,
+    onPointerDown: pointerHandlers.onPointerDown,
+    onPointerMove: pointerHandlers.onPointerMove,
+    onPointerUp: pointerHandlers.onPointerUp,
+    onPointerCancel: pointerHandlers.onPointerCancel,
+    onKeyDown,
+  },
+    h('div', {
+      className: mailCss.dragStampLeft,
+      'data-drag-stamp': 'left',
+      'data-ready': drag.x <= -LETTER_DRAG_THRESHOLD ? 'true' : 'false',
+      'aria-hidden': 'true',
+      style: { opacity: leftOpacity },
+    }, dt('← 跳过 / 下一封', '← Skip / Next')),
+    h('div', {
+      className: mailCss.dragStampRight,
+      'data-drag-stamp': 'right',
+      'data-ready': drag.x >= LETTER_DRAG_THRESHOLD ? 'true' : 'false',
+      'aria-hidden': 'true',
+      style: { opacity: rightOpacity },
+    }, dt('→ 快捷回复 / 展开', '→ Quick Reply / Open')),
+    h('div', { className: mailCss.letterFlipper, 'data-flipped': flipped ? 'true' : 'false' },
+      h('article', {
+        className: clsx(mailCss.letterPaper, mailCss.letterFaceFront),
+        'data-letter-face': 'front',
+        'aria-hidden': flipped ? 'true' : undefined,
+      },
+        h('div', { className: mailCss.letterTrim }),
+        h('div', { className: mailCss.letterTopRow },
+          h('div', { className: mailCss.letterSenderGroup },
+            h('span', { className: mailCss.waxSeal, 'aria-hidden': 'true' }, initials),
+            h('div', { className: mailCss.letterSenderInfo },
+              h('div', { className: mailCss.letterSenderLine },
+                unseen ? h('span', { className: mailCss.unreadDot, role: 'img', 'aria-label': dt('未读', 'Unread') }) : null,
+                h('strong', { className: mailCss.letterSenderName, title: fromFull }, senderDisplay),
+                row.flagged ? h(W.Icon, { name: 'star', size: 13, className: mailCss.letterStar }) : null),
+              h('span', { className: mailCss.letterSenderAddr, title: fromFull }, fromFull))),
+          h('div', { className: mailCss.postmark, title: stamp.full },
+            h('span', { className: mailCss.postmarkTag }, proto),
+            h('strong', null, stamp.monthDay),
+            h('small', null, stamp.year || stamp.full))),
+        h('div', { className: mailCss.letterBadgeRow },
+          h('span', { className: mailCss.letterMetaChip, 'data-tone': unseen ? 'accent' : undefined },
+            unseen ? dt('未读来信', 'Unread') : row.flagsSupported === false ? dt('POP3 来信', 'POP3 mail') : dt('已阅', 'Read')),
+          h('span', { className: mailCss.letterMetaChip }, folderName),
+          sizeLabel ? h('span', { className: mailCss.letterMetaChip }, sizeLabel) : null,
+          h('time', { className: mailCss.letterFullDate, dateTime: row.date }, stamp.full)),
+        h('h2', { className: mailCss.letterSubject, 'data-dsh-serif': '' }, subject),
+        h('div', { className: mailCss.letterExcerptBox },
+          snippet
+            ? h('p', { className: mailCss.letterExcerpt }, snippet)
+            : h('div', { className: mailCss.letterEnvelopeNote },
+                h('p', null, dt('发件地址：', 'From: ') + fromFull),
+                h('p', null, dt('投递箱：', 'Mailbox: ') + account + ' · ' + folderName + ' (' + proto + ')' + (sizeLabel ? ' · ' + sizeLabel : '')),
+                h('p', { className: mailCss.letterExcerptHint }, dt('点击下方「展开信纸全文」或向右拖出即可阅读完整图文正文与附件。', 'Click "Unfold full letter" or drag right to read the full body & attachments.')))),
+        hasAttachments ? h('div', { className: mailCss.letterAttachments, 'data-letter-attachments': 'true' },
+          attachments.length > 0
+            ? h(React.Fragment, null,
+                attachments.slice(0, 3).map((file, idx) => h('span', { key: idx, className: mailCss.attachmentChip },
+                  h(W.Icon, { name: 'clip', size: 12 }),
+                  h('span', null, file.filename),
+                  file.size ? h('small', null, formatLetterBytes(file.size)) : null)),
+                attachments.length > 3 ? h('span', { className: mailCss.attachmentChip }, '+' + (attachments.length - 3)) : null)
+            : h('span', { className: mailCss.attachmentChip },
+                h(W.Icon, { name: 'clip', size: 12 }),
+                h('span', null, dt('包含附件 · 展开信纸查看与下载', 'Has attachments · Unfold to download')))) : null,
+        h('div', { className: mailCss.letterCardFoot },
+          h('span', { className: mailCss.letterDragCue }, 'UID #' + row.uid + ' · ' + dt('← 左滑跳过 · 右滑展开 →', '← Drag left skip · Drag right open →')),
+          h('button', {
+            type: 'button',
+            className: mailCss.inlineFlipBtn,
+            'data-email-flip': 'true',
+            'data-no-drag': 'true',
+            'aria-pressed': flipped,
+            disabled: busy,
+            tabIndex: flipped ? -1 : 0,
+            onClick: onToggleFlip,
+          }, h(W.Icon, { name: 'flip', size: 13 }), h('span', null, dt('翻面看信封头', 'Envelope header'))))),
+      h('section', {
+        className: clsx(mailCss.letterPaper, mailCss.letterFaceBack),
+        'data-letter-face': 'back',
+        'aria-hidden': !flipped ? 'true' : undefined,
+      },
+        h('div', { className: mailCss.letterTrim }),
+        h('div', { className: mailCss.letterBackHead },
+          h('div', { className: mailCss.letterBackTitle },
+            h('h3', { 'data-dsh-serif': '' }, dt('信封头与投递元数据', 'Envelope & Server Metadata')),
+            h('span', { className: mailCss.deskProtoTag }, proto)),
+          h('button', {
+            type: 'button',
+            className: mailCss.inlineFlipBtn,
+            'data-email-flip': 'true',
+            'data-no-drag': 'true',
+            'aria-pressed': flipped,
+            tabIndex: flipped ? 0 : -1,
+            onClick: onToggleFlip,
+          }, h(W.Icon, { name: 'flip', size: 13 }), h('span', null, dt('翻回信纸正面', 'Back to front')))),
+        h('dl', { className: mailCss.envelopeMetaGrid },
+          h('dt', null, dt('发件人 (From)', 'From')),
+          h('dd', null, fromFull),
+          h('dt', null, dt('收件人 (To)', 'To')),
+          h('dd', null, toFull),
+          ccFull ? h(React.Fragment, null, h('dt', null, dt('抄送 (Cc)', 'Cc')), h('dd', null, ccFull)) : null,
+          h('dt', null, dt('时间 (Date)', 'Date')),
+          h('dd', null, stamp.full + (row.date && row.date !== stamp.full ? ' (' + row.date + ')' : '')),
+          h('dt', null, dt('编号与协议', 'UID & Protocol')),
+          h('dd', null, 'UID ' + row.uid + (uidValidity ? ' · VALIDITY ' + uidValidity : '') + ' · ' + proto + ' · ' + account + ' / ' + folder),
+          h('dt', null, dt('状态标记', 'Flags')),
+          h('dd', null, row.flagsSupported === false
+            ? dt('POP3 不提供服务器已读 / 星标标记', 'POP3 does not expose server read/star flags')
+            : (row.seen ? dt('已读', 'Seen') : dt('未读', 'Unseen')) + (row.flagged ? ' · ★ ' + dt('已星标', 'Starred') : '')),
+          h('dt', null, dt('体积与附件', 'Size & Attachments')),
+          h('dd', null, (sizeLabel || dt('未知', 'Unknown')) + ' · ' + (attachments.length
+            ? attachments.map(a => a.filename).join(', ')
+            : hasAttachments ? dt('包含附件（展开信纸可下载）', 'Has attachments (unfold to download)') : dt('无附件', 'None')))),
+        h('div', { className: mailCss.letterRawBlock, 'data-no-drag': 'true' },
+          h('div', { className: mailCss.letterRawBar },
+            h('span', null, rawHeaders ? dt('原始邮件头', 'Raw headers') : dt('信封与服务器字段', 'Envelope & server fields')),
+            !cached && onLoadHeaders ? h(W.Button, {
+              variant: 'ghost',
+              className: mailCss.letterRawFetchBtn,
+              disabled: busy || loadingHeaders,
+              tabIndex: flipped ? 0 : -1,
+              onClick: () => onLoadHeaders(row.uid),
+            }, loadingHeaders ? dt('读取中…', 'Fetching…') : dt('读取完整信封头', 'Fetch full headers')) : null),
+          h('pre', { className: mailCss.letterRawPre }, headerText)),
+        h('div', { className: mailCss.letterBackFoot, 'data-no-drag': 'true' },
+          h(W.Button, { variant: 'primary', icon: 'expand', disabled: busy, tabIndex: flipped ? 0 : -1, onClick: () => onUnfold(row) }, dt('展开信纸全文', 'Unfold full letter')),
+          h(W.Button, { variant: 'outline', icon: 'reply', disabled: busy, tabIndex: flipped ? 0 : -1, onClick: () => onQuickReply(row) }, dt('回复到草稿', 'Reply in drafts'))))));
+}
+
+function MailStationerySheet({
+  row, activePos, totalCount, folderName, account, folder, selected,
+  detail, reading, readError, busy, run, who, canTrash,
+  onFoldBack, onPrev, onNext, onRetryRead, onDraft, onTrash, onMark,
+  sheetRef, sheetBackRef,
+}) {
+  return h('div', {
+    ref: sheetRef,
+    className: mailCss.stationeryStage,
+    'data-letter-sheet': 'true',
+    tabIndex: -1,
+    onKeyDown: event => {
+      if (event.key === 'Escape' && !event.isComposing) {
+        event.preventDefault();
+        onFoldBack();
+      }
+    },
+  },
+    h('div', { className: mailCss.stationerySheet },
+      h('div', { className: mailCss.letterTrim }),
+      h('div', { className: mailCss.stationeryBar },
+        h('button', {
+          ref: sheetBackRef,
+          type: 'button',
+          className: clsx('dsh-btn', uiCss.button, uiCss.outline, mailCss.foldBackBtn),
+          'data-email-fold-back': 'true',
+          disabled: busy,
+          onClick: onFoldBack,
+        }, h(W.Icon, { name: 'left', size: 14 }), h('span', null, dt('收拢回信桌', 'Fold back to desk'))),
+        h('div', { className: mailCss.stationeryPos },
+          h('span', { className: mailCss.letterMetaChip }, folderName),
+          totalCount > 0 ? h('span', { className: mailCss.stationeryCount }, dt('第 ', 'Letter ') + (activePos + 1) + ' / ' + totalCount + dt(' 封', '')) : null),
+        h('div', { className: mailCss.stationeryNav },
+          h(W.IconButton, { icon: 'left', label: dt('上一封', 'Previous letter'), disabled: busy || activePos <= 0, onClick: onPrev }),
+          h(W.IconButton, { icon: 'right', label: dt('下一封', 'Next letter'), disabled: busy || activePos < 0 || activePos >= totalCount - 1, onClick: onNext }))),
+      h('div', { className: mailCss.stationeryBody, 'aria-busy': reading || undefined },
+        reading && selected !== null
+          ? h('div', { className: mailCss.readerSkeleton, role: 'status', 'aria-busy': 'true', 'aria-label': dt('正在读取正文…', 'Loading message…') },
+              h(W.Skeleton, { variant: 'text', lines: 1, width: '62%', height: '22px' }),
+              h(W.Skeleton, { variant: 'card' }),
+              h(W.Skeleton, { variant: 'text', lines: 5 }))
+          : readError && selected !== null
+            ? h(W.Empty, {
+                title: dt('这封邮件没有读出来', 'This message could not be loaded'),
+                action: h(W.Button, { icon: 'refresh', disabled: busy, onClick: onRetryRead }, dt('重试', 'Retry')),
+              }, readError)
+            : detail
+              ? h(MailMessage, {
+                  key: JSON.stringify([account, folder, selected, detail.rich?.images?.[0]?.id]),
+                  detail, currentRow: row, account, folder, selected, busy, run, who, date: formatDate, onDraft, canTrash, onTrash, onMark,
+                })
+              : null)));
+}
+
 function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
+  const [viewMode, setViewMode] = useState('desk');
+  const [deckIndex, setDeckIndex] = useState(0);
+  const [flipped, setFlipped] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [drag, setDrag] = useState({ x: 0, y: 0, active: false });
+  const [flyingOut, setFlyingOut] = useState(null);
+  const [envelopeCache, setEnvelopeCache] = useState({});
+  const [headersLoadingUid, setHeadersLoadingUid] = useState(null);
   const [accountsLoading, setAccountsLoading] = useState(true);
   const [accountReload, setAccountReload] = useState(0);
   const [accounts, setAccounts] = useState([]);
@@ -598,6 +1085,12 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
   const context = useRef(0);
   const readerBack = useRef(null);
   const openedRow = useRef(null);
+  const deskCardRef = useRef(null);
+  const sheetRef = useRef(null);
+  const sheetBackRef = useRef(null);
+  const wasSheetOpenRef = useRef(false);
+  const dragRef = useRef(null);
+  const flyTimerRef = useRef(0);
   const activeAccount = accounts.find(row => row.name === account);
   const isPop3 = activeAccount?.incoming === 'pop3';
   const canTrash = activeAccount?.trashSupported === true;
@@ -608,13 +1101,39 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
 
   __stardustUpdatesGuard(React, 'dsh-email.mailbox', { busy: !!trash || foldersOpen });
   __stardustUpdatesGuard(React, 'dsh-email.mailbox-operation', { busy });
-  useEffect(() => { setFoldersOpen(false); setMoved(null); }, [active, account]);
+  useEffect(() => () => { if (flyTimerRef.current) clearTimeout(flyTimerRef.current); }, []);
+  useEffect(() => { setFoldersOpen(false); setMoved(null); setEnvelopeCache({}); }, [active, account]);
   useEffect(() => { onAccountChange?.(account); }, [account, onAccountChange]);
-  useEffect(() => { setChecked([]); setTrash(null); }, [active, account, folder, query, offset, scanOffset, unread, refresh]);
   useEffect(() => {
-    if (selected === null || !readerBack.current?.getClientRects().length) return;
+    setChecked([]);
+    setTrash(null);
+    setDeckIndex(0);
+    setFlipped(false);
+    setSheetOpen(false);
+    setDrag({ x: 0, y: 0, active: false });
+    dragRef.current = null;
+  }, [active, account, folder, query, offset, scanOffset, unread, withAttachments, refresh]);
+  useEffect(() => {
+    if (viewMode !== '3pane' || selected === null || !readerBack.current?.getClientRects?.().length) return;
     readerBack.current.querySelector('button')?.focus({ preventScroll: true });
-  }, [selected]);
+  }, [selected, viewMode]);
+  useEffect(() => {
+    if (viewMode !== 'desk') {
+      wasSheetOpenRef.current = false;
+      return;
+    }
+    if (sheetOpen && !wasSheetOpenRef.current) {
+      wasSheetOpenRef.current = true;
+      scheduleFocus(() => {
+        (sheetBackRef.current || sheetRef.current)?.focus?.({ preventScroll: true });
+      });
+    } else if (!sheetOpen && wasSheetOpenRef.current) {
+      wasSheetOpenRef.current = false;
+      scheduleFocus(() => {
+        deskCardRef.current?.focus?.({ preventScroll: true });
+      });
+    }
+  }, [viewMode, sheetOpen]);
   useEffect(() => {
     if (!moved?.undo) return;
     const timer = setTimeout(() => setMoved(old => old === moved ? { ...old, undo: null } : old), Math.max(0, moved.undoExpires - Date.now()));
@@ -699,6 +1218,7 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
       .then(value => {
         if (ctrl.signal.aborted) return;
         setDetail(value);
+        setEnvelopeCache(old => ({ ...old, [account + '\0' + folder + '\0' + selected]: value }));
         // 打开即已读：后端确实改了服务器状态才把这一行的未读点点掉，否则列表会
         // 一直说这封还没读，而邮箱里已经读过了。
         if (value && value.markedRead === true) {
@@ -716,7 +1236,7 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
       .catch(error => { if (!ctrl.signal.aborted) setReadError(emailError(error)); })
       .finally(() => { if (!ctrl.signal.aborted) setReading(false); });
     return () => ctrl.abort();
-        }, [active, account, folder, selected, readToken]);
+  }, [active, account, folder, selected, readToken]);
 
   async function run(task) {
     if (busyRef.current) return;
@@ -754,6 +1274,9 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
     setSelected(null);
     setDetail(null);
     setReadError("");
+    setDeckIndex(0);
+    setFlipped(false);
+    setSheetOpen(false);
   }
   function changeAccount(value) {
     reset();
@@ -794,6 +1317,7 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
       if (valid()) {
         setTrash(null);
         setChecked([]);
+        setSheetOpen(false);
         setOffset(0);
         refreshMailbox();
       }
@@ -816,6 +1340,212 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
   const hasMore = result?.hasMore ?? (result?.bodyScan ? rows.length === 20 : offset + rows.length < (result?.count || 0));
   const listLoading = loading || foldersLoading;
   const pageLimit = 20;
+  const currentFolderRow = folders.find(row => row.path === folder);
+  const activeFolderName = currentFolderRow ? folderLabel(currentFolderRow) : (folder || dt('收件箱', 'Inbox'));
+  const safeDeckIndex = visibleRows.length === 0 ? 0 : Math.min(deckIndex, visibleRows.length);
+  const activeDeskRow = visibleRows[safeDeckIndex] || null;
+  const remainingCount = Math.max(0, visibleRows.length - safeDeckIndex);
+  const activeDeskCacheKey = activeDeskRow ? account + '\0' + folder + '\0' + activeDeskRow.uid : '';
+  const activeDeskCached = activeDeskCacheKey ? envelopeCache[activeDeskCacheKey] || (selected === activeDeskRow?.uid ? detail : null) : null;
+
+  function switchViewMode(nextMode) {
+    if (nextMode === viewMode) return;
+    runViewTransition(() => {
+      setFlipped(false);
+      setDrag({ x: 0, y: 0, active: false });
+      dragRef.current = null;
+      if (nextMode === 'desk' && selected !== null) {
+        const idx = visibleRows.findIndex(row => row.uid === selected);
+        if (idx >= 0) setDeckIndex(idx);
+      }
+      setSheetOpen(false);
+      setViewMode(nextMode);
+    });
+  }
+
+  function unfoldLetter(row) {
+    if (!row) return;
+    runViewTransition(() => {
+      setFlipped(false);
+      setDrag({ x: 0, y: 0, active: false });
+      dragRef.current = null;
+      if (selected !== row.uid) {
+        setDetail(null);
+        setReadError("");
+        setReading(true);
+        setSelected(row.uid);
+      } else if (!detail && !reading) {
+        setReadToken(n => n + 1);
+      }
+      setSheetOpen(true);
+    });
+  }
+
+  function foldBackToDesk() {
+    runViewTransition(() => {
+      setSheetOpen(false);
+    });
+  }
+
+  function skipCard() {
+    if (!activeDeskRow) return;
+    const leaving = activeDeskRow;
+    setFlipped(false);
+    setDrag({ x: 0, y: 0, active: false });
+    dragRef.current = null;
+    if (!prefersReducedMotion()) {
+      if (flyTimerRef.current) clearTimeout(flyTimerRef.current);
+      setFlyingOut({ key: String(leaving.uid) + '-' + Date.now(), row: leaving });
+      flyTimerRef.current = setTimeout(() => { setFlyingOut(null); }, 220);
+    }
+    setDeckIndex(i => Math.min(visibleRows.length, i + 1));
+  }
+
+  function prevCard() {
+    if (safeDeckIndex <= 0) return;
+    setFlipped(false);
+    setDrag({ x: 0, y: 0, active: false });
+    dragRef.current = null;
+    setDeckIndex(i => Math.max(0, Math.min(visibleRows.length, i) - 1));
+  }
+
+  function stepSheet(delta) {
+    const nextIdx = Math.max(0, Math.min(visibleRows.length - 1, safeDeckIndex + delta));
+    const nextRow = visibleRows[nextIdx];
+    if (!nextRow || nextIdx === safeDeckIndex) return;
+    setDeckIndex(nextIdx);
+    setFlipped(false);
+    setDetail(null);
+    setReadError("");
+    setReading(true);
+    setSelected(nextRow.uid);
+  }
+
+  function applyMarkState(uid, value) {
+    if (value === 'read' || value === 'unread') adjustUnread(folder, value === 'read' ? -1 : 1);
+    setResult(old => old && {
+      ...old,
+      messages: old.messages.map(m => m.uid === uid
+        ? { ...m, ...(value === 'read' || value === 'unread' ? { seen: value === 'read' } : { flagged: value === 'star' }) }
+        : m),
+    });
+  }
+
+  function markMessage(uid, value) {
+    return run(async valid => {
+      await mailboxApi('mark', { account, folder, uid, mark: value });
+      if (valid()) applyMarkState(uid, value);
+    });
+  }
+
+  function quickReply(row, replyAll = false) {
+    if (!row) return;
+    return run(async valid => {
+      const draft = await mailboxApi('replyDraft', { account, folder, uid: row.uid, replyAll });
+      if (valid()) onDraft(draft.id);
+    });
+  }
+
+  async function loadEnvelopeHeaders(uid) {
+    if (!account || !folder || headersLoadingUid === uid) return;
+    const key = account + '\0' + folder + '\0' + uid;
+    if (envelopeCache[key]) return;
+    const generation = context.current;
+    setHeadersLoadingUid(uid);
+    try {
+      const value = await mailboxApi('read', { account, folder, uid });
+      if (generation === context.current) {
+        setEnvelopeCache(old => ({ ...old, [key]: value }));
+        if (value && value.markedRead === true) {
+          adjustUnread(folder, -1);
+          setResult(old => old && {
+            ...old,
+            messages: old.messages.map(row => row.uid === uid ? { ...row, seen: true } : row),
+          });
+        }
+        requestContactRefresh();
+      }
+    } catch {
+      // Back-face metadata already shows full list envelope; keep silent on optional header fetch error.
+    } finally {
+      setHeadersLoadingUid(current => current === uid ? null : current);
+    }
+  }
+
+  const deskPointerHandlers = {
+    onPointerDown(event) {
+      if (busy || flipped || !activeDeskRow) return;
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
+      if (isInteractiveTarget(event.target)) return;
+      try { event.currentTarget?.setPointerCapture?.(event.pointerId); } catch { /* ignore */ }
+      dragRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        dx: 0,
+        dy: 0,
+        active: true,
+      };
+      setDrag({ x: 0, y: 0, active: true });
+    },
+    onPointerMove(event) {
+      const state = dragRef.current;
+      if (!state || !state.active) return;
+      if (state.pointerId !== undefined && event.pointerId !== undefined && state.pointerId !== event.pointerId) return;
+      const dx = event.clientX - state.startX;
+      const dy = event.clientY - state.startY;
+      state.dx = dx;
+      state.dy = dy;
+      setDrag({ x: dx, y: dy, active: true });
+    },
+    onPointerUp(event) {
+      const state = dragRef.current;
+      if (!state || !state.active) return;
+      if (state.pointerId !== undefined && event?.pointerId !== undefined && state.pointerId !== event.pointerId) return;
+      try { event?.currentTarget?.releasePointerCapture?.(event.pointerId); } catch { /* ignore */ }
+      const dx = typeof event?.clientX === 'number' ? event.clientX - state.startX : state.dx;
+      dragRef.current = null;
+      setDrag({ x: 0, y: 0, active: false });
+      if (!activeDeskRow) return;
+      if (dx <= -LETTER_DRAG_THRESHOLD) {
+        skipCard();
+      } else if (dx >= LETTER_DRAG_THRESHOLD) {
+        if (event?.shiftKey) {
+          void quickReply(activeDeskRow, false);
+        } else {
+          unfoldLetter(activeDeskRow);
+        }
+      }
+    },
+    onPointerCancel(event) {
+      const state = dragRef.current;
+      if (!state || !state.active) return;
+      try { event?.currentTarget?.releasePointerCapture?.(event.pointerId); } catch { /* ignore */ }
+      dragRef.current = null;
+      setDrag({ x: 0, y: 0, active: false });
+    },
+  };
+
+  function onDeskCardKeyDown(event) {
+    if (event.isComposing || event.nativeEvent?.isComposing || !activeDeskRow) return;
+    if (isInteractiveTarget(event.target) && event.target !== event.currentTarget) return;
+    if (event.key === ' ' || event.key === 'f' || event.key === 'F') {
+      event.preventDefault();
+      setFlipped(value => !value);
+    } else if (event.key === 'Enter' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      unfoldLetter(activeDeskRow);
+    } else if (event.key === 'ArrowLeft' || event.key === 'j' || event.key === 'J') {
+      event.preventDefault();
+      skipCard();
+    } else if (event.key === 'k' || event.key === 'K') {
+      event.preventDefault();
+      prevCard();
+    } else if (event.key === 'r' || event.key === 'R') {
+      event.preventDefault();
+      void quickReply(activeDeskRow, false);
+    }
+  }
 
   const errorBanner = h(W.Status,{tone:'error'},error ? h(React.Fragment, null, error,
     h('div', { className: uiCss.actions },
@@ -835,141 +1565,282 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
         }, dt('添加并测试邮箱账号后，即可在这里阅读和回复邮件。','Add and test an email account to read and reply here.')));
   }
 
-  return h('section', { className: mailCss.mailbox, 'aria-label': dt('邮箱工作台','Mailbox workbench') },
+  const submitSearch = event => {
+    event.preventDefault();
+    if (!folder || busy || listLoading) return;
+    reset();
+    setUnread(false);
+    setQuery(input.trim());
+    setRefresh(n => n + 1);
+  };
+  const dragProgress = Math.min(1, Math.abs(drag.x) / 110);
+  const stackTail = visibleRows.slice(safeDeckIndex + 1, safeDeckIndex + 3);
+  const deskProtocolNote = isPop3
+    ? dt('POP3 收件箱 · 不提供服务器已读、星标或已发送文件夹。回复会进入本地草稿，确认后通过 SMTP 发送。', 'POP3 inbox · Server read/star flags and a Sent folder are unavailable. Replies open in local Drafts and use SMTP after confirmation.')
+    : !canTrash
+      ? dt('此协议暂不支持移入废纸篓，请使用邮箱原生客户端删除。', 'Trash is unavailable for this protocol; delete in your mail client.')
+      : '';
+
+  const deskView = h('div', {
+    className: mailCss.letterDesk,
+    'data-email-desk': 'true',
+    'data-sheet-open': sheetOpen ? 'true' : 'false',
+  },
+    h(MailDeskRibbon, {
+      accounts, account, activeAccount, folder, folders, folderName: activeFolderName,
+      busy, listLoading, foldersLoading, isPop3,
+      input, query, unread, withAttachments, remainingCount, viewMode,
+      onAccount: changeAccount,
+      onFolder: changeFolder,
+      onManageFolders: () => setFoldersOpen(true),
+      onInput: setInput,
+      onSearch: submitSearch,
+      onRefresh: refreshMailbox,
+      onToggleUnread: () => { reset(); setUnread(value => !value); },
+      onToggleAttachments: () => { setChecked([]); setWithAttachments(value => !value); },
+      onClearSearch: () => { reset(); setInput(''); setQuery(''); },
+      onViewMode: switchViewMode,
+    }),
+    sheetOpen && selected !== null
+      ? h(MailStationerySheet, {
+          row: currentRow || activeDeskRow,
+          activePos: safeDeckIndex < visibleRows.length ? safeDeckIndex : Math.max(0, visibleRows.findIndex(r => r.uid === selected)),
+          totalCount: visibleRows.length,
+          folderName: activeFolderName,
+          account, folder, selected,
+          detail, reading, readError, busy, run, who, canTrash,
+          onFoldBack: foldBackToDesk,
+          onPrev: () => stepSheet(-1),
+          onNext: () => stepSheet(1),
+          onRetryRead: () => setReadToken(n => n + 1),
+          onDraft,
+          onTrash: requestTrash,
+          onMark: value => applyMarkState(selected, value),
+          sheetRef,
+          sheetBackRef,
+        })
+      : h('div', { className: mailCss.deskMain, 'aria-busy': listLoading || undefined },
+          h('div', { className: mailCss.deskStage, 'data-tour': 'mail-desk-stage' },
+            listLoading && !(error && !result)
+              ? h('div', { className: mailCss.deskSkeletonCard, role: 'status', 'aria-busy': 'true', 'aria-label': dt('正在读取邮件…', 'Loading messages…') },
+                  h(W.Skeleton, { variant: 'text', lines: 1, width: '48%', height: '16px' }),
+                  h(W.Skeleton, { variant: 'text', lines: 1, width: '76%', height: '24px' }),
+                  h(W.Skeleton, { variant: 'card' }),
+                  h(W.Skeleton, { variant: 'text', lines: 2 }))
+              : visibleRows.length === 0
+                ? h('div', { className: mailCss.deskEmptyCard, 'data-dsh-card': '' },
+                    h(W.Empty, {
+                      title: error && !result ? dt('邮件列表没有读出来', 'Messages could not be loaded')
+                        : rows.length && withAttachments ? dt('本页没有附件邮件', 'No messages with attachments on this page')
+                        : query ? dt('当前检索范围内没有结果。', 'No results in the current search window.')
+                        : dt('当前页没有邮件。', 'No messages on this page.'),
+                      action: error && !result
+                        ? h(W.Button, { icon: 'refresh', disabled: busy || listLoading, onClick: retry }, dt('重试', 'Retry'))
+                        : (withAttachments || query || unread)
+                          ? h(W.Button, { variant: 'outline', disabled: busy, onClick: () => { reset(); setInput(''); setQuery(''); setUnread(false); setWithAttachments(false); } }, dt('清除筛选', 'Clear filters'))
+                          : h(W.Button, { icon: 'refresh', variant: 'outline', disabled: busy || listLoading, onClick: refreshMailbox }, dt('刷新收件箱', 'Refresh mailbox')),
+                    }))
+                : !activeDeskRow
+                  ? h('div', { className: mailCss.deskCompleteCard, 'data-dsh-card': '', 'data-desk-complete': 'true' },
+                      h('div', { className: mailCss.letterTrim }),
+                      h(W.Empty, {
+                        icon: 'check',
+                        title: dt('本页书信已分拣完毕', 'All letters on this page reviewed'),
+                        action: h(React.Fragment, null,
+                          h(W.Button, { variant: 'primary', icon: 'left', disabled: busy, onClick: () => { setDeckIndex(0); setFlipped(false); } }, dt('从第一封重新浏览', 'Review from first')),
+                          hasMore ? h(W.Button, { variant: 'outline', icon: 'right', disabled: loading || busy, onClick: () => setOffset(n => n + pageLimit) }, dt('加载下一页书信', 'Load next page')) : null,
+                          h(W.Button, { variant: 'ghost', icon: 'refresh', disabled: loading || busy, onClick: refreshMailbox }, dt('刷新', 'Refresh'))),
+                      }, dt('已整理本页 ', 'Reviewed ') + visibleRows.length + dt(' 封书信。可重看、翻页或切换到三栏总览。', ' letters on this page. Revisit, paginate, or switch to 3-Pane.')))
+                  : h('div', { className: mailCss.letterStack, 'data-letter-stack': 'true' },
+                      stackTail.slice().reverse().map((row, revIdx) => {
+                        const layer = stackTail.length - revIdx;
+                        return h(MailLetterStackCard, { key: row.uid, row, layer, who, dragProgress });
+                      }),
+                      h(MailLetterCard, {
+                        key: activeDeskRow.uid,
+                        row: activeDeskRow,
+                        cached: activeDeskCached,
+                        account, activeAccount, folder, folderName: activeFolderName,
+                        uidValidity: result?.uidValidity,
+                        flipped, drag, busy, who,
+                        cardRef: deskCardRef,
+                        pointerHandlers: deskPointerHandlers,
+                        onKeyDown: onDeskCardKeyDown,
+                        onToggleFlip: () => setFlipped(value => !value),
+                        onUnfold: unfoldLetter,
+                        onQuickReply: row => void quickReply(row, false),
+                        onLoadHeaders: loadEnvelopeHeaders,
+                        loadingHeaders: headersLoadingUid === activeDeskRow.uid,
+                      }),
+                      flyingOut ? h(MailLetterStackCard, { key: flyingOut.key, row: flyingOut.row, layer: 0, who, exiting: true }) : null)),
+          activeDeskRow ? h('div', { className: mailCss.deskDock, role: 'toolbar', 'aria-label': dt('书信操作栏', 'Letter actions'), 'data-desk-dock': 'true' },
+            h(W.IconButton, { icon: 'left', label: dt('上一封', 'Previous letter'), disabled: busy || safeDeckIndex === 0, onClick: prevCard }),
+            h(W.Button, { variant: 'outline', disabled: busy, 'data-desk-action': 'skip', onClick: skipCard }, dt('← 下一封 / 跳过', '← Next / Skip')),
+            h(W.Button, { variant: 'outline', icon: 'flip', disabled: busy, 'data-email-flip': 'true', 'aria-pressed': flipped, onClick: () => setFlipped(value => !value) }, flipped ? dt('翻回正面', 'Front face') : dt('翻面看信封头', 'Flip header')),
+            h(W.Button, { variant: 'primary', icon: 'expand', disabled: busy, 'data-email-unfold': 'true', onClick: () => unfoldLetter(activeDeskRow) }, dt('展开信纸全文', 'Unfold full letter')),
+            h(W.Button, { variant: 'outline', icon: 'reply', disabled: busy, 'data-desk-action': 'reply', onClick: () => { void quickReply(activeDeskRow, false); } }, dt('回复到草稿', 'Reply in drafts')),
+            activeDeskRow.flagsSupported !== false ? h(React.Fragment, null,
+              h(W.IconButton, {
+                icon: 'mail',
+                disabled: busy,
+                label: activeDeskRow.seen ? dt('标记未读', 'Mark unread') : dt('标记已读', 'Mark read'),
+                onClick: () => { void markMessage(activeDeskRow.uid, activeDeskRow.seen ? 'unread' : 'read'); },
+              }),
+              h(W.IconButton, {
+                icon: 'star',
+                disabled: busy,
+                'aria-pressed': !!activeDeskRow.flagged,
+                label: activeDeskRow.flagged ? dt('取消星标', 'Unstar') : dt('添加星标', 'Star'),
+                onClick: () => { void markMessage(activeDeskRow.uid, activeDeskRow.flagged ? 'unstar' : 'star'); },
+              })) : null,
+            canTrash ? h(W.IconButton, {
+              icon: 'trash',
+              variant: 'danger',
+              disabled: busy,
+              label: dt('移入废纸篓', 'Move to Trash'),
+              onClick: () => requestTrash([activeDeskRow.uid]),
+            }) : null) : null,
+          h('footer', { className: mailCss.deskFooter },
+            h('div', { className: mailCss.deskFooterLeft },
+              h('span', { className: mailCss.listNote, role: 'status' },
+                result ? (visibleRows.length
+                  ? dt('第 ', '') + Math.min(safeDeckIndex + 1, visibleRows.length) + ' / ' + visibleRows.length + dt(' 封 · ', ' · ')
+                  : '') + dt('第 ', 'Page ') + (Math.floor(offset / pageLimit) + 1) + dt(' 页', '') +
+                  (result.order === 'relevance' ? dt(' · 按相关性排序', ' · Ranked by relevance') : '') : null),
+              deskProtocolNote ? h('span', { className: mailCss.listNote }, deskProtocolNote) : null,
+              result?.headerScan ? h('span', { className: mailCss.listNote }, dt('信封实际扫描：', 'Headers scanned: ') + result.headerScan.scanned + ' / ' + result.headerScan.mailboxTotal) : null),
+            h('div', { className: mailCss.deskFooterPages },
+              offset > 0 || hasMore ? h(React.Fragment, null,
+                h(W.Button, { variant: 'ghost', icon: 'left', disabled: loading || busy || offset === 0, onClick: () => setOffset(n => Math.max(0, n - pageLimit)) }, dt('上一页', 'Previous page')),
+                h(W.Button, { variant: 'ghost', icon: 'right', disabled: loading || busy || !hasMore, onClick: () => setOffset(n => n + pageLimit) }, dt('下一页', 'Next page'))) : null,
+              result?.headerScan?.nextScanOffset !== undefined
+                ? h(W.Button, { variant: 'ghost', icon: 'search', disabled: loading || busy, onClick: () => { setOffset(0); setScanOffset(result.headerScan.nextScanOffset); } }, dt('继续搜索更早邮件', 'Search older headers'))
+                : null))));
+
+  const threePaneView = h('div', {
+    className: mailCss.columns,
+    'data-reading': selected !== null,
+    style: { '--mail-rail-width': railSplit.size + 'px', '--mail-list-width': listSplit.size + 'px' },
+  },
+    h(MailFolderRail, { accounts, account, folder, folders, busy, loading: foldersLoading,
+      onAccount: changeAccount, onFolder: changeFolder, onManage: () => setFoldersOpen(true) }),
+    h(W.SplitResizer, { ...railSplit.resizerProps, label: dt('调整文件夹栏宽度', 'Resize folders pane') }),
+    h('section', { className: mailCss.list, 'aria-label': dt('邮件列表', 'Message list'), 'aria-busy': listLoading || undefined },
+      h('div', { className: mailCss.listHeader, 'data-tour': 'mail-filter' },
+        h('div', { className: mailCss.listModeRow },
+          h('span', { className: mailCss.listFolderTitle }, activeFolderName,
+            h('span', { className: mailCss.listFolderCount }, dt(' · 待阅 ', ' · ') + visibleRows.length + dt(' 封', ''))),
+          h(MailViewToggle, { viewMode, onChange: switchViewMode, disabled: busy })),
+        h('form', { className: mailCss.search, onSubmit: submitSearch },
+          h(W.Input, { icon: 'search', type: 'search', 'aria-label': dt('搜索当前文件夹','Search current folder'), placeholder: dt('搜索当前文件夹','Search current folder'), value: input, maxLength: 500, disabled: busy, onChange: event => setInput(event.target.value) }),
+          h(W.IconButton, { icon: 'search', label: dt('搜索','Search'), type: 'submit', disabled: listLoading || busy || !folder }),
+          h(W.IconButton, { icon: 'refresh', label: dt('刷新邮件','Refresh mail'), 'aria-busy': listLoading || undefined, disabled: listLoading || busy || !folder, onClick: refreshMailbox })),
+        h('div', { className: mailCss.filters },
+          !isPop3 ? h(W.Button, { variant: unread ? 'primary' : 'outline', disabled: busy || !!query, 'aria-pressed': unread,
+            onClick: () => { reset(); setUnread(value => !value); } }, dt('只看未读','Unread only')) : null,
+          h(W.Button, { variant: withAttachments ? 'primary' : 'outline', disabled: busy, 'aria-pressed': withAttachments,
+            onClick: () => { setChecked([]); setWithAttachments(value => !value); } }, dt('本页有附件', 'With attachments on this page')),
+          query ? h(W.Button, { variant: 'ghost', disabled: busy, onClick: () => { reset(); setInput(''); setQuery(''); } }, dt('清除搜索','Clear search')) : null)),
+      canTrash && visibleRows.length ? h('div', { className: mailCss.batch },
+        h(W.Checkbox, { label: dt('选择本页', 'Select page'), disabled: busy || listLoading,
+          checked: checked.length === visibleRows.length, onChange: value => setChecked(value ? visibleRows.map(row => row.uid) : []) }),
+        checked.length ? h(W.Button, { variant: 'danger', icon: 'trash', disabled: busy || listLoading, onClick: () => requestTrash(checked) },
+          dt('移入废纸篓（', 'Move to Trash (') + checked.length + dt('）', ')')) : null) : null,
+      h('div', { className: mailCss.listScroll, onPointerMove: moveMailSpotlight },
+        visibleRows.length ? visibleRows.map(row => {
+          const unseen = row.flagsSupported !== false && !row.seen;
+          const subject = row.subject || dt('（无主题）','(No subject)');
+          const from = who(row.from);
+          const isSelected = selected === row.uid;
+          return h('div', { key: row.uid, className: mailCss.messageRow, 'data-dsh-row': '', 'data-selected': isSelected, 'data-active': isSelected ? 'true' : 'false', 'data-unread': unseen },
+            canTrash ? h(W.Checkbox, { hiddenLabel: true, label: dt('选择邮件：', 'Select message: ') + subject,
+              checked: checked.includes(row.uid), disabled: busy || listLoading,
+              onChange: value => setChecked(old => value ? [...old, row.uid] : old.filter(uid => uid !== row.uid)) }) : null,
+            h('span', { className: 'dsh-pixel-cursor', 'aria-hidden': 'true' }, '▶'),
+            h(W.Button, { variant: 'ghost', className: mailCss.messageButton, disabled: busy, 'aria-pressed': isSelected,
+              onClick: event => openMessage(row.uid, event.currentTarget) },
+              h('span', { className: mailCss.messageLine },
+                unseen ? h('span', { className: mailCss.unreadDot, role: 'img', 'aria-label': dt('未读','Unread') }) : null,
+                h('strong', { className: mailCss.sender, title: from }, senderLabelOf(row.from?.[0]) || from),
+                row.flagged ? h(W.Icon, { name: 'star', size: 13 }) : null,
+                h('time', { className: mailCss.timestamp, dateTime: row.date }, formatDate(row.date))),
+              h('span', { className: mailCss.messageLine }, h('span', { className: mailCss.subject, title: subject }, subject),
+                row.hasAttachments ? h(W.Icon, { name: 'clip', size: 13, role: 'img', 'aria-hidden': undefined, 'aria-label': dt('附件', 'Attachments') }) : null)),
+            h('div', { className: clsx('dsh-row-actions', mailCss.rowActions) },
+              row.flagsSupported !== false ? h(React.Fragment, null,
+                h(W.IconButton, {
+                  icon: 'mail',
+                  disabled: busy,
+                  label: row.seen ? dt('标记未读', 'Mark unread') : dt('标记已读', 'Mark read'),
+                  onClick: () => { void markMessage(row.uid, row.seen ? 'unread' : 'read'); },
+                }),
+                h(W.IconButton, {
+                  icon: 'star',
+                  disabled: busy,
+                  'aria-pressed': !!row.flagged,
+                  label: row.flagged ? dt('取消星标', 'Unstar') : dt('添加星标', 'Star'),
+                  onClick: () => { void markMessage(row.uid, row.flagged ? 'unstar' : 'star'); },
+                })) : null,
+              h(W.IconButton, {
+                icon: 'reply',
+                disabled: busy,
+                label: dt('回复到草稿', 'Reply in drafts'),
+                onClick: () => { void quickReply(row, false); },
+              }),
+              canTrash ? h(W.IconButton, {
+                icon: 'trash',
+                variant: 'danger',
+                disabled: busy,
+                label: dt('移入废纸篓', 'Move to Trash'),
+                onClick: () => requestTrash([row.uid]),
+              }) : null));
+        }) : listLoading && !(error && !result)
+          ? h('div', { className: mailCss.skeletonList, role: 'status', 'aria-busy': 'true', 'aria-label': dt('正在读取邮件…','Loading messages…') },
+              Array.from({ length: 5 }, (_, idx) => h(W.Skeleton, { key: idx, variant: 'row' })))
+          : h(W.Empty, {
+              title:error && !result?dt('邮件列表没有读出来','Messages could not be loaded')
+                : listLoading ? dt('正在读取邮件…','Loading messages…') : rows.length && withAttachments ? dt('本页没有附件邮件', 'No messages with attachments on this page')
+                : query ? dt('当前检索范围内没有结果。','No results in the current search window.') : dt('当前页没有邮件。','No messages on this page.'),
+              action: error && !result ? h(W.Button, { icon: 'refresh', disabled: busy || listLoading, onClick: retry }, dt('重试','Retry')) : undefined,
+            })),
+      h('footer', { className: mailCss.listFooter },
+        h('p', { className: mailCss.listNote, role: 'status' }, result ? dt("本页 ", "This page: ") + rows.length + dt(" 封", " messages") +
+          (result.order === 'relevance' ? dt(' · 按相关性排序', ' · Ranked by relevance') : dt(' · 按邮箱到达序排列', ' · Mailbox arrival order')) : null),
+        result?.headerScan ? h('p', { className: mailCss.listNote }, dt('信封实际扫描：', 'Headers scanned: ') + result.headerScan.scanned + ' / ' + result.headerScan.mailboxTotal +
+          (result.headerScan.complete ? dt('，信封覆盖完整；正文另有限制。', '; headers fully covered; body search has a separate limit.') : dt('，尚未覆盖全文件夹。', '; folder coverage is partial.'))) : null,
+        result?.bodyScan ? h('p', { className: mailCss.listNote }, dt('正文实际扫描：','Bodies scanned: ') + result.bodyScan.scanned + dt(' 封；最多 ',' messages; limit ') + result.bodyScan.scanLimit + dt(' 封，受正文显示上限限制。','; bounded by the body display limit.')) : null,
+        result?.searchSource === 'api' ? h('p', { className: mailCss.listNote }, dt('AgentMail 搜索由服务按相关性返回，垃圾箱等特殊邮件不在其搜索范围。','AgentMail ranks results by relevance and excludes spam, trash and other protected mail.')) : null,
+        isPop3 ? h('p', { className: mailCss.listNote }, dt('POP3 收件箱 · 不提供服务器已读、星标或已发送文件夹。回复会进入本地草稿，确认后通过 SMTP 发送。','POP3 inbox · Server read/star flags and a Sent folder are unavailable. Replies open in local Drafts and use SMTP after confirmation.'))
+          : !canTrash ? h('p', { className: mailCss.listNote }, dt('此协议暂不支持移入废纸篓，请使用邮箱原生客户端删除。','Trash is unavailable for this protocol; delete in your mail client.')) : null,
+        h('div', { className: mailCss.pages },
+          h(W.Button, { icon: 'left', disabled: loading || busy || offset === 0, onClick: () => setOffset(n => Math.max(0, n - pageLimit)) }, dt('上一页', 'Previous page')),
+          h('span', { className: mailCss.listNote }, dt('第 ', 'Page ') + (Math.floor(offset / pageLimit) + 1) + dt(' 页', '')),
+          h(W.Button, { icon: 'right', disabled: loading || busy || !hasMore, onClick: () => setOffset(n => n + pageLimit) }, dt('下一页', 'Next page'))),
+        result?.headerScan?.nextScanOffset !== undefined ? h(W.Button, { icon: 'search', disabled: loading || busy, onClick: () => { setOffset(0); setScanOffset(result.headerScan.nextScanOffset); } }, dt('继续搜索更早邮件', 'Search older headers')) : null)),
+    h(W.SplitResizer, { ...listSplit.resizerProps, label: dt('调整邮件列表宽度', 'Resize message list pane') }),
+    h('section', { className: mailCss.reader, 'aria-label': dt('邮件详情', 'Message details'), 'aria-busy': reading || undefined },
+      selected !== null ? h('div', { className: mailCss.readerBack, ref: readerBack },
+        h(W.Button, { variant: 'ghost', icon: 'left', disabled: busy, onClick: backToList }, dt('返回邮件列表','Back to messages'))) : null,
+      reading && selected !== null ? h('div', { className: mailCss.readerSkeleton, role: 'status', 'aria-busy': 'true', 'aria-label': dt('正在读取正文…','Loading message…') },
+        h(W.Skeleton, { variant: 'text', lines: 1, width: '62%', height: '22px' }),
+        h(W.Skeleton, { variant: 'card' }),
+        h(W.Skeleton, { variant: 'text', lines: 5 })) :
+        readError && selected !== null ? h(W.Empty, { title:dt('这封邮件没有读出来','This message could not be loaded'),
+          action: h(W.Button, { icon: 'refresh', disabled: busy, onClick: () => setReadToken(n => n + 1) }, dt('重试','Retry')),
+        }, readError) : detail ? h(MailMessage, {
+          key: JSON.stringify([account, folder, selected, detail.rich?.images?.[0]?.id]),
+          detail, currentRow, account, folder, selected, busy, run, who, date: formatDate, onDraft, canTrash, onTrash: requestTrash,
+          onMark: value => applyMarkState(selected, value),
+        }) : h(W.Empty, { title: dt('选择一封邮件','Select a message') }, dt('打开正文后，可以回复到草稿、标记状态或下载附件。','Open a message to reply in drafts, mark its state or download attachments.'))));
+
+  return h('section', { className: mailCss.mailbox, 'aria-label': dt('邮箱工作台','Mailbox workbench'), 'data-email-view': viewMode },
     error ? h('div', { className: mailCss.alert }, errorBanner) : null,
     moved ? h('div', { className: mailCss.moveNotice, role: 'status', 'data-window-drag-exclude': '' },
       h('span', null, dt('已移动 ', 'Moved ') + moved.count + dt(' 封至 ', ' messages to ') + moved.target,
         !moved.undo ? h('p', { className: mailCss.listNote }, dt('如需恢复，请在邮箱客户端移回原文件夹。', 'To restore, move the messages back in your mail client.')) : null),
       moved.undo ? h(W.Button, { disabled: busy, onClick: undoTrash }, dt('撤销移动', 'Undo move')) : null,
       h(W.IconButton, { icon: 'close', onClick: () => setMoved(null), label: dt('关闭提示', 'Dismiss') })) : null,
-    h('div', {
-      className: mailCss.columns,
-      'data-reading': selected !== null,
-      style: { '--mail-rail-width': railSplit.size + 'px', '--mail-list-width': listSplit.size + 'px' },
-    },
-      h(MailFolderRail, { accounts, account, folder, folders, busy, loading: foldersLoading,
-        onAccount: changeAccount, onFolder: changeFolder, onManage: () => setFoldersOpen(true) }),
-      h(W.SplitResizer, { ...railSplit.resizerProps, label: dt('调整文件夹栏宽度', 'Resize folders pane') }),
-      h('section', { className: mailCss.list, 'aria-label': dt('邮件列表', 'Message list'), 'aria-busy': listLoading || undefined },
-        h('div', { className: mailCss.listHeader, 'data-tour': 'mail-filter' },
-          h('form', { className: mailCss.search, onSubmit: event => { event.preventDefault(); if (!folder || busy || listLoading) return; reset(); setUnread(false); setQuery(input.trim()); setRefresh(n => n + 1); } },
-            h(W.Input, { icon: 'search', type: 'search', 'aria-label': dt('搜索当前文件夹','Search current folder'), placeholder: dt('搜索当前文件夹','Search current folder'), value: input, maxLength: 500, disabled: busy, onChange: event => setInput(event.target.value) }),
-            h(W.IconButton, { icon: 'search', label: dt('搜索','Search'), type: 'submit', disabled: listLoading || busy || !folder }),
-            h(W.IconButton, { icon: 'refresh', label: dt('刷新邮件','Refresh mail'), 'aria-busy': listLoading || undefined, disabled: listLoading || busy || !folder, onClick: refreshMailbox })),
-          h('div', { className: mailCss.filters },
-            !isPop3 ? h(W.Button, { variant: unread ? 'primary' : 'outline', disabled: busy || !!query, 'aria-pressed': unread,
-              onClick: () => { reset(); setUnread(value => !value); } }, dt('只看未读','Unread only')) : null,
-            h(W.Button, { variant: withAttachments ? 'primary' : 'outline', disabled: busy, 'aria-pressed': withAttachments,
-              onClick: () => { setChecked([]); setWithAttachments(value => !value); } }, dt('本页有附件', 'With attachments on this page')),
-            query ? h(W.Button, { variant: 'ghost', disabled: busy, onClick: () => { reset(); setInput(''); setQuery(''); } }, dt('清除搜索','Clear search')) : null)),
-        canTrash && visibleRows.length ? h('div', { className: mailCss.batch },
-          h(W.Checkbox, { label: dt('选择本页', 'Select page'), disabled: busy || listLoading,
-            checked: checked.length === visibleRows.length, onChange: value => setChecked(value ? visibleRows.map(row => row.uid) : []) }),
-          checked.length ? h(W.Button, { variant: 'danger', icon: 'trash', disabled: busy || listLoading, onClick: () => requestTrash(checked) },
-            dt('移入废纸篓（', 'Move to Trash (') + checked.length + dt('）', ')')) : null) : null,
-        h('div', { className: mailCss.listScroll, onPointerMove: moveMailSpotlight },
-          visibleRows.length ? visibleRows.map(row => {
-            const unseen = row.flagsSupported !== false && !row.seen;
-            const subject = row.subject || dt('（无主题）','(No subject)');
-            const from = who(row.from);
-            const isSelected = selected === row.uid;
-            return h('div', { key: row.uid, className: mailCss.messageRow, 'data-dsh-row': '', 'data-selected': isSelected, 'data-active': isSelected ? 'true' : 'false', 'data-unread': unseen },
-              canTrash ? h(W.Checkbox, { hiddenLabel: true, label: dt('选择邮件：', 'Select message: ') + subject,
-                checked: checked.includes(row.uid), disabled: busy || listLoading,
-                onChange: value => setChecked(old => value ? [...old, row.uid] : old.filter(uid => uid !== row.uid)) }) : null,
-              h('span', { className: 'dsh-pixel-cursor', 'aria-hidden': 'true' }, '▶'),
-              h(W.Button, { variant: 'ghost', className: mailCss.messageButton, disabled: busy, 'aria-pressed': isSelected,
-                onClick: event => openMessage(row.uid, event.currentTarget) },
-                h('span', { className: mailCss.messageLine },
-                  unseen ? h('span', { className: mailCss.unreadDot, role: 'img', 'aria-label': dt('未读','Unread') }) : null,
-                  h('strong', { className: mailCss.sender, title: from }, senderLabelOf(row.from?.[0]) || from),
-                  row.flagged ? h(W.Icon, { name: 'star', size: 13 }) : null,
-                  h('time', { className: mailCss.timestamp, dateTime: row.date }, formatDate(row.date))),
-                h('span', { className: mailCss.messageLine }, h('span', { className: mailCss.subject, title: subject }, subject),
-                  row.hasAttachments ? h(W.Icon, { name: 'clip', size: 13, role: 'img', 'aria-hidden': undefined, 'aria-label': dt('附件', 'Attachments') }) : null)),
-              h('div', { className: clsx('dsh-row-actions', mailCss.rowActions) },
-                row.flagsSupported !== false ? h(React.Fragment, null,
-                  h(W.IconButton, {
-                    icon: 'mail',
-                    disabled: busy,
-                    label: row.seen ? dt('标记未读', 'Mark unread') : dt('标记已读', 'Mark read'),
-                    onClick: () => run(async valid => {
-                      await mailboxApi('mark', { account, folder, uid: row.uid, mark: row.seen ? 'unread' : 'read' });
-                      if (valid()) {
-                        adjustUnread(folder, row.seen ? 1 : -1);
-                        setResult(old => old && { ...old, messages: old.messages.map(m => m.uid === row.uid ? { ...m, seen: !row.seen } : m) });
-                      }
-                    }),
-                  }),
-                  h(W.IconButton, {
-                    icon: 'star',
-                    disabled: busy,
-                    'aria-pressed': !!row.flagged,
-                    label: row.flagged ? dt('取消星标', 'Unstar') : dt('添加星标', 'Star'),
-                    onClick: () => run(async valid => {
-                      await mailboxApi('mark', { account, folder, uid: row.uid, mark: row.flagged ? 'unstar' : 'star' });
-                      if (valid()) setResult(old => old && { ...old, messages: old.messages.map(m => m.uid === row.uid ? { ...m, flagged: !row.flagged } : m) });
-                    }),
-                  })) : null,
-                h(W.IconButton, {
-                  icon: 'reply',
-                  disabled: busy,
-                  label: dt('回复到草稿', 'Reply in drafts'),
-                  onClick: () => run(async valid => {
-                    const draft = await mailboxApi('replyDraft', { account, folder, uid: row.uid, replyAll: false });
-                    if (valid()) onDraft(draft.id);
-                  }),
-                }),
-                canTrash ? h(W.IconButton, {
-                  icon: 'trash',
-                  variant: 'danger',
-                  disabled: busy,
-                  label: dt('移入废纸篓', 'Move to Trash'),
-                  onClick: () => requestTrash([row.uid]),
-                }) : null));
-          }) : listLoading && !(error && !result)
-            ? h('div', { className: mailCss.skeletonList, role: 'status', 'aria-busy': 'true', 'aria-label': dt('正在读取邮件…','Loading messages…') },
-                Array.from({ length: 5 }, (_, idx) => h(W.Skeleton, { key: idx, variant: 'row' })))
-            : h(W.Empty, {
-                title:error && !result?dt('邮件列表没有读出来','Messages could not be loaded')
-                  : listLoading ? dt('正在读取邮件…','Loading messages…') : rows.length && withAttachments ? dt('本页没有附件邮件', 'No messages with attachments on this page')
-                  : query ? dt('当前检索范围内没有结果。','No results in the current search window.') : dt('当前页没有邮件。','No messages on this page.'),
-                action: error && !result ? h(W.Button, { icon: 'refresh', disabled: busy || listLoading, onClick: retry }, dt('重试','Retry')) : undefined,
-              })),
-        h('footer', { className: mailCss.listFooter },
-          h('p', { className: mailCss.listNote, role: 'status' }, result ? dt("本页 ", "This page: ") + rows.length + dt(" 封", " messages") +
-            (result.order === 'relevance' ? dt(' · 按相关性排序', ' · Ranked by relevance') : dt(' · 按邮箱到达序排列', ' · Mailbox arrival order')) : null),
-          result?.headerScan ? h('p', { className: mailCss.listNote }, dt('信封实际扫描：', 'Headers scanned: ') + result.headerScan.scanned + ' / ' + result.headerScan.mailboxTotal +
-            (result.headerScan.complete ? dt('，信封覆盖完整；正文另有限制。', '; headers fully covered; body search has a separate limit.') : dt('，尚未覆盖全文件夹。', '; folder coverage is partial.'))) : null,
-          result?.bodyScan ? h('p', { className: mailCss.listNote }, dt('正文实际扫描：','Bodies scanned: ') + result.bodyScan.scanned + dt(' 封；最多 ',' messages; limit ') + result.bodyScan.scanLimit + dt(' 封，受正文显示上限限制。','; bounded by the body display limit.')) : null,
-          result?.searchSource === 'api' ? h('p', { className: mailCss.listNote }, dt('AgentMail 搜索由服务按相关性返回，垃圾箱等特殊邮件不在其搜索范围。','AgentMail ranks results by relevance and excludes spam, trash and other protected mail.')) : null,
-          isPop3 ? h('p', { className: mailCss.listNote }, dt('POP3 收件箱 · 不提供服务器已读、星标或已发送文件夹。回复会进入本地草稿，确认后通过 SMTP 发送。','POP3 inbox · Server read/star flags and a Sent folder are unavailable. Replies open in local Drafts and use SMTP after confirmation.'))
-            : !canTrash ? h('p', { className: mailCss.listNote }, dt('此协议暂不支持移入废纸篓，请使用邮箱原生客户端删除。','Trash is unavailable for this protocol; delete in your mail client.')) : null,
-          h('div', { className: mailCss.pages },
-            h(W.Button, { icon: 'left', disabled: loading || busy || offset === 0, onClick: () => setOffset(n => Math.max(0, n - pageLimit)) }, dt('上一页', 'Previous page')),
-            h('span', { className: mailCss.listNote }, dt('第 ', 'Page ') + (Math.floor(offset / pageLimit) + 1) + dt(' 页', '')),
-            h(W.Button, { icon: 'right', disabled: loading || busy || !hasMore, onClick: () => setOffset(n => n + pageLimit) }, dt('下一页', 'Next page'))),
-          result?.headerScan?.nextScanOffset !== undefined ? h(W.Button, { icon: 'search', disabled: loading || busy, onClick: () => { setOffset(0); setScanOffset(result.headerScan.nextScanOffset); } }, dt('继续搜索更早邮件', 'Search older headers')) : null)),
-      h(W.SplitResizer, { ...listSplit.resizerProps, label: dt('调整邮件列表宽度', 'Resize message list pane') }),
-      h('section', { className: mailCss.reader, 'aria-label': dt('邮件详情', 'Message details'), 'aria-busy': reading || undefined },
-        selected !== null ? h('div', { className: mailCss.readerBack, ref: readerBack },
-          h(W.Button, { variant: 'ghost', icon: 'left', disabled: busy, onClick: backToList }, dt('返回邮件列表','Back to messages'))) : null,
-        reading && selected !== null ? h('div', { className: mailCss.readerSkeleton, role: 'status', 'aria-busy': 'true', 'aria-label': dt('正在读取正文…','Loading message…') },
-          h(W.Skeleton, { variant: 'text', lines: 1, width: '62%', height: '22px' }),
-          h(W.Skeleton, { variant: 'card' }),
-          h(W.Skeleton, { variant: 'text', lines: 5 })) :
-          readError && selected !== null ? h(W.Empty, { title:dt('这封邮件没有读出来','This message could not be loaded'),
-            action: h(W.Button, { icon: 'refresh', disabled: busy, onClick: () => setReadToken(n => n + 1) }, dt('重试','Retry')),
-          }, readError) : detail ? h(MailMessage, {
-            key: JSON.stringify([account, folder, selected, detail.rich?.images?.[0]?.id]),
-            detail, currentRow, account, folder, selected, busy, run, who, date: formatDate, onDraft, canTrash, onTrash: requestTrash,
-            onMark: value => {
-              if (value === 'read' || value === 'unread') adjustUnread(folder, value === 'read' ? -1 : 1);
-              setResult(old => old && { ...old, messages: old.messages.map(row => row.uid === selected ? {
-                ...row, ...(value === 'read' || value === 'unread' ? { seen: value === 'read' } : { flagged: value === 'star' }),
-              } : row) });
-            },
-          }) : h(W.Empty, { title: dt('选择一封邮件','Select a message') }, dt('打开正文后，可以回复到草稿、标记状态或下载附件。','Open a message to reply in drafts, mark its state or download attachments.')))),
+    viewMode === 'desk' ? deskView : threePaneView,
     trash ? h(MailTrashDialog, { account, folder, uids: trash, uidValidity: result?.uidValidity, folders, busy, onClose: () => setTrash(null), onConfirm: confirmTrash }) : null,
     foldersOpen ? h(MailFoldersDialog, { account, folders, busy, onClose: () => setFoldersOpen(false), onChanged: () => setFolderReload(n => n + 1) }) : null);
 }

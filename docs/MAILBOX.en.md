@@ -1,6 +1,13 @@
 # Formatted mail, threaded replies and Trash
 
-Available in dsh-email 0.22.1, under **Email → Mailbox**. UI language follows DSH.
+Available in dsh-email 0.32.0, under **Email → Mailbox**. UI language follows DSH.
+
+## Letter Desk (`Desk`) & classic `3-Pane` views
+
+**Mailbox** defaults to the tactile **Letter Desk (`Desk`)** view, with a 1-click **Desk / 3-Pane** segmented toggle in the top ribbon:
+
+- **Letter Desk (default)**: a compact ribbon holds account selection, nested folder dropdown (with unread counts), search, **Unread only**, **With attachments**, remaining count, and the view toggle. Stacked 3-deep airmail Letter Cards let you drag left (`←` / `J`) to skip or right (`→` / `Enter`) to unfold full stationery, click **Envelope header** (`Space` / `F`) to 3D-flip for raw envelope & server metadata, or click **Unfold full letter** for centered stationery reading with **Fold back to desk** and full dock actions.
+- **3-Pane (classic)**: retains the collapsible folder tree with per-folder unread badges, resizable split panes, hover quick actions, and multi-select bulk Trash.
 
 ## Folder tree and unread counts
 

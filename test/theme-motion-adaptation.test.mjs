@@ -495,4 +495,12 @@ test('EmailSettingsSection calls all hooks before early return and CoachmarkTour
   for (const fn of effects) fn?.()
   assert.ok(queried.includes('[id=":r12:-tab-accounts"]'), 'CoachmarkTour rewrites #:id to safe [id="..."] selector')
   assert.ok(measuredLayout?.spotlight, 'CoachmarkTour computes spotlight for useId() selector without SyntaxError')
+
+  // Verify the 5-step bespoke Letter Desk tour steps and anchors exist in templates/client.js
+  for (const anchor of ['data-tour="mail-filter"', 'data-tour="mail-letter-card"', 'data-tour="mail-courier"', 'data-tour="mail-style"', 'data-tour="mail-compose"']) {
+    assert.ok(clientTpl.includes(anchor), 'Expected CoachmarkTour selector anchor in templates/client.js: ' + anchor)
+  }
+  for (const stepId of ['desk-ribbon', 'letter-card', 'whale-courier', 'style-font', 'compose-drafts']) {
+    assert.ok(clientTpl.includes('id: "' + stepId + '"'), 'Expected bespoke tour step id in templates/client.js: ' + stepId)
+  }
 })

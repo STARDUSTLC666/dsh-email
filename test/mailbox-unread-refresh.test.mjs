@@ -43,6 +43,14 @@ function workbench({ refuseRead = false } = {}) {
     clsx: (...values) => values.filter(Boolean).join(' '), mailCss: css, uiCss: css, moveMailSpotlight() {},
     MailFolderRail: 'MailFolderRail', MailMessage: 'MailMessage', MailWorkflowBar: 'MailWorkflowBar',
     MailTrashDialog: 'MailTrashDialog', MailFoldersDialog: 'MailFoldersDialog',
+    MailDeskRibbon: 'MailDeskRibbon', MailLetterStackCard: 'MailLetterStackCard',
+    MailLetterCard: 'MailLetterCard', MailStationerySheet: 'MailStationerySheet',
+    MailViewToggle: 'MailViewToggle',
+    LETTER_DRAG_THRESHOLD: 90,
+    folderLabel: row => row?.name || row?.path || '',
+    prefersReducedMotion: () => true,
+    runViewTransition: fn => fn(),
+    scheduleFocus: fn => fn(),
     async mailboxApi(action, payload = {}) {
       calls.push({ action, ...payload })
       if (action === 'accounts') return { accounts: [{ name: 'default', incoming: 'imap', trashSupported: true }], defaultAccount: 'default' }
@@ -92,10 +100,15 @@ function workbench({ refuseRead = false } = {}) {
     }
     assert.fail('Workbench effects did not settle; possible request loop')
   }
+  const ribbon = () => find(node => node.type === 'MailDeskRibbon').props
   const rail = () => find(node => node.type === 'MailFolderRail').props
-  return { settle, find, calls, folders, rail, contactRefreshes: () => contactRefreshes,
+  const switchTo3Pane = async () => {
+    ribbon().onViewMode('3pane')
+    await settle()
+  }
+  return { settle, find, calls, folders, ribbon, rail, switchTo3Pane, contactRefreshes: () => contactRefreshes,
     count: action => calls.filter(call => call.action === action).length,
-    unseen: path => rail().folders.find(row => row.path === path).unseen,
+    unseen: path => (findAll(view, node => node.type === 'MailFolderRail')[0]?.props || ribbon()).folders.find(row => row.path === path).unseen,
     open: uid => find(node => node.props.className === 'messageRow' && node.props.key === uid).children
       .find(node => node?.props?.className === 'messageButton').props.onClick({ currentTarget: { focus() {} } }),
     trash: uid => find(node => node.props.className === 'messageRow' && node.props.key === uid).children
@@ -103,9 +116,27 @@ function workbench({ refuseRead = false } = {}) {
   }
 }
 
-test('automatic read updates the selected folder count once without a folder/list request loop', async () => {
+test('Letter Desk automatic read updates the selected folder count once without a folder/list request loop', async () => {
   const ui = workbench()
   await ui.settle()
+  ui.ribbon().onFolder('Work'); await ui.settle()
+  assert.equal(ui.unseen('Work'), 2)
+  const before = { folders: ui.count('folders'), list: ui.count('list'), contacts: ui.contactRefreshes() }
+  const card = ui.find(node => node.type === 'MailLetterCard')
+  card.props.onUnfold(card.props.row); await ui.settle()
+  assert.equal(ui.unseen('Work'), 1)
+  assert.equal(ui.unseen('INBOX'), 1)
+  assert.equal(ui.ribbon().folder, 'Work')
+  assert.equal(ui.count('folders'), before.folders)
+  assert.equal(ui.count('list'), before.list)
+  assert.equal(ui.count('read'), 1)
+  assert.equal(ui.contactRefreshes(), before.contacts + 1)
+  assert.equal(ui.find(node => node.type === 'MailStationerySheet').props.selected, 7)
+})
+
+test('automatic read updates the selected folder count once without a folder/list request loop', async () => {
+  const ui = workbench()
+  await ui.settle(); await ui.switchTo3Pane()
   ui.rail().onFolder('Work'); await ui.settle()
   assert.equal(ui.unseen('Work'), 2)
   const before = { folders: ui.count('folders'), list: ui.count('list'), contacts: ui.contactRefreshes() }
@@ -123,7 +154,7 @@ test('automatic read updates the selected folder count once without a folder/lis
 
 test('a refused read mutation keeps the unread dot and selected folder badge', async () => {
   const ui = workbench({ refuseRead: true })
-  await ui.settle(); ui.rail().onFolder('Work'); await ui.settle()
+  await ui.settle(); await ui.switchTo3Pane(); ui.rail().onFolder('Work'); await ui.settle()
   ui.open(7); await ui.settle()
   assert.equal(ui.unseen('Work'), 2)
   assert.equal(ui.find(node => node.props.className === 'messageRow' && node.props.key === 7).props['data-unread'], true)
@@ -132,7 +163,7 @@ test('a refused read mutation keeps the unread dot and selected folder badge', a
 
 test('move, undo and explicit refresh each reload folder counts once and preserve the selected folder', async () => {
   const ui = workbench()
-  await ui.settle(); ui.rail().onFolder('Work'); await ui.settle()
+  await ui.settle(); await ui.switchTo3Pane(); ui.rail().onFolder('Work'); await ui.settle()
   const before = { folders: ui.count('folders'), list: ui.count('list') }
   ui.trash(8); await ui.settle()
   await ui.find(node => node.type === 'MailTrashDialog').props.onConfirm({ id: 'preview' })
@@ -155,7 +186,7 @@ test('move, undo and explicit refresh each reload folder counts once and preserv
 
 test('folder management reload retains an existing selection and falls back only when it disappears', async () => {
   const ui = workbench()
-  await ui.settle(); ui.rail().onFolder('Work'); await ui.settle()
+  await ui.settle(); await ui.switchTo3Pane(); ui.rail().onFolder('Work'); await ui.settle()
   ui.rail().onManage(); await ui.settle()
   ui.find(node => node.type === 'MailFoldersDialog').props.onChanged(); await ui.settle()
   assert.equal(ui.rail().folder, 'Work')

@@ -52,6 +52,10 @@ function createWorkbenchUI(React, require) {
     clip: ['m8 13 6-6a2.5 2.5 0 0 1 3.5 3.5l-7 7a4 4 0 0 1-5.7-5.7l8-8a5 5 0 0 1 7.1 7.1l-8 8'],
     clock: ['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z', 'M12 6v6l4 2'],
     image: ['M3 4h18v16H3z', 'm3 17 6-6 5 5 2-2 5 5M16 8h.01'],
+    layers: ['m12 3 9 4.5-9 4.5L3 7.5 12 3Z', 'm3 12 9 4.5 9-4.5', 'm3 16.5 9 4.5 9-4.5'],
+    columns: ['M3 4h18v16H3z', 'M9 4v16', 'M15 4v16'],
+    flip: ['M3 12a9 9 0 0 1 15.5-6.3L21 8', 'M21 3v5h-5', 'M21 12a9 9 0 0 1-15.5 6.3L3 16', 'M3 21v-5h5'],
+    expand: ['M15 3h6v6', 'M9 21H3v-6', 'm21 3-7 7', 'm3 21 7-7'],
   };
   function Icon({ name = 'file', size = 16, ...props }) {
     return h('svg', {
@@ -185,10 +189,21 @@ function createWorkbenchUI(React, require) {
         }
         try { return scope.querySelector(selector); } catch { return null; }
       }
+      function findTarget(scope, selectors) {
+        let firstMatch = null;
+        for (const selector of selectors) {
+          const node = safeQuery(scope, selector);
+          if (!node) continue;
+          if (!firstMatch) firstMatch = node;
+          const rect = node.getBoundingClientRect?.();
+          if (!rect || rect.width > 0 || rect.height > 0) return node;
+        }
+        return firstMatch;
+      }
       function measure() {
         const scope = rootRef?.current || (typeof document !== 'undefined' ? document : null);
         if (!scope || typeof scope.querySelector !== 'function') return;
-        const target = safeQuery(scope, current.selector) || safeQuery(scope, current.fallback) || null;
+        const target = findTarget(scope, [current.selector, current.fallback, current.fallback2]);
         setLayout?.(computeTourLayout(target, current.side, cardRef.current));
       }
       measure();
@@ -203,7 +218,7 @@ function createWorkbenchUI(React, require) {
         window.removeEventListener('resize', measure);
         window.removeEventListener('scroll', measure, true);
       };
-    }, [step, current.selector, current.fallback, current.side]);
+    }, [step, current.selector, current.fallback, current.fallback2, current.side]);
 
     React.useEffect?.(() => {
       if (manual) nextBtnRef.current?.focus?.();
@@ -294,7 +309,7 @@ function createWorkbenchUI(React, require) {
               onClick: () => (isLast ? finish() : onStep?.(step + 1, true)),
             }, isLast ? l('完成引导', 'Done') : l('下一步', 'Next'))))));
   }
-  function Page({ title, navigation, actions, children, workbench = false, showUpdates = false, className, lang = 'zh', tourSteps = null, tourStorageKey = 'dsh-email.tour.v1', onTourCopyPrompt }) {
+  function Page({ title, navigation, actions, children, workbench = false, showUpdates = false, className, lang = 'zh', tourSteps = null, tourStorageKey = 'dsh-email.tour.v1', onTourCopyPrompt, onTourOpen }) {
     const [style, setStyle] = useDshStyle(React);
     const [font, setFont] = useDshFont(React);
     const rootRef = React.useRef ? React.useRef(null) : { current: null };
@@ -335,9 +350,12 @@ function createWorkbenchUI(React, require) {
             'aria-label': isEn ? 'Interactive guide' : '使用引导',
             'aria-expanded': tour.open,
             title: isEn ? 'Interactive guide' : '使用引导',
-            onClick: () => setTour({ open: true, step: 0, manual: true }),
+            onClick: () => {
+              onTourOpen?.();
+              setTour({ open: true, step: 0, manual: true });
+            },
           }, isEn ? '? Tour' : '? 引导') : null,
-          h(StyleSwitcher, { style, font, onChange: setStyle, onFontChange: setFont, lang, compact: true }),
+          h(StyleSwitcher, { style, font, onChange: setStyle, onFontChange: setFont, lang, compact: true, dataTour: 'mail-style' }),
           actions)),
       h('div', { className: ui.pageBody, 'data-show-updates': showUpdates }, children),
       hasTour && tour.open ? h(CoachmarkTour, {

@@ -1465,6 +1465,7 @@ export function createStyleSwitcherComponent(React, requireFn) {
     disabled = false,
     align = 'end',
     className,
+    dataTour,
   } = {}) {
     const [syncedStyle, setSyncedStyle] = useDshStyle(React);
     const [syncedFont] = useDshFont(React);
@@ -1494,6 +1495,7 @@ export function createStyleSwitcherComponent(React, requireFn) {
       'div',
       {
         className: ['dsh-style-switcher', className].filter(Boolean).join(' '),
+        'data-tour': dataTour || undefined,
         'data-window-drag-exclude': '',
       },
       h(P.Menu, {

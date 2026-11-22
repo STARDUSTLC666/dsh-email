@@ -2,7 +2,7 @@
 
 # Email
 
-**DeepSeek Harness email workbench: read mail, draft rich replies, review before immediate or scheduled delivery, and switch across five workbench themes.**
+**DeepSeek Harness email workbench: default tactile Letter Desk (`Desk`) with 1-click toggle to classic `3-Pane`, safe rich replies, local Contacts pinyin autocomplete, interactive Whale-Girl Courier, and 13 bright styles + 8 dual-layer fonts.**
 
 [![npm](https://img.shields.io/npm/v/dsh-email)](https://www.npmjs.com/package/dsh-email) [![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-downloads.svg)](https://www.npmjs.com/package/dsh-email) [![total downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-total-downloads.svg)](https://www.npmjs.com/package/dsh-email)
 
@@ -17,11 +17,12 @@
 
 ## Features
 
-Supports safe HTML send/reply/draft previews, reviewed scheduled sends, Google & Outlook OAuth, Tencent enterprise mail presets, localized reply quotations, optional mail-triggered DSH tasks, and five switchable UI themes (Native Airy, Warm Cream, Claude Warmth, Bright 8-Bit, and Airy Mint) adapted for DeepSeek Harness `>=0.2.2-rc.3`. See the [workflow and operating boundaries](docs/OUTGOING-AUTOMATION.en.md). Existing Gmail app-password accounts continue to work. Scheduling requires a running DSH; task execution and automatic result replies are opt-in.
+Supports the bespoke **Letter Desk (`Desk`)** tactile stacked airmail workbench with 1-click switch back to classic **3-Pane**, safe HTML send/reply/draft previews, reviewed scheduled sends, Google & Outlook OAuth, Tencent enterprise mail presets, localized reply quotations, optional mail-triggered DSH tasks, interactive Whale-Girl **Courier**, **13 switchable bright/soft workbench styles** (Native Airy, Warm Cream, Claude Warmth, Bright 8-Bit, Airy Mint, Daylight Glass, E-Ink Paper, Blueprint, Riso Zine, Retro 98, Song Xuan, Aqua Gloss, Gazette), and **8 dual-layer font pairings (default: YouYuan Mono)** adapted for DeepSeek Harness `>=0.2.2-rc.3`. See the [workflow and operating boundaries](docs/OUTGOING-AUTOMATION.en.md). Existing Gmail app-password accounts continue to work. Scheduling requires a running DSH; task execution and automatic result replies are opt-in.
 
 - Use IMAP/POP3/SMTP, Outlook OAuth or AgentMail accounts.
 - Besides built-in providers and server presets, the provider dropdown offers **Custom server (enter details)**: enter IMAP/SMTP endpoints directly for intranet or self-hosted mail servers. A blank outgoing host reuses the incoming host, and blank ports default to 993/465.
-- Read messages, search and download attachments in the workbench.
+- **Letter Desk (`Desk` default) & 3-Pane toggle**: triage stacked airmail Letter Cards by dragging left to skip or right to unfold full stationery, 3D-flip to inspect raw envelope metadata, or switch back to the classic 3-Pane folder tree with per-folder unread counts and resizable split panes in 1 click. Click **`? Tour`** in the header anytime for a spotlight guide.
+- **Interactive Whale-Girl Courier**: click **Courier** in the topbar to summon her anytime — pat her head for 3 mood expressions & particle effects, check for new mail live, or jump straight to your mailbox.
 - A local address book collects correspondents as you read, renders senders and recipients by contact name, and offers autocomplete for To/Cc by name, address, full pinyin, pinyin initials or 工号 (so `张小`, `zxm`, `zhangxiaoming` and `100123` all reach the same colleague), filling in `Name <address>`; everything stays on this machine in a local SQLite file.
 - Review the sender, To/Cc, content and attachments before confirming.
 - Run in Chinese, English, Spanish, French, German, Japanese, Brazilian Portuguese or Russian, using the DSH locale runtime.
@@ -30,9 +31,9 @@ Supports safe HTML send/reply/draft previews, reviewed scheduled sends, Google &
 <details>
 <summary>See a workbench example</summary>
 
-![workbench example](https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/docs/assets/intro/screen-en.webp)
+![dsh-email Letter Desk workbench example](https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/docs/assets/intro/screen-en.webp)
 
-Actual interface with controlled validation data; the PPTX image is a rendered sample when shown.
+Captured with `dsh-email 0.32.0` running in Harness Web `0.2.2-rc.3` (Letter Desk tactile airmail stack + default YouYuan Mono font, controlled validation data).
 
 </details>
 
@@ -50,12 +51,14 @@ For the web profile, replace `desktop` with `web`. Restart that DSH profile afte
 
 ## Start using it
 
-**Human-in-the-loop workflow: Connect mailbox → Filter & read in Workbench → 1-click copy AI prompt to draft/summarize → Review & send**
+**Human-in-the-loop workflow: Connect mailbox → Triage on Letter Desk → Summon Courier / AI drafts → Review & send** (click **`? Tour`** in the topbar anytime for a spotlight walkthrough):
 
 1. **Connect mailbox**: Open **Email → Accounts**, choose your IMAP/POP3/SMTP provider, Google/Outlook OAuth, AgentMail, or a custom server, sign in or paste an app password, and click **Test connection**.
-2. **Filter & read in Workbench**: Switch to **Mailbox**, narrow down with folder navigation, **Unread only**, **With attachments on this page**, or search, and inspect formatted messages safely (external tracking images stay blocked until you opt in per message).
-3. **1-click copy AI prompt to draft or summarize**: Expand **AI mail workflow & quick prompts** at the top of the Mailbox panel and click **Summarize unread & tasks**, **Draft a polite reply**, or **Extract key points & asks**. When a message is open, the copied prompt automatically includes its account, folder, UID, subject, and sender—paste straight into DSH Chat so the assistant prepares a draft or summary without sending anything prematurely.
-4. **Review & send**: Open **Drafts** to edit and preview HTML/plain text, verify To/Cc, attachments, and sending account, then confirm **immediate** or **scheduled** delivery. Recipient block rules always take precedence.
+2. **Triage & read on the Letter Desk (`Desk` default, 1-click back to `3-Pane`)**:
+   - **Mailbox** opens into the **Letter Desk**: the compact top ribbon combines account & folder tree switching (with unread badges), keyword search, **Unread only**, **With attachments**, a remaining counter, and the 1-click **Desk / 3-Pane** toggle.
+   - Triage stacked airmail Letter Cards by dragging **left to skip** or **right to unfold full stationery**; click **Envelope header** (or press `Space`/`F`) to 3D-flip to raw server headers, or click **Unfold full letter** for formatted reading, attachment downloads, and replies (external tracking images stay blocked until you opt in per message).
+3. **Interactive Whale-Girl Courier & AI drafts**: Click **Courier** in the topbar to summon the whale-girl for headpat expressions or live **Check mail**; copy the 1-click prompt in `? Tour` (or ask in Chat) so the assistant summarizes unread tasks or saves reply drafts in **Drafts** without sending prematurely.
+4. **Compose with autocomplete, review & personalize**: Click **Compose** or open **Drafts** (with local Contacts pinyin/ID autocomplete for To/Cc), preview HTML/plain text, recipients, attachments, and sending account, then confirm **immediate** or **scheduled** delivery (recipient block rules always take precedence). Switch live across **13 bright styles** and **8 dual-layer fonts (`字`, default: YouYuan Mono)** synced across all DSH plugins.
 
 You can also ask directly in Chat:
 
