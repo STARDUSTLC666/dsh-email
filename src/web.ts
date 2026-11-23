@@ -48,9 +48,10 @@ function carrierVerdict(request: Request): { status: number; message: string } |
   if (!['GET', 'POST'].includes(request.method)) return { status: 405, message: 'Use GET or POST' }
   if (request.headers.get('x-dsh-email-settings') !== '1') return { status: 403, message: 'Open settings from DSH' }
   const site = request.headers.get('sec-fetch-site')
-  if (site && !['same-origin', 'none'].includes(site)) return { status: 403, message: 'Open settings from the same DSH session' }
   const origin = request.headers.get('origin')
-  if (origin && origin !== 'dsh-app://app') {
+  const desktop = origin === 'dsh-app://app'
+  if (site && !['same-origin', 'none'].includes(site) && !desktop) return { status: 403, message: 'Open settings from the same DSH session' }
+  if (origin && !desktop) {
     try {
       const source = new URL(origin)
       if (!['http:', 'https:'].includes(source.protocol) || source.host !== (request.headers.get('host') || new URL(request.url).host)) throw new Error('origin mismatch')

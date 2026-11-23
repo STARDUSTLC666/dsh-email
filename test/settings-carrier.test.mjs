@@ -39,6 +39,8 @@ for (const headers of [{ origin: 'http://attacker.example' }, { origin: 'null' }
 test('carrier supports HTTPS, native desktop and absent Origin with its explicit marker', async () => {
   const f = fixture()
   for (const origin of ['https://' + host, 'dsh-app://app']) assert.equal((await f.backend.fetch(request('GET', { origin }))).status, 200)
+  assert.equal((await f.backend.fetch(request('POST', { origin: 'dsh-app://app', 'sec-fetch-site': 'cross-site' }, { action: 'save', value: f.value(), expectedRevision: 0 }))).status, 200)
+  assert.equal((await f.backend.fetch(request('POST', { origin: 'dsh-app://app.evil', 'sec-fetch-site': 'cross-site' }, { action: 'save', value: f.value(), expectedRevision: 1 }))).status, 403)
   const req = request();req.headers.delete('origin');assert.equal((await f.backend.fetch(req)).status, 200)
 })
 test('carrier rejects simple forms, missing markers, invalid methods and oversized saves', async () => {

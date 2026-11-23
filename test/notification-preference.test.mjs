@@ -137,7 +137,7 @@ test('whale popup fits portrait fallback and skin artwork without cropping, expo
   assert.equal(img.getAttribute('data-whale-skin'), 'false')
   assert.equal(img.getAttribute('width'), '800')
   assert.equal(img.getAttribute('height'), '597')
-  assert.equal(img.src, WHALE_API_ROUTE)
+  assert.equal(img.src, WHALE_API_ROUTE.replace(/^\/+/, ''))
 
   assert.equal(body.getAttribute('data-whale'), 'body')
   assert.deepEqual(

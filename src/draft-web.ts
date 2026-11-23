@@ -336,10 +336,10 @@ export class EmailDraftBackend {
     } catch (error) { await this.store.removeOwnedFile(id, owned); throw error }
   }
   async fetch(request: Request): Promise<Response> {
-    const site = request.headers.get('sec-fetch-site'), origin = request.headers.get('origin')
+    const site = request.headers.get('sec-fetch-site'), origin = request.headers.get('origin'), desktop = origin === 'dsh-app://app'
     const fail = (status: number, error: unknown) => json(status, { ok: false, error: { code: error instanceof DraftError ? error.code : (error as { code?: string })?.code === 'SETTINGS_CONFLICT' ? 'settings-conflict' : 'draft-invalid', message: this.safe(error) } })
-    if (site && !['same-origin', 'none'].includes(site)) return fail(403, new DraftError('请从邮件草稿面板操作'))
-    if (origin) { try { const url = new URL(origin); if (!['http:', 'https:'].includes(url.protocol) || url.host !== (request.headers.get('host') || new URL(request.url).host)) return fail(403, new DraftError('拒绝跨源操作')) } catch { return fail(403, new DraftError('无效来源')) } }
+    if (site && !['same-origin', 'none'].includes(site) && !desktop) return fail(403, new DraftError('请从邮件草稿面板操作'))
+    if (origin && !desktop) { try { const url = new URL(origin); if (!['http:', 'https:'].includes(url.protocol) || url.host !== (request.headers.get('host') || new URL(request.url).host)) return fail(403, new DraftError('拒绝跨源操作')) } catch { return fail(403, new DraftError('无效来源')) } }
     try {
       this.prune()
       if (request.method === 'GET') {

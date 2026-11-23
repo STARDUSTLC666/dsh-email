@@ -293,24 +293,25 @@ export class EmailMailboxBackend {
         },
       })
     const origin = request.headers.get('origin'),
-      site = request.headers.get('sec-fetch-site')
+      site = request.headers.get('sec-fetch-site'),
+      desktop = origin === 'dsh-app://app'
     if (
       request.method !== 'POST' ||
       request.headers.get('x-dsh-email-mailbox') !== '1' ||
       request.headers.get('content-type')?.split(';')[0] !==
         'application/json' ||
-      (site && !['same-origin', 'none'].includes(site))
+      (site && !['same-origin', 'none'].includes(site) && !desktop)
     )
       return fail(403)
     // DSH's authenticated connection carrier reconstructs the URL internally;
     // the original Host header identifies the browser-facing origin.
-    if (origin) {
+    if (origin && !desktop) {
       try {
         const source = new URL(origin)
         if (
-          origin !== 'dsh-app://app' && (!['http:', 'https:'].includes(source.protocol) ||
+          !['http:', 'https:'].includes(source.protocol) ||
           source.host !==
-            (request.headers.get('host') || new URL(request.url).host))
+            (request.headers.get('host') || new URL(request.url).host)
         )
           return fail(403)
       } catch {

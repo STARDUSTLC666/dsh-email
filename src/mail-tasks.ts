@@ -381,10 +381,10 @@ export class MailTaskBackend {
         await this.running;
     }
     async fetch(request: Request): Promise<Response> {
-        const site = request.headers.get('sec-fetch-site'), origin = request.headers.get('origin');
-        if (request.method !== 'POST' || request.headers.get('x-dsh-email-tasks') !== '1' || request.headers.get('content-type')?.split(';')[0] !== 'application/json' || site && !['same-origin', 'none'].includes(site))
+        const site = request.headers.get('sec-fetch-site'), origin = request.headers.get('origin'), desktop = origin === 'dsh-app://app';
+        if (request.method !== 'POST' || request.headers.get('x-dsh-email-tasks') !== '1' || request.headers.get('content-type')?.split(';')[0] !== 'application/json' || (site && !['same-origin', 'none'].includes(site) && !desktop))
             return json(403, { ok: false, message: 'Open mail tasks in DSH' });
-        if (origin) {
+        if (origin && !desktop) {
             try {
                 const u = new URL(origin);
                 if (!['http:', 'https:'].includes(u.protocol) || u.host !== (request.headers.get('host') || new URL(request.url).host))

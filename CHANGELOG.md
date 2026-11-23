@@ -1,5 +1,12 @@
 # 更新记录
 
+## 0.32.1 (2026-11-23)
+
+- **反代子路径与 DSH 桌面端认证修复**：修复 `mailTaskApi`（`api/dsh-email/tasks`）与鲸鱼娘信使图片 URL（去除 `/api/dsh-email/whale` 与 `/_dsh/...` 前导 `/`）在反向代理子路径挂载下逃逸站点根的问题；全量 4 条工作台认证路由（`settings` / `mailbox` / `drafts` / `tasks`）统一豁免 DSH 桌面端 `Origin: dsh-app://app`（含 `Sec-Fetch-Site`），并补充对应单测。
+- **打包元数据与文档同步**：更新 `package.json` 描述（13 套设计风格 × 8 套字体）并补充 `typecheck` 脚本；在 `USAGE` 工具表补齐 `email_schedule`，更新 `DRAFTS` 线程回复草稿说明，并修正双语 `REFERENCE` 语言切换链接与兼容更新范围文案。
+- **Reverse-Proxy Subpath & DSH Desktop Origin Fixes**: Switched `mailTaskApi` to relative `api/dsh-email/tasks` and stripped leading slashes on whale courier URLs so subpath deployments stay within the application mount; exempted DSH Desktop `Origin: dsh-app://app` (including `Sec-Fetch-Site`) uniformly across all four authenticated routes (`settings`, `mailbox`, `drafts`, `tasks`) with unit tests.
+- **Metadata & Docs**: Updated `package.json` description (13 styles × 8 fonts), added `typecheck` script, added `email_schedule` to `USAGE` tool tables, updated `DRAFTS` for threaded reply drafts, and fixed bilingual `REFERENCE` links and compatible update-scope wording.
+
 ## 0.32.0 (2026-11-22)
 
 - **全新「信桌（Letter Desk）」默认交互工作台**：收发邮件默认采用实体航空信封叠卡流，支持直接左滑跳过、右滑展开、点击「翻面看信封头」查看 3D 背面完整投递元信息、点击「展开信纸全文」阅读信纸正文并自动按设置标记已读、同步扣减文件夹未读计数；顶栏提供 `信桌 / 三栏` 一键切换，可随时切回经典三栏布局（完整保留层级文件夹未读数与本地 SQLite 通讯录姓名显示/拼音补全）。

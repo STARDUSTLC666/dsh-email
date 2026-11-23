@@ -5273,7 +5273,7 @@ __stardustUpdatesGuard(React, "dsh-email.rules", { dirty: !!dirty, busy, retainO
         }
         let emailWorkspace=null;
         async function mailTaskApi(action,payload={}) {
-            const response=await fetch('/api/dsh-email/tasks',{credentials:'same-origin',method:'POST',headers:{'content-type':'application/json','x-dsh-email-tasks':'1'},body:JSON.stringify({action,...payload})});
+            const response=await fetch('api/dsh-email/tasks',{credentials:'same-origin',method:'POST',headers:{'content-type':'application/json','x-dsh-email-tasks':'1'},body:JSON.stringify({action,...payload})});
             const result=await response.json();if(!response.ok||!result.ok)throw new Error(result.message||dt('任务操作失败','Task operation failed'));return result.value;
         }
         function MailTaskWorkbench({active,accounts=[]}) {
@@ -6127,7 +6127,7 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                         const snap = await api();
                         if (disposed) return;
                         if (snap?.whale) {
-                            whaleUrl = (snap.whale.url || "").replace(/^\/_dsh\//, "_dsh/");
+                            whaleUrl = (snap.whale.url || "").replace(/^\/+/, "");
                             whaleCredit = snap.whale.credit || "";
                             whaleSkin = Boolean(snap.whale.skin);
                         }
@@ -6197,7 +6197,7 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                         const snap = await api();
                         if (disposed) return;
                         if (snap?.whale) {
-                            whaleUrl = (snap.whale.url || "").replace(/^\/_dsh\//, "_dsh/");
+                            whaleUrl = (snap.whale.url || "").replace(/^\/+/, "");
                             whaleCredit = snap.whale.credit || "";
                             whaleSkin = Boolean(snap.whale.skin);
                         }
@@ -6238,7 +6238,7 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                         return;
                     setEnabled(localPreference ?? (snap?.settings?.value?.newMailPopup !== false));
                     if (snap && snap.whale) {
-                        whaleUrl = (snap.whale.url || "").replace(/^\/_dsh\//, "_dsh/");
+                        whaleUrl = (snap.whale.url || "").replace(/^\/+/, "");
                         whaleCredit = snap.whale.credit || "";
                         whaleSkin = Boolean(snap.whale.skin);
                     }

@@ -77,9 +77,13 @@ test('custom subject prefixes work without permitting arbitrary workspace paths'
  await f.backend.tick();assert.equal(f.prompts.length,1);assert.match(f.prompts[0].text,/Summarize this workspace/)
 })
 
-test('mail-task writes reject cross-origin requests and preserve corrupt storage',async t=>{
+test('mail-task writes reject cross-origin requests, allow DSH desktop origin and preserve corrupt storage',async t=>{
  const f=await setup(t)
- const request=new Request('http://localhost/api/dsh-email/tasks',{method:'POST',headers:{origin:'https://evil.example','content-type':'application/json','x-dsh-email-tasks':'1'},body:'{"action":"rotateKey","revision":2}'})
- assert.equal((await f.backend.fetch(request)).status,403)
+ const post=(headers,body='{"action":"list"}')=>f.backend.fetch(new Request('http://localhost/api/dsh-email/tasks',{method:'POST',headers:{'content-type':'application/json','x-dsh-email-tasks':'1',...headers},body}))
+ assert.equal((await post({origin:'https://evil.example'},'{"action":"rotateKey","revision":2}')).status,403)
+ assert.equal((await post({origin:'dsh-app://app.evil'})).status,403)
+ assert.equal((await post({'sec-fetch-site':'cross-site'})).status,403)
+ assert.equal((await post({origin:'dsh-app://app'})).status,200)
+ assert.equal((await post({origin:'dsh-app://app','sec-fetch-site':'cross-site'})).status,200)
  await writeFile(f.store.file,'{broken');await assert.rejects(f.backend.action({action:'rotateKey',revision:2}),/existing file kept/);assert.equal(await readFile(f.store.file,'utf8'),'{broken')
 })

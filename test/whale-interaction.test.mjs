@@ -165,7 +165,7 @@ test('whale courier supports header summon toggle, headpat expressions/particles
   assert.equal(card.getAttribute('data-whale-mood'), 'deliver')
   assert.equal(card.getAttribute('data-dsh-style'), 'harness')
   assert.equal(card.getAttribute('data-dsh-font'), 'arcade')
-  assert.equal(img.src, WHALE_API_ROUTE)
+  assert.equal(img.src, WHALE_API_ROUTE.replace(/^\/+/, ''))
 
   // Check Mail with no new messages -> switches to ?mood=check and reports empty inbox.
   await checkBtn.onclick()

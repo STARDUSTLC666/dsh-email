@@ -161,7 +161,10 @@ test('configured attachment caps and the 50-draft limit stop excessive data', as
 test('the authenticated carrier route rejects CSRF, missing custom headers and unknown download handles', async t => {
   const x = await setup(t)
   assert.equal((await x.request({ action: 'list' }, { origin: 'https://untrusted.test' })).status, 403)
+  assert.equal((await x.request({ action: 'list' }, { origin: 'dsh-app://app.evil' })).status, 403)
   assert.equal((await x.request({ action: 'list' }, { 'sec-fetch-site': 'cross-site' })).status, 403)
+  assert.equal((await x.request({ action: 'list' }, { origin: 'dsh-app://app' })).status, 200)
+  assert.equal((await x.request({ action: 'list' }, { origin: 'dsh-app://app', 'sec-fetch-site': 'cross-site' })).status, 200)
   assert.equal((await x.request({ action: 'list' }, { 'x-dsh-email-draft': '' })).status, 403)
   assert.equal((await x.backend.fetch(new Request('http://127.0.0.1' + EMAIL_DRAFT_ROUTE + '?preview=missing&attachment=../secret'))).status, 404)
   const routes = []; installEmailDrafts({ inject(_names, callback) { callback({ connection: { fetch: { register(value) { routes.push(value) } } } }) } }, x.backend)

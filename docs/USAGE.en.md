@@ -25,6 +25,7 @@ See the [draft workbench](DRAFTS.en.md) for editable drafts and per-account trus
 | `email_search` | Search subject/sender/recipient/CC by keyword, verify server candidates and fall back to a batched header scan (default 5000 messages). Returns coverage and an older-window cursor; optional body search remains limited to recent messages. |
 | `email_send` | Send mail on your behalf (attachments supported). **Prompts for confirmation before sending by default**, showing recipients, subject and attachment count; only sends after you approve |
 | `email_draft` | Prepare a local draft without sending; edit, save, inspect the preview and manually confirm in Settings → Email → Drafts |
+| `email_schedule` | Manage confirmed scheduled emails on this DSH host (`schedule` / `list` / `cancel`): schedule an existing draft at a timezone-qualified ISO 8601 `sendAt` with mandatory approval; DSH must stay running |
 | `email_folders` | List the mailbox folders (INBOX/Sent/Junk/custom…); feed the `path` to other tools |
 | `email_attachment` | Download an attachment by index (saved to the session workspace by default so the model can read it directly; size capped by `maxAttachmentBytes`) |
 | `email_health` | Check account configuration and IMAP/SMTP host details offline; makes no network connection. Use Test connection in Web settings to verify IMAP connectivity |

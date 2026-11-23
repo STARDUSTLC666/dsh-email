@@ -301,3 +301,12 @@ test('IMAP reviewed replies retain thread headers and reject a renumbered mailbo
     pool.dispose()
   }
 })
+
+test('mailbox carrier allows DSH desktop origin (including cross-site Sec-Fetch-Site) and rejects foreign origins', async t => {
+  const f = await fixture(t)
+  assert.equal((await f.request({ action: 'accounts' }, { origin: 'https://evil.example' })).status, 403)
+  assert.equal((await f.request({ action: 'accounts' }, { origin: 'dsh-app://app.evil' })).status, 403)
+  assert.equal((await f.request({ action: 'accounts' }, { 'sec-fetch-site': 'cross-site' })).status, 403)
+  assert.equal((await f.request({ action: 'accounts' }, { origin: 'dsh-app://app' })).status, 200)
+  assert.equal((await f.request({ action: 'accounts' }, { origin: 'dsh-app://app', 'sec-fetch-site': 'cross-site' })).status, 200)
+})
