@@ -109,6 +109,10 @@ test('backend serves all 3 original whale-maid mood PNGs with empty FALLBACK_CRE
   const deliverBytes = await readMood('')
   const happyBytes = await readMood('?mood=happy')
   const checkBytes = await readMood('?mood=check')
+  for (const png of [deliverBytes, happyBytes, checkBytes]) {
+    assert.equal(png.toString('ascii', 12, 16), 'IHDR')
+    assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [1000, 400])
+  }
   assert.notEqual(Buffer.compare(deliverBytes, happyBytes), 0)
   assert.notEqual(Buffer.compare(deliverBytes, checkBytes), 0)
   assert.notEqual(Buffer.compare(happyBytes, checkBytes), 0)

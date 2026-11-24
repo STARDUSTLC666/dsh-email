@@ -94,7 +94,7 @@ test('closing the preference or unloading suppresses late watch results even if 
   assert.equal(f.events.size, 0)
 })
 
-test('whale popup fits portrait fallback and skin artwork without cropping, exposes data-whale hooks, and pauses dismiss on focus/hover (#55)', async t => {
+test('whale popup fits the built-in banner and skin artwork without cropping, exposes data-whale hooks, and pauses dismiss on focus/hover (#55)', async t => {
   const f = widgetFixture(true, { url: WHALE_API_ROUTE, skin: false, credit: 'community credit' })
   t.after(f.dispose)
   const { EMAIL_CSS: css, settingsCss } = f.probe
@@ -135,8 +135,8 @@ test('whale popup fits portrait fallback and skin artwork without cropping, expo
   assert.equal(img.tag, 'img')
   assert.equal(img.getAttribute('data-whale'), 'image')
   assert.equal(img.getAttribute('data-whale-skin'), 'false')
-  assert.equal(img.getAttribute('width'), '800')
-  assert.equal(img.getAttribute('height'), '597')
+  assert.equal(img.getAttribute('width'), '1000')
+  assert.equal(img.getAttribute('height'), '400')
   assert.equal(img.src, WHALE_API_ROUTE.replace(/^\/+/, ''))
 
   assert.equal(body.getAttribute('data-whale'), 'body')
