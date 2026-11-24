@@ -10,6 +10,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
         const h = React.createElement;
         // Harness supplies document.baseURI for reverse-proxy mounts and in-page navigation.
         const ROUTE = "api/dsh-email/settings";
+        const EMAIL_WORKBENCH_ID = "dsh-email.workbench";
         function translateError(message) {
             const common = {
                 es: ['La cuenta seleccionada no está configurada o no ha iniciado sesión. Revisa la configuración de la cuenta.', 'No se pudo guardar de forma segura la credencial OAuth2. No se escribió ningún token en texto sin cifrar.', 'No se pudo leer el archivo de inicio de sesión OAuth2. Comprueba los permisos; el archivo original no se modificó.', 'El resultado del envío no está claro. Comprueba el buzón antes de volver a enviar para evitar duplicados.', 'La operación de correo ha fallado. Revisa la cuenta y los registros de DSH.'],
@@ -5834,6 +5835,7 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
         let updateWhalePreference = null;
         let toggleWhaleWidget = null;
         let openEmailInbox = null;
+        let openEmailWorkbench = null;
         function startWhaleWidget() {
             if (document.querySelector("#dsh-email-whale-root"))
                 return () => { };
@@ -5892,11 +5894,9 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                 return whaleUrl + (whaleUrl.includes("?") ? "&" : "?") + "mood=" + mood;
             };
             const jumpToMailbox = () => {
+                emailActiveTab = "mailbox";
                 openEmailInbox?.();
-                if (typeof emailWorkspace?.openPlugin === "function")
-                    emailWorkspace.openPlugin("dsh-email.workbench");
-                else if (typeof emailWorkspace?.openWorkbench === "function")
-                    emailWorkspace.openWorkbench("dsh-email.workbench");
+                openEmailWorkbench?.();
             };
             const showPopup = (value, opts = {}) => {
                 const keepBubble = opts.preserveInteraction ? lastBubbleText : "";
@@ -6323,7 +6323,13 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
         const inject = ["slots", "locale"];
         function apply(ctx) {
             ctx.inject?.(['uiWorkspace'],host=>{emailWorkspace=host.uiWorkspace;host.effect?.(()=>()=>{emailWorkspace=null})});
-W.register(ctx,{id:'dsh-email.workbench',label:()=>dt('邮件','Email'),icon:'mail',component:EmailSettingsSection,order:54});
+            ctx.inject?.(["layout"], host => {
+                const layout = host.layout;
+                if (typeof layout?.selectPanel !== "function") return;
+                openEmailWorkbench = () => layout.selectPanel(EMAIL_WORKBENCH_ID);
+                host.effect?.(() => () => { openEmailWorkbench = null; });
+            });
+            W.register(ctx, { id: EMAIL_WORKBENCH_ID, label: () => dt("邮件", "Email"), icon: "mail", component: EmailSettingsSection, order: 54 });
 
             // 语言要在任何 t() 之前定下来：槽位的 label thunk 和鲸鱼娘都在挂载时就取文案。
             ctx.effect(() => subscribeLocale(ctx), "dsh-email: locale");

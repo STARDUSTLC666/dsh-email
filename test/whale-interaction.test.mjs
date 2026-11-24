@@ -6,8 +6,8 @@ import { EmailSettingsBackend, WHALE_API_ROUTE, parseWhaleMood } from '../lib/we
 
 const settle = async () => { for (let i = 0; i < 6; i++) await new Promise(resolve => setImmediate(resolve)) }
 
-function interactiveWidgetFixture({ enabled = true, accounts = ['default'], watchResult = { newCount: 0, messages: [] } } = {}) {
-  const timers = new Map(), roots = [], events = new Map(), workspaces = []
+function interactiveWidgetFixture({ enabled = true, accounts = ['default'], watchResult = { newCount: 0, messages: [] }, mounted = true, tab = 'mailbox' } = {}) {
+  const timers = new Map(), roots = [], events = new Map(), panels = []
   let serial = 0, client, watchCalls = 0, openedInbox = 0
   const element = tag => {
     const styleProps = new Map()
@@ -47,7 +47,7 @@ function interactiveWidgetFixture({ enabled = true, accounts = ['default'], watc
   }
   const source = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8').replace(
     'return module.exports;',
-    'module.exports.probe = { startWhaleWidget, EMAIL_CSS, toggleWhaleWidget: () => toggleWhaleWidget?.(), setInboxOpener: fn => { openEmailInbox = fn }, setWorkspace: ws => { emailWorkspace = ws } }; return module.exports;',
+    'module.exports.probe = { startWhaleWidget, EMAIL_CSS, toggleWhaleWidget: () => toggleWhaleWidget?.(), setInboxOpener: fn => { openEmailInbox = fn }, getTab: () => emailActiveTab, setTab: value => { emailActiveTab = value } }; return module.exports;',
   )
   runInNewContext(source, {
     window: { __ModuleLoader__: { load({ factory }) { client = factory(() => ({})) } } },
@@ -64,8 +64,15 @@ function interactiveWidgetFixture({ enabled = true, accounts = ['default'], watc
       return { ok: true, json: async () => ({ ok: true, value }) }
     },
   })
-  client.probe.setInboxOpener(() => { openedInbox++ })
-  client.probe.setWorkspace({ openPlugin(id) { workspaces.push(id) } })
+  if (mounted) client.probe.setInboxOpener(() => { openedInbox++ })
+  client.probe.setTab(tab)
+  client.apply({
+    inject(services, setup) {
+      if (services.includes('layout')) setup({ layout: { selectPanel(id) { panels.push(id) } } })
+    },
+    effect() {},
+    slots: { inject() {} },
+  })
   const dispose = client.probe.startWhaleWidget()
   return {
     dispose,
@@ -75,7 +82,7 @@ function interactiveWidgetFixture({ enabled = true, accounts = ['default'], watc
     probe: client.probe,
     get watchCalls() { return watchCalls },
     get openedInbox() { return openedInbox },
-    workspaces,
+    panels,
     setWatchResult(next) { watchResult = next },
   }
 }
@@ -189,12 +196,32 @@ test('whale courier supports header summon toggle, headpat expressions/particles
   assert.match(f.byWhale('item')[0].textContent, /Stage 5 Ready/)
   assert.match(f.byWhale('bubble')[0].textContent, /1 封新邮件/)
 
-  // Open Mailbox jumps to inbox tab and workspace.
+  // Open Mailbox jumps to the inbox tab and native mail panel.
   f.byWhale('open')[0].onclick()
   assert.equal(f.openedInbox, 1)
-  assert.deepEqual(f.workspaces, ['dsh-email.workbench'])
+  assert.deepEqual(f.panels, ['dsh-email.workbench'])
 
   // Summon toggle again closes the open card.
   await f.probe.toggleWhaleWidget()
   assert.equal(f.roots[0].childElementCount, 0)
+})
+
+test('a new mail notification opens the inbox from outside the mail workbench', async t => {
+  const f = interactiveWidgetFixture({
+    mounted: false,
+    tab: 'accounts',
+    watchResult: calls => calls === 1 ? { newCount: 0, messages: [] }
+      : { newCount: 1, messages: [{ subject: 'Courier notification', from: [] }] },
+  })
+  t.after(f.dispose)
+  await settle()
+  const nextPoll = [...f.timers.values()].find(timer => timer.delay === 30000)
+  assert.ok(nextPoll)
+  nextPoll.fn()
+  await settle()
+
+  f.byWhale('item')[0].onclick()
+  assert.equal(f.openedInbox, 0)
+  assert.equal(f.probe.getTab(), 'mailbox')
+  assert.deepEqual(f.panels, ['dsh-email.workbench'])
 })

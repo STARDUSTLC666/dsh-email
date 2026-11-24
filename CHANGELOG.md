@@ -1,5 +1,14 @@
 # 更新记录
 
+## 0.32.2 (2026-11-24)
+
+- 信使的三种默认表情统一使用 5:2 横幅，缩短信使弹窗并完整显示角色。
+- 从 DSH 聊天页点击新信通知或「打开邮箱」时，直接进入邮件工作台的收发邮件页。
+- 窄窗下邮件顶栏按可用宽度换行，信使和写邮件按钮保持完整，功能标签可以横向滚动。
+- All three built-in courier illustrations use a 5:2 banner that keeps the full character visible in a shorter popup.
+- Click a new-mail notification or **Open mailbox** from a DSH chat to open the inbox.
+- The mail toolbar wraps in narrow panes, keeping the Courier and Compose buttons readable and the tab strip scrollable.
+
 ## 0.32.1 (2026-11-23)
 
 - **反代子路径与 DSH 桌面端认证修复**：修复 `mailTaskApi`（`api/dsh-email/tasks`）与鲸鱼娘信使图片 URL（去除 `/api/dsh-email/whale` 与 `/_dsh/...` 前导 `/`）在反向代理子路径挂载下逃逸站点根的问题；全量 4 条工作台认证路由（`settings` / `mailbox` / `drafts` / `tasks`）统一豁免 DSH 桌面端 `Origin: dsh-app://app`（含 `Sec-Fetch-Site`），并补充对应单测。

@@ -1,6 +1,6 @@
 {
   "name": "dsh-email",
-  "version": "0.32.1",
+  "version": "0.32.2",
   "description": "DeepSeek Harness 邮件工作台：多账号收发、图文回复草稿、确认定时发送、Google/Outlook OAuth、可选邮件任务与 13 套设计风格 × 8 套字体切换。欢迎提交 issues 和 PR。",
   "type": "module",
   "main": "lib/index.js",

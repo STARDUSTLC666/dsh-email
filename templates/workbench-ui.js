@@ -356,7 +356,7 @@ function createWorkbenchUI(React, require) {
             },
           }, isEn ? '? Tour' : '? 引导') : null,
           h(StyleSwitcher, { style, font, onChange: setStyle, onFontChange: setFont, lang, compact: true, dataTour: 'mail-style' }),
-          actions)),
+          actions ? h('div', { className: ui.mailActions }, actions) : null)),
       h('div', { className: ui.pageBody, 'data-show-updates': showUpdates }, children),
       hasTour && tour.open ? h(CoachmarkTour, {
         rootRef,

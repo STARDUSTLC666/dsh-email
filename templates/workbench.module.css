@@ -65,6 +65,19 @@
   flex: none;
 }
 
+.mailActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  max-inline-size: 100%;
+  gap: 8px;
+}
+
+.headerActions .button.button {
+  flex: none;
+  white-space: nowrap;
+}
+
 .pageBody,
 .panel {
   display: flex;
@@ -412,15 +425,19 @@
 
 @container (max-width: 650px) {
   .pageHeader {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 4px 8px;
-    padding: 8px 12px 4px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 8px 12px;
   }
 
-  .tabs {
-    grid-area: 2 / 1 / auto / -1;
-    margin-inline: -2px;
+  .pageHeader :global(.dsh-header-leading) {
+    flex-wrap: nowrap;
+  }
+
+  .pageHeader .headerActions {
+    flex-wrap: wrap;
+    margin-inline-start: 0;
   }
 }
 
