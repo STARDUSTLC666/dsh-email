@@ -34,6 +34,12 @@ import {
 import { EmailPool, messageOf, redactCredentials } from './mail-client.js'
 import { AgentMailClient } from './agentmail.js'
 import { Pop3Client } from './pop3.js'
+import {
+  autodiscoverEmailServer,
+  extractDiscoveryDomain,
+  type AutodiscoverDependencies,
+  type AutodiscoverResult,
+} from './autodiscover.js'
 import type { ResolvedEmailConfig } from './config.js'
 import type { EmailWatchResult } from './types.js'
 
@@ -1121,6 +1127,9 @@ export class EmailSettingsBackend {
   /** Wired by apply(): the email_watch core; 'web' keeps its own cursor scope. */
   watchImpl?: (account: string, folder: string, limit: number, scope: string) => Promise<EmailWatchResult>
 
+  /** Test/embedder seam for deterministic autodiscover fixtures; never settable by HTTP callers. */
+  autodiscoverDeps?: AutodiscoverDependencies
+
   private get namespace(): string { return this.scope.namespace ?? SETTINGS_NAMESPACE }
 
   private get currentConfig(): EmailConfig { return this.scope.config ?? this.rowConfig }
@@ -1424,12 +1433,34 @@ export class EmailSettingsBackend {
     let status = 200, bytes: Buffer = Buffer.alloc(0)
     const res = { setHeader: (name: string, value: string) => headers.set(name, value), writeHead: (value: number) => { status = value }, end: (value: Buffer) => { bytes = Buffer.from(value) } }
     if (asset) this.handleAsset(req, res, AUTHENTICATED_CARRIER)
-    else await this.handle(req, res, AUTHENTICATED_CARRIER)
+    else await this.handle(req, res, AUTHENTICATED_CARRIER, request.signal)
     headers.delete('Content-Length')
     return new Response(bytes as any, { status, headers })
   }
 
-  async handle(req: any, res: any, transport?: symbol) {
+  /**
+   * Discover mail endpoints for an email address or domain without touching
+   * any credentials, passwords, or OAuth tokens. Only the extracted domain
+   * ever enters DNS or public HTTPS lookups.
+   */
+  async autodiscover(
+    input: unknown,
+    allowOnlineLookup = true,
+    signal?: AbortSignal,
+  ): Promise<{ found: true; result: AutodiscoverResult } | { found: false; domain: string }> {
+    if (typeof input !== 'string' || input.trim() === '') {
+      throw new Error('请先填写邮箱地址再进行自动识别 / Enter an email address before auto-detecting')
+    }
+    const domain = extractDiscoveryDomain(input)
+    const result = await autodiscoverEmailServer(domain, {
+      allowOnlineLookup,
+      signal,
+      dependencies: this.autodiscoverDeps,
+    })
+    return result ? { found: true, result } : { found: false, domain }
+  }
+
+  async handle(req: any, res: any, transport?: symbol, signal?: AbortSignal) {
     // The snapshot includes editable credentials. Loopback addresses and
     // request headers cannot replace the host's connection authentication.
     if (transport !== AUTHENTICATED_CARRIER) {
@@ -1480,6 +1511,12 @@ export class EmailSettingsBackend {
         this.responseJson(res, 200, { ok: true, value: await this.save(body.value, body.expectedRevision) })
       } else if (body?.action === 'test') {
         this.responseJson(res, 200, { ok: true, value: await this.test(body.value, body.account) })
+      } else if (body?.action === 'autodiscover') {
+        const rawTarget = typeof body.domain === 'string' && body.domain.trim() !== ''
+          ? body.domain
+          : (typeof body.email === 'string' ? body.email : '')
+        const allowOnlineLookup = body.allowOnlineLookup !== false
+        this.responseJson(res, 200, { ok: true, value: await this.autodiscover(rawTarget, allowOnlineLookup, signal) })
       } else if (body?.action === 'watch') {
         if (typeof this.watchImpl !== 'function') throw new Error('email_watch 未就绪')
         const account = typeof body.account === 'string' ? body.account : ''

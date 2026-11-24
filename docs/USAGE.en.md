@@ -159,11 +159,28 @@ work:
 
 The existing **Server presets (custom providers, advanced)** feature is unchanged: keep using a preset when several accounts share one set of servers, and use **Custom server (enter details)** when a single account needs its own endpoints. The two do not conflict, and an account's own `imap`/`smtp` still takes precedence over its selected preset.
 
+### Automatic server detection
+
+After entering an email address in **Settings → Email → Email accounts**, click **Auto-detect** next to the address field to discover server settings in order:
+
+1. **Built-in provider domains** (instant, offline): QQ / Foxmail / 163 / 126 / Sina / Alibaba / Gmail / Outlook / iCloud / AgentMail.
+2. **Offline extended provider database** (instant, offline): mainstream domestic and global providers (139, 189, Wo, Sohu, Yeah, 188, Feishu/Lark, Yahoo, Fastmail, Zoho, Yandex, GMX, WEB.DE, Mail.ru, Naver, Daum, mailbox.org, Posteo, etc.).
+3. **DNS MX reverse-lookup**: detects hosted custom-domain corporate/campus mailboxes (Tencent Exmail, Alibaba Enterprise Mail, NetEase Enterprise Mail, Feishu/Lark Mail, 263, Google Workspace, Microsoft 365, Zoho, Fastmail, iCloud+, etc.).
+4. **DNS SRV (RFC 6186 / RFC 8314)**: queries `_imaps._tcp`, `_submissions._tcp`, and `_pop3s._tcp` records.
+5. **HTTPS Autoconfig XML & Thunderbird ISPDB**: for public domains only, fetches the domain's HTTPS `config-v1.1.xml` and Mozilla's free Thunderbird ISPDB through the SSRF-hardened public downloader.
+
+Security & privacy guarantees:
+- **Zero credentials or usernames sent**: everything before `@` is stripped before querying; the endpoint never reads passwords or OAuth tokens.
+- **No intranet leaks**: private/internal/reserved domains (`.local`, `.internal`, `.lan`, private IPs) never trigger public HTTPS Autoconfig or Thunderbird ISPDB lookups.
+- **Encrypted endpoints only**: plaintext (`socketType: plain`), POP3 `STARTTLS`, and public discoveries targeting private/loopback hosts are rejected.
+- **Preview before applying**: discovered settings are shown for review first and never auto-saved or auto-tested; switching to a different server clears any previously stored password so old credentials cannot be sent to a newly discovered host.
+
 ## Presets
 
 | provider | IMAP | SMTP |
 |---|---|---|
 | `qq` | imap.qq.com:993 (SSL) | smtp.qq.com:465 (SSL) |
+| `exmail` | imap.exmail.qq.com:993 (SSL) | smtp.exmail.qq.com:465 (SSL) |
 | `163` | imap.163.com:993 | smtp.163.com:465 |
 | `126` | imap.126.com:993 | smtp.126.com:465 |
 | `sina` | imap.sina.com:993 | smtp.sina.com:465 |

@@ -21,7 +21,7 @@ Opens in the tactile **Letter Desk (`Desk`)** airmail stack with 1-click switch 
 
 | Pillar | Capabilities |
 | :--- | :--- |
-| **Multi-Protocol Accounts** | IMAP / POP3 / SMTP, Google & Outlook OAuth, AgentMail, Tencent enterprise presets, plus manual **Custom server** endpoints for intranet/self-hosted mail |
+| **Multi-Protocol Accounts** | IMAP / POP3 / SMTP, Google & Outlook OAuth, AgentMail, Tencent enterprise presets, **one-click server auto-detection** (offline DB / MX / SRV / Autoconfig / ISPDB), plus manual **Custom server** endpoints |
 | **Letter Desk (`Desk`) Triage** | Stacked airmail cards (drag left to skip, right to unfold, `Space`/`F` 3D-flip to raw headers) with 1-click switch to classic **3-Pane** folder trees & unread badges |
 | **Safe Reading & Delivery** | Blocks external tracking images by default; preview HTML/plain drafts, recipients & attachments before immediate or scheduled send, with undoable IMAP Trash |
 | **Local Contacts Autocomplete** | Learns correspondents locally in SQLite and autocompletes To/Cc by name, email, full pinyin, pinyin initials, or employee ID |

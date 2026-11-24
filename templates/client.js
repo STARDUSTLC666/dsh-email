@@ -3841,15 +3841,24 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             }
             if (draft.provider && draft.provider !== CUSTOM_SERVER_PROVIDER)
                 input.provider = draft.provider;
-            if (!isOauthDraft(draft) && draft.password)
-                input.password = draft.password;
-            // 显示名/登录名是普通三态字段（留空 = 清掉该键），密码与 password 同规：只有真打了字才写。
+            if (!isOauthDraft(draft)) {
+                if (draft.password)
+                    input.password = draft.password;
+                else if (draft.clearCredentials)
+                    input.password = "";
+            }
+            // 显示名/登录名是普通三态字段（留空 = 清掉该键），密码与 password 同规：只有真打了字才写；
+            // clearCredentials 仅在切换自动识别出的新服务器时置位，确保旧密码不会被发往新主机。
             if (draft.senderName !== undefined)
                 input.senderName = String(draft.senderName || "").trim();
             if (!isOauthDraft(draft) && draft.authUser !== undefined)
                 input.authUser = String(draft.authUser || "").trim();
-            if (!isOauthDraft(draft) && draft.authPassword)
-                input.authPassword = draft.authPassword;
+            if (!isOauthDraft(draft)) {
+                if (draft.authPassword)
+                    input.authPassword = draft.authPassword;
+                else if (draft.clearCredentials)
+                    input.authPassword = "";
+            }
             if (draft.proxyDirty) {
                 if (draft.proxyMode === 'custom' && !draft.proxy.trim() && !draft.hasProxy) throw new Error(dt('请填写自定义代理地址。', 'Enter the custom proxy URL.'));
                 if (draft.proxyMode !== 'custom' || draft.proxy.trim()) input.proxy = draft.proxyMode === 'direct' ? 'direct' : draft.proxyMode === 'custom' ? draft.proxy.trim() : '';
@@ -4170,8 +4179,8 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                 isOauth: authKind === "oauth2",
                 oauthState: sameProvider && liveState !== "" ? liveState : draftState,
                 oauthUser: sameProvider && live && typeof live.oauthUser === "string" ? live.oauthUser : String(draft.oauthUser || ""),
-                hasPassword: live !== null && live.hasPassword === true,
-                hasAuthPassword: live !== null && live.hasAuthPassword === true,
+                hasPassword: !draft.clearCredentials && live !== null && live.hasPassword === true,
+                hasAuthPassword: !draft.clearCredentials && live !== null && live.hasAuthPassword === true,
                 defaultClientId: sameProvider && typeof live.oauthDefaultClientId === "string"
                     ? live.oauthDefaultClientId : String(draft.defaultClientId || ""),
             };
@@ -4335,12 +4344,20 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             const [oauth, setOauth] = React.useState({});
             /** 每个账号的会话序号：取消 / 重启 / 换服务商都 +1，晚到的轮询结果据此作废。 */
             const oauthSeqRef = React.useRef({});
+            const cardIdPrefixRef = React.useRef("");
+            if (!cardIdPrefixRef.current) cardIdPrefixRef.current = "dshe-acc-" + (++nextCardId);
+            const cardIdPrefix = cardIdPrefixRef.current;
+            const [discovering, setDiscovering] = React.useState("");
+            const [discoverPreview, setDiscoverPreview] = React.useState({});
+            const [advOpen, setAdvOpen] = React.useState({});
+            const discoverSeqRef = React.useRef({});
             const listKey = cards.map((c) => String(c.name) + ":" + c.isDefault).join("|") + "|" + (detail.defaultAccount || "");
             React.useEffect(() => {
                 setDrafts(draftsFromCards(cards));
                 setOrder(cardRows(cards.map((c) => String(c.name))));
                 setOpen(0);
                 setConfirming(0);
+                setDiscoverPreview({});
                 setDefaultAccount(detail.defaultAccount || "");
                 // 详情对象每次快照都是新的：只依赖它的投影，免得无谓重建草稿。
                 // eslint-disable-next-line
@@ -4558,6 +4575,131 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
             const changeProvider = (name, provider) => {
                 cancelOauth(name);
                 patchDraft(name, applyPreset(draftsRef.current[name], provider));
+            };
+            const discoverSourceLabel = (source) => {
+                if (source === "builtin-domain") return dt("内置服务商", "Built-in");
+                if (source === "offline-db") return dt("离线扩展库", "Offline DB");
+                if (source === "mx") return dt("DNS MX 反查", "DNS MX");
+                if (source === "srv") return dt("DNS SRV", "DNS SRV");
+                if (source === "domain-autoconfig") return dt("域名 Autoconfig (HTTPS)", "Domain Autoconfig (HTTPS)");
+                if (source === "ispdb") return dt("Thunderbird ISPDB (HTTPS)", "Thunderbird ISPDB (HTTPS)");
+                return String(source || "");
+            };
+            const clearDiscover = (id) => {
+                discoverSeqRef.current[id] = (discoverSeqRef.current[id] || 0) + 1;
+                setDiscoverPreview((cur) => {
+                    if (!Object.prototype.hasOwnProperty.call(cur, id)) return cur;
+                    const next = Object.assign({}, cur);
+                    delete next[id];
+                    return next;
+                });
+            };
+            const discoverChangesTarget = (draft, result) => {
+                if (!draft || !result) return false;
+                const curProvider = String(draft.provider || "").trim();
+                if (result.provider) return curProvider !== result.provider;
+                if (curProvider !== CUSTOM_SERVER_PROVIDER) return curProvider !== "";
+                const sameHost = (a, b) => String(a?.host || "").trim().toLowerCase() === String(b?.host || "").trim().toLowerCase();
+                if (result.imap && !sameHost(draft.imap, result.imap)) return true;
+                if (result.smtp && !sameHost(draft.smtp, result.smtp)) return true;
+                if (!result.imap && result.pop3 && !sameHost(draft.pop3, result.pop3)) return true;
+                return false;
+            };
+            /** 只发送邮箱地址中的域名，绝不发送用户名、密码或令牌；结果仅预览，需用户确认才回填。 */
+            const runAutodiscover = async (id, name) => {
+                const draft = draftsRef.current[name];
+                if (draft === undefined) return;
+                const rawUser = String(draft.user || "").trim();
+                const at = rawUser.lastIndexOf("@");
+                const domain = (at >= 0 ? rawUser.slice(at + 1) : rawUser).replace(/\.$/, "").trim();
+                if (rawUser === "" || !domain.includes(".") || /\s/.test(domain)) {
+                    setDiscoverPreview((cur) => Object.assign({}, cur, {
+                        [id]: { state: "error", text: dt("请先填写完整的邮箱地址（例如 you@example.com），再点击「自动识别」。", "Enter a full email address (e.g. you@example.com) before auto-detecting.") },
+                    }));
+                    return;
+                }
+                const seq = (discoverSeqRef.current[id] || 0) + 1;
+                discoverSeqRef.current[id] = seq;
+                setDiscovering(name);
+                setRowStatus((cur) => {
+                    if (!Object.prototype.hasOwnProperty.call(cur, name)) return cur;
+                    const next = Object.assign({}, cur);
+                    delete next[name];
+                    return next;
+                });
+                setDiscoverPreview((cur) => {
+                    const next = Object.assign({}, cur);
+                    delete next[id];
+                    return next;
+                });
+                try {
+                    const value = await api("autodiscover", { domain });
+                    if (seq !== discoverSeqRef.current[id]) return;
+                    if (value && value.found && value.result) {
+                        setDiscoverPreview((cur) => Object.assign({}, cur, {
+                            [id]: { state: "found", result: value.result },
+                        }));
+                    } else {
+                        setDiscoverPreview((cur) => Object.assign({}, cur, {
+                            [id]: { state: "not-found", domain: (value && value.domain) || domain },
+                        }));
+                    }
+                } catch (e) {
+                    if (seq !== discoverSeqRef.current[id]) return;
+                    setDiscoverPreview((cur) => Object.assign({}, cur, {
+                        [id]: { state: "error", text: emailError(e) },
+                    }));
+                } finally {
+                    setDiscovering((cur) => (cur === name ? "" : cur));
+                }
+            };
+            const applyAutodiscover = (id, name) => {
+                const entry = discoverPreview[id];
+                const draft = draftsRef.current[name];
+                if (!entry || entry.state !== "found" || !entry.result || draft === undefined) return;
+                const result = entry.result;
+                const view = oauthViewOf(draft, cards);
+                const targetChanged = discoverChangesTarget(draft, result);
+                const hadCreds = view.hasPassword || view.hasAuthPassword || Boolean(draft.password) || Boolean(draft.authPassword);
+                cancelOauth(name);
+                let nextPatch;
+                if (result.provider) {
+                    nextPatch = applyPreset(draft, result.provider);
+                    if (result.provider === "gmail" && result.authKind === "oauth2") {
+                        nextPatch.authKindSetting = "oauth2";
+                        nextPatch.authKind = "oauth2";
+                    }
+                } else {
+                    nextPatch = applyPreset(draft, CUSTOM_SERVER_PROVIDER);
+                    if (result.imap && result.smtp) {
+                        nextPatch.receiveProtocol = "imap";
+                        nextPatch.imap = { host: result.imap.host, port: result.imap.port, secure: result.imap.secure };
+                        nextPatch.smtp = { host: result.smtp.host, port: result.smtp.port, secure: result.smtp.secure };
+                        if (result.pop3) nextPatch.pop3 = { host: result.pop3.host, port: result.pop3.port, secure: result.pop3.secure };
+                    } else if (result.pop3) {
+                        nextPatch.receiveProtocol = "pop3";
+                        nextPatch.pop3 = { host: result.pop3.host, port: result.pop3.port, secure: result.pop3.secure };
+                        nextPatch.smtp = result.smtp
+                            ? { host: result.smtp.host, port: result.smtp.port, secure: result.smtp.secure }
+                            : { host: "", port: 465, secure: true };
+                    }
+                }
+                if (targetChanged && hadCreds) {
+                    nextPatch.clearCredentials = true;
+                    nextPatch.password = "";
+                    nextPatch.authPassword = "";
+                }
+                clearDiscover(id);
+                patchDraft(name, nextPatch);
+                const label = dt(result.labelZh, result.labelEn);
+                setRowStatus((cur) => Object.assign({}, cur, {
+                    [name]: {
+                        kind: "success",
+                        text: result.authKind === "oauth2"
+                            ? dt("已填入「" + label + "」服务器设置，请完成 OAuth2 登录后点击「测试连接」。", "Applied settings for “" + label + "”. Sign in with OAuth2, then test the connection.")
+                            : dt("已填入「" + label + "」服务器设置，请填写授权码后点击「测试连接」。", "Applied settings for “" + label + "”. Enter your authorization code/app password, then test the connection."),
+                    },
+                }));
             };
             const renameDraft = (oldName, nextName) => {
                 // 映射键必须立刻跟着名字走，否则改名会留下旧键的孤儿。
@@ -4806,6 +4948,99 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                         expanded
                             ? h("div", { className: "dshe-acc-body" }, [
                                 h("div", { className: "dshe-grid" }, [
+                                    // Row 1 (全宽)：先填邮箱地址，右侧紧贴「自动识别」按钮，下方直接承接预览卡片，避免半栏空洞。
+                                    h("div", { className: "dshe-field", style: { gridColumn: "1 / -1" } }, [
+                                        h("label", { htmlFor: cardIdPrefix + "-addr-" + id }, t("card.addressLabel")),
+                                        h("div", { className: "dshe-endpoint-row" }, [
+                                            h("input", {
+                                                id: cardIdPrefix + "-addr-" + id,
+                                                type: "email",
+                                                autoComplete: "username",
+                                                autoCorrect: "off",
+                                                autoCapitalize: "none",
+                                                spellCheck: false,
+                                                value: draft.user === undefined || draft.user === null ? "" : String(draft.user),
+                                                placeholder: "you@example.com",
+                                                disabled: busy !== "",
+                                                onChange: (e) => {
+                                                    clearDiscover(id);
+                                                    setRowStatus((cur) => {
+                                                        if (!Object.prototype.hasOwnProperty.call(cur, name)) return cur;
+                                                        const next = Object.assign({}, cur);
+                                                        delete next[name];
+                                                        return next;
+                                                    });
+                                                    patchDraft(name, { user: e.target.value });
+                                                },
+                                            }),
+                                            h("button", {
+                                                type: "button",
+                                                className: "dshe-btn",
+                                                disabled: busy !== "" || discovering === name,
+                                                onClick: () => runAutodiscover(id, name),
+                                            }, discovering === name ? dt("识别中…", "Detecting…") : dt("自动识别", "Auto-detect")),
+                                        ]),
+                                        h("div", { className: "dshe-hint" }, dt("填完邮箱地址后点「自动识别」，仅按域名探测服务器（不发送用户名和密码）。", "Click Auto-detect after entering your address; only the domain is queried (no username or password is sent).")),
+                                    ]),
+                                    (() => {
+                                        const disc = discoverPreview[id];
+                                        if (!disc) return null;
+                                        if (disc.state === "error") {
+                                            return h("div", { className: "dshe-alert error", role: "alert", style: { gridColumn: "1 / -1" } }, disc.text);
+                                        }
+                                        if (disc.state === "not-found") {
+                                            return h("div", { className: "dshe-discover-preview", role: "status", "aria-live": "polite", style: { gridColumn: "1 / -1" } }, [
+                                                h("div", { className: "dshe-discover-head" }, dt("未自动识别到 " + disc.domain + " 的邮件服务器", "No mail server settings detected for " + disc.domain)),
+                                                h("div", { className: "dshe-hint" }, dt("可将服务商切到「自定义服务器（手动填写）」，直接填入邮箱服务商提供的 IMAP/POP3 与 SMTP 地址。", "Switch Provider to “Custom server (manual)” and enter the IMAP/POP3 and SMTP endpoints from your mail provider.")),
+                                                h("div", { className: "dshe-actions" }, [
+                                                    draft.provider !== CUSTOM_SERVER_PROVIDER && h("button", {
+                                                        type: "button",
+                                                        className: "dshe-btn",
+                                                        onClick: () => { clearDiscover(id); changeProvider(name, CUSTOM_SERVER_PROVIDER); },
+                                                    }, dt("切到自定义服务器", "Switch to custom server")),
+                                                    h("button", {
+                                                        type: "button",
+                                                        className: "dshe-btn",
+                                                        onClick: () => clearDiscover(id),
+                                                    }, dt("关闭", "Dismiss")),
+                                                ]),
+                                            ]);
+                                        }
+                                        const res = disc.result;
+                                        const willClear = discoverChangesTarget(draft, res) && (view.hasPassword || view.hasAuthPassword || Boolean(draft.password) || Boolean(draft.authPassword));
+                                        const tlsTag = (ep) => ep.secure ? "SSL/TLS" : "STARTTLS";
+                                        const lines = [];
+                                        if (res.provider === "agentmail" || res.provider === "agentmail-eu") {
+                                            lines.push(res.provider === "agentmail-eu" ? "API: https://api.agentmail.eu" : "API: https://api.agentmail.to");
+                                        } else {
+                                            if (res.imap) lines.push("IMAP: " + res.imap.host + ":" + res.imap.port + " (" + tlsTag(res.imap) + ")");
+                                            if (res.smtp) lines.push("SMTP: " + res.smtp.host + ":" + res.smtp.port + " (" + tlsTag(res.smtp) + ")");
+                                            if (res.pop3) lines.push("POP3: " + res.pop3.host + ":" + res.pop3.port + " (TLS)");
+                                        }
+                                        return h("div", { className: "dshe-discover-preview", role: "status", "aria-live": "polite", style: { gridColumn: "1 / -1" } }, [
+                                            h("div", { className: "dshe-discover-head" }, [
+                                                h("span", null, dt("识别结果：", "Detected: ") + dt(res.labelZh, res.labelEn)),
+                                                h("span", { className: "dshe-acc-badge" }, discoverSourceLabel(res.source)),
+                                                h("span", { className: "dshe-acc-badge" }, res.authKind === "oauth2" ? "OAuth2" : dt("授权码 / 应用密码", "App password")),
+                                            ]),
+                                            lines.length > 0 && h("ul", { className: "dshe-discover-endpoints" }, lines.map((line) => h("li", { key: line }, line))),
+                                            (res.hintZh || res.hintEn) && h("div", { className: "dshe-hint" }, dt(res.hintZh || res.hintEn, res.hintEn || res.hintZh)),
+                                            willClear && h("div", { className: "dshe-hint dshe-acc-warn" }, dt("注意：应用后将切换服务器并清空当前已存授权码，请核对上方服务器地址无误后再重新填写。", "Note: applying switches servers and clears any saved password. Verify the endpoints above before entering credentials again.")),
+                                            h("div", { className: "dshe-actions" }, [
+                                                h("button", {
+                                                    type: "button",
+                                                    className: "dshe-btn primary",
+                                                    onClick: () => applyAutodiscover(id, name),
+                                                }, dt("应用到当前账号", "Apply to account")),
+                                                h("button", {
+                                                    type: "button",
+                                                    className: "dshe-btn",
+                                                    onClick: () => clearDiscover(id),
+                                                }, t("common.cancel")),
+                                            ]),
+                                        ]);
+                                    })(),
+                                    // Row 2 (2 列顶部齐平)：账号名称 | 服务商
                                     h("div", { className: "dshe-field" }, [
                                         h("label", null, t("card.nameLabel")),
                                         h("input", {
@@ -4826,16 +5061,6 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                                             onChange: (e) => changeProvider(name, e.target.value),
                                         }, providerOptionsFor(presets, draft.provider).map((option) => h("option", { key: option.value, value: option.value }, option.label)))),
                                     ]),
-                                    h("div", { className: "dshe-field" }, [
-                                        h("label", null, t("card.addressLabel")),
-                                        fieldInput("text", draft.user, (v) => patchDraft(name, { user: v }), "you@example.com"),
-                                    ]),
-                                    !draft.provider?.startsWith('agentmail') && h('div', {className:'dshe-field'}, [
-                                        h('label', null, dt('收信协议','Incoming protocol')),
-                                        h(W.SettingsChoice, null, h('select', {'aria-label':dt('收信协议','Incoming protocol'),value:draft.receiveProtocol || 'imap',disabled:busy !== '',onChange:e=>patchDraft(name,{receiveProtocol:e.target.value,inboxFolder:'INBOX',pop3:draft.pop3 || {host:'',port:995,secure:true}})},[
-                                            h('option',{value:'imap'},'IMAP'),h('option',{value:'pop3',disabled:oauthCard},'POP3')])),
-                                        draft.receiveProtocol === 'pop3' && h('p',{className:'dshe-hint',role:'note'},dt('POP3 只读取收件箱，发送使用 SMTP。无服务器已读、星标或已发送文件夹；搜索会说明扫描范围。','POP3 reads the inbox and uses SMTP for sending. Server read/star flags and a Sent folder are unavailable; search shows its scan coverage.')),
-                                    ]),
                                     // 自定义服务器账号的端点：没有预设可展开，直接写在卡片里。
                                     draft.provider === CUSTOM_SERVER_PROVIDER && draft.receiveProtocol !== 'pop3' && h(React.Fragment, null, [
                                         endpointRow(name, draft, "imap", "card.imapServerLabel", "imap.corp.example"),
@@ -4852,15 +5077,7 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                                             kind==='pop3' && value.secure===false ? h('p',{className:'dshe-hint'},dt('未开启 TLS，POP3 登录与内容将以明文传输；仅用于明确允许明文的受信任服务器。此选项不是 STARTTLS。','TLS is off: POP3 login and content use plaintext. Use only with a trusted server where plaintext is intended. This is not STARTTLS.')) : null,
                                         ]);
                                     })),
-                                    !draft.provider?.startsWith("agentmail") && h("div", { className: "dshe-field" }, [
-                                        h("label", null, t("card.senderNameLabel")),
-                                        fieldInput("text", draft.senderName, (v) => patchDraft(name, { senderName: v }), t("card.senderNamePlaceholder")),
-                                        h("div", { className: "dshe-hint" }, t("card.senderNameHint")),
-                                    ]),
-                                    // 认证方式只在「可能是 OAuth2」的账号上出现：给 QQ/163 用户多一个
-                                    // 下拉框只是噪音。它是那条逃生舱的唯一面板入口——仍能用应用密码连
-                                    // Exchange Online 的租户（混合/本地部署、SMTP AUTH 未关）靠它才不用
-                                    // 去手改 YAML。
+                                    // Row 3 (核心认证区)：OAuth 方式选择器（如适用） + 授权码/OAuth 面板 + 发件显示名
                                     (oauthCard || authKindOf(draft.provider) === "oauth2" || draft.provider === 'gmail')
                                         ? h("div", { className: "dshe-field" }, [
                                             h("label", null, t("card.authKindLabel")),
@@ -4882,68 +5099,102 @@ window.__ModuleLoader__.load({ id: "dsh-email", factory: (require) => {
                                             h("div", { className: "dshe-hint" }, draft.provider==='gmail'?dt('Google OAuth 需要自己的桌面应用客户端；应用密码是否可用取决于账号策略。','Google OAuth requires your own Desktop app client; app-password availability depends on account policy.'):t("card.authKindHint")),
                                         ])
                                         : null,
-                                    !draft.provider?.startsWith('agentmail') && h('div', { className: 'dshe-field' },
-                                      h('label', null, dt('连接方式', 'Connection routing')),
-                                      h(W.SettingsChoice, null, h('select', { value: draft.proxyMode || 'inherit', 'aria-label': dt('连接方式', 'Connection routing'), disabled: busy !== '', onChange: e => patchDraft(name, { proxyMode: e.target.value, proxyDirty: true }) },
-                                        h('option', { value: 'inherit' }, dt('跟随全局或环境设置', 'Follow global or environment settings')),
-                                        h('option', { value: 'direct' }, dt('直接连接（不使用代理）', 'Connect directly (ignore proxies)')),
-                                        h('option', { value: 'custom' }, dt('自定义代理', 'Custom proxy')))),
-                                      draft.proxyMode === 'custom' && h('input', { type: 'password', autoComplete: 'new-password', value: draft.proxy || '', 'aria-label': dt('自定义代理地址', 'Custom proxy URL'), placeholder: draft.hasProxy ? dt('已保存，留空保持不变', 'Saved; leave blank to retain') : 'http://127.0.0.1:7897', disabled: busy !== '', onChange: e => patchDraft(name, { proxy: e.target.value, proxyDirty: true }) }),
-                                      h('div', { className: 'dshe-hint' }, dt('用于 IMAP 和 SMTP，支持 HTTP CONNECT / HTTPS / SOCKS。代理地址可能含密码，保存后不会回显。POP3 收信仍直接连接。', 'Applies to IMAP and SMTP. Supports HTTP CONNECT, HTTPS and SOCKS. Saved URLs may contain passwords and are not displayed. POP3 receiving still connects directly.'))),
-                                    // OAuth2 的服务商没有密码可填：这一格的凭证就是下面那块登录区。
-                                    // 留着密码框只会让人以为「填了密码就能用」，而后端根本不会读它。
-                                    oauthCard
-                                        ? h(OauthLoginPanel, {
-                                            draft: draft,
-                                            view: view,
-                                            session: oauthSession,
-                                            providerLabel: summary.label,
-                                            disabled: busy !== "" || oauthBusy,
-                                            starting: oauthBusy,
-                                            restarting: oauthBusy,
-                                            onStart: () => startOauth(name),
-                                            onCancel: () => cancelOauth(name),
-                                            onClientId: (v) => patchDraft(name, { clientId: v }),
-                                            onClientSecret: v=>patchDraft(name,{clientSecret:v,clientSecretDirty:true}),
-                                        })
-                                        : h(React.Fragment, null, [
-                                            h("div", { className: "dshe-field" }, [
-                                                h("label", null, draft.provider?.startsWith("agentmail") ? "AgentMail API Key" : t("card.passwordLabel")),
-                                                h("input", {
-                                                    type: "password",
-                                                    value: draft.password,
-                                                    disabled: busy !== "",
-                                                    placeholder: draft.provider?.startsWith("agentmail") ? dt("输入 API Key；留空保留已存密钥", "API key; leave blank to retain saved key") : t("card.passwordPlaceholder"),
-                                                    onChange: (e) => patchDraft(name, { password: e.target.value }),
-                                                }),
-                                                h("div", { className: "dshe-hint" }, view.hasPassword
-                                                    ? t("card.passwordSaved")
-                                                    : draft.provider?.startsWith("agentmail") ? dt("从 AgentMail 控制台取得 API Key。API Key 保存在本机账号配置中，由 DSH 后端调用所选区域的 API。", "Use an API key from the AgentMail console. The key is stored in the local account configuration; the DSH backend calls the selected region.") : t("card.passwordHint")),
-                                            ]),
-                                            // 别名/中继：登录名与登录密码都只在密码类账号上有意义（OAuth2 用 token 登录）。
-                                            !draft.provider?.startsWith("agentmail") && h("div", { className: "dshe-field" }, [
-                                                h("label", null, t("card.authUserLabel")),
-                                                fieldInput("text", draft.authUser, (v) => patchDraft(name, { authUser: v }), t("card.authUserPlaceholder")),
-                                                h("div", { className: "dshe-hint" }, t("card.authUserHint")),
-                                            ]),
-                                            !draft.provider?.startsWith("agentmail") && h("div", { className: "dshe-field" }, [
-                                                h("label", null, t("card.authPasswordLabel")),
-                                                h("input", {
-                                                    type: "password",
-                                                    value: draft.authPassword,
-                                                    disabled: busy !== "",
-                                                    placeholder: draft.provider?.startsWith("agentmail") ? dt("输入 API Key；留空保留已存密钥", "API key; leave blank to retain saved key") : t("card.passwordPlaceholder"),
-                                                    onChange: (e) => patchDraft(name, { authPassword: e.target.value }),
-                                                }),
-                                                h("div", { className: "dshe-hint" }, view.hasAuthPassword
-                                                    ? t("card.authPasswordSaved")
-                                                    : t("card.authPasswordHint")),
-                                            ]),
-                                        ]),
-                                    !draft.provider?.startsWith("agentmail") && draft.receiveProtocol !== 'pop3' && h("div", { className: "dshe-field" }, [
-                                        h("label", null, t("card.inboxLabel")),
-                                        fieldInput("text", draft.inboxFolder, (v) => patchDraft(name, { inboxFolder: v }), "INBOX"),
+                                    !oauthCard && h("div", {
+                                        className: "dshe-field",
+                                        style: draft.provider?.startsWith("agentmail") ? { gridColumn: "1 / -1" } : undefined,
+                                    }, [
+                                        h("label", null, draft.provider?.startsWith("agentmail") ? "AgentMail API Key" : t("card.passwordLabel")),
+                                        h("input", {
+                                            type: "password",
+                                            value: draft.password,
+                                            disabled: busy !== "",
+                                            placeholder: draft.provider?.startsWith("agentmail") ? dt("输入 API Key；留空保留已存密钥", "API key; leave blank to retain saved key") : t("card.passwordPlaceholder"),
+                                            onChange: (e) => patchDraft(name, { password: e.target.value, clearCredentials: false }),
+                                        }),
+                                        h("div", { className: "dshe-hint" }, view.hasPassword
+                                            ? t("card.passwordSaved")
+                                            : draft.provider?.startsWith("agentmail") ? dt("从 AgentMail 控制台取得 API Key。API Key 保存在本机账号配置中，由 DSH 后端调用所选区域的 API。", "Use an API key from the AgentMail console. The key is stored in the local account configuration; the DSH backend calls the selected region.") : t("card.passwordHint")),
                                     ]),
+                                    !draft.provider?.startsWith("agentmail") && h("div", {
+                                        className: "dshe-field",
+                                        style: (!oauthCard && (authKindOf(draft.provider) === "oauth2" || draft.provider === 'gmail')) ? { gridColumn: "1 / -1" } : undefined,
+                                    }, [
+                                        h("label", null, t("card.senderNameLabel")),
+                                        fieldInput("text", draft.senderName, (v) => patchDraft(name, { senderName: v }), t("card.senderNamePlaceholder")),
+                                        h("div", { className: "dshe-hint" }, t("card.senderNameHint")),
+                                    ]),
+                                    // OAuth2 的服务商没有密码可填：登录面板占满整行。
+                                    oauthCard && h(OauthLoginPanel, {
+                                        draft: draft,
+                                        view: view,
+                                        session: oauthSession,
+                                        providerLabel: summary.label,
+                                        disabled: busy !== "" || oauthBusy,
+                                        starting: oauthBusy,
+                                        restarting: oauthBusy,
+                                        onStart: () => startOauth(name),
+                                        onCancel: () => cancelOauth(name),
+                                        onClientId: (v) => patchDraft(name, { clientId: v }),
+                                        onClientSecret: v=>patchDraft(name,{clientSecret:v,clientSecretDirty:true}),
+                                    }),
+                                    // Row 4 (折叠高级区)：收信协议、代理、发信别名与收件文件夹。已配非默认值时自动展开。
+                                    !draft.provider?.startsWith("agentmail") && (() => {
+                                        const hasAdv = draft.receiveProtocol === "pop3"
+                                            || (draft.proxyMode && draft.proxyMode !== "inherit")
+                                            || Boolean(draft.authUser)
+                                            || view.hasAuthPassword
+                                            || (draft.inboxFolder && draft.inboxFolder !== "INBOX");
+                                        const isAdvOpen = Object.prototype.hasOwnProperty.call(advOpen, id) ? advOpen[id] : hasAdv;
+                                        return h("details", {
+                                            className: "dshe-details dshe-advanced-box",
+                                            open: isAdvOpen,
+                                            onToggle: (e) => {
+                                                const nextOpen = Boolean(e.currentTarget && e.currentTarget.open);
+                                                setAdvOpen((cur) => cur[id] === nextOpen ? cur : Object.assign({}, cur, { [id]: nextOpen }));
+                                            },
+                                        }, [
+                                            h("summary", null, dt("高级设置（收信协议、代理、发信别名与收件文件夹）", "Advanced settings (protocol, proxy, login alias & folder)")),
+                                            h("div", { className: "dshe-grid" }, [
+                                                h('div', {className:'dshe-field'}, [
+                                                    h('label', null, dt('收信协议','Incoming protocol')),
+                                                    h(W.SettingsChoice, null, h('select', {'aria-label':dt('收信协议','Incoming protocol'),value:draft.receiveProtocol || 'imap',disabled:busy !== '',onChange:e=>patchDraft(name,{receiveProtocol:e.target.value,inboxFolder:'INBOX',pop3:draft.pop3 || {host:'',port:995,secure:true}})},[
+                                                        h('option',{value:'imap'},'IMAP'),h('option',{value:'pop3',disabled:oauthCard},'POP3')])),
+                                                    draft.receiveProtocol === 'pop3' && h('p',{className:'dshe-hint',role:'note'},dt('POP3 只读取收件箱，发送使用 SMTP。无服务器已读、星标或已发送文件夹；搜索会说明扫描范围。','POP3 reads the inbox and uses SMTP for sending. Server read/star flags and a Sent folder are unavailable; search shows its scan coverage.')),
+                                                ]),
+                                                h('div', { className: 'dshe-field' }, [
+                                                    h('label', null, dt('连接方式', 'Connection routing')),
+                                                    h(W.SettingsChoice, null, h('select', { value: draft.proxyMode || 'inherit', 'aria-label': dt('连接方式', 'Connection routing'), disabled: busy !== '', onChange: e => patchDraft(name, { proxyMode: e.target.value, proxyDirty: true }) },
+                                                        h('option', { value: 'inherit' }, dt('跟随全局或环境设置', 'Follow global or environment settings')),
+                                                        h('option', { value: 'direct' }, dt('直接连接（不使用代理）', 'Connect directly (ignore proxies)')),
+                                                        h('option', { value: 'custom' }, dt('自定义代理', 'Custom proxy')))),
+                                                    draft.proxyMode === 'custom' && h('input', { type: 'password', autoComplete: 'new-password', value: draft.proxy || '', 'aria-label': dt('自定义代理地址', 'Custom proxy URL'), placeholder: draft.hasProxy ? dt('已保存，留空保持不变', 'Saved; leave blank to retain') : 'http://127.0.0.1:7897', disabled: busy !== '', onChange: e => patchDraft(name, { proxy: e.target.value, proxyDirty: true }) }),
+                                                    h('div', { className: 'dshe-hint' }, dt('用于 IMAP 和 SMTP，支持 HTTP CONNECT / HTTPS / SOCKS。代理地址可能含密码，保存后不会回显。POP3 收信仍直接连接。', 'Applies to IMAP and SMTP. Supports HTTP CONNECT, HTTPS and SOCKS. Saved URLs may contain passwords and are not displayed. POP3 receiving still connects directly.')),
+                                                ]),
+                                                !oauthCard && h("div", { className: "dshe-field" }, [
+                                                    h("label", null, t("card.authUserLabel")),
+                                                    fieldInput("text", draft.authUser, (v) => patchDraft(name, { authUser: v }), t("card.authUserPlaceholder")),
+                                                    h("div", { className: "dshe-hint" }, t("card.authUserHint")),
+                                                ]),
+                                                !oauthCard && h("div", { className: "dshe-field" }, [
+                                                    h("label", null, t("card.authPasswordLabel")),
+                                                    h("input", {
+                                                        type: "password",
+                                                        value: draft.authPassword,
+                                                        disabled: busy !== "",
+                                                        placeholder: t("card.passwordPlaceholder"),
+                                                        onChange: (e) => patchDraft(name, { authPassword: e.target.value, clearCredentials: false }),
+                                                    }),
+                                                    h("div", { className: "dshe-hint" }, view.hasAuthPassword
+                                                        ? t("card.authPasswordSaved")
+                                                        : t("card.authPasswordHint")),
+                                                ]),
+                                                draft.receiveProtocol !== 'pop3' && h("div", { className: "dshe-field" }, [
+                                                    h("label", null, t("card.inboxLabel")),
+                                                    fieldInput("text", draft.inboxFolder, (v) => patchDraft(name, { inboxFolder: v }), "INBOX"),
+                                                ]),
+                                            ]),
+                                        ]);
+                                    })(),
                                 ]),
                             ])
                             : null,

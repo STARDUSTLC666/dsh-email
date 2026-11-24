@@ -1,5 +1,5 @@
 import { type RecipientPolicy } from './recipient-policy.js';
-/** The 8 built-in provider ids. A `provider` may also name a custom preset. */
+/** The 9 built-in provider ids. A `provider` may also name a custom preset. */
 export type ProviderName = 'qq' | 'exmail' | '163' | '126' | 'sina' | 'aliyun' | 'gmail' | 'outlook' | 'icloud';
 /**
  * A provider id as an account stores it: one of the built-in names, or the name

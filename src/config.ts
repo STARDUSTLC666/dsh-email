@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { parseRecipientPolicies, type RecipientPolicy } from './recipient-policy.js'
 import { parseProxyUrl } from './proxy.js'
 
-/** The 8 built-in provider ids. A `provider` may also name a custom preset. */
+/** The 9 built-in provider ids. A `provider` may also name a custom preset. */
 export type ProviderName = 'qq' | 'exmail' | '163' | '126' | 'sina' | 'aliyun' | 'gmail' | 'outlook' | 'icloud'
 
 /**
@@ -622,7 +622,7 @@ export function resolveEmailSettings(config: EmailConfig | undefined, onlyAccoun
 }
 
 /**
- * The provider lookup order: the 8 built-ins first, then the custom presets.
+ * The provider lookup order: the 9 built-ins first, then the custom presets.
  * A built-in name always wins, so a custom preset cannot shadow `qq` — and an
  * inherited Object member (`constructor`, `toString`) is never a provider.
  *

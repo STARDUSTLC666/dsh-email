@@ -27,6 +27,67 @@
   background: var(--dsw-alias-bg-base);
 }
 
+.root :global(.dshe-discover-preview) {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-inline-start: 3px solid var(--dsw-alias-state-business-primary, #0b57d0);
+  border-radius: var(--dsw-radius-sm, 8px);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.root :global(.dshe-discover-head) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.root :global(.dshe-discover-endpoints) {
+  margin: 0;
+  padding-inline-start: 18px;
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code, ui-monospace);
+  font-size: 11.5px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.root :global(.dshe-advanced-box) {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm, 8px);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.root :global(.dshe-advanced-box) > summary {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary);
+  user-select: none;
+}
+
+.root :global(.dshe-advanced-box[open]) > summary {
+  margin-block-end: 12px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.root :global(.dshe-btn):focus-visible,
+.root :global(.dshe-field) :is(input, textarea, select):focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary, #0b57d0);
+  outline-offset: 2px;
+}
+
 .root :global(.dshe-field),
 .root :global(.dshe-acc-list),
 .root :global(.dshe-prst-list),
@@ -35,6 +96,21 @@
   display: grid;
   min-width: 0;
   gap: 6px;
+}
+
+.root :global(.dshe-field) {
+  align-content: start;
+  gap: 5px;
+}
+
+.root :global(.dshe-acc-body) {
+  padding-block-start: 10px;
+  border-block-start: 0.5px solid var(--dsw-alias-border-l2);
+  gap: 12px;
+}
+
+.root :global(.dshe-grid) > :global(.dshe-oauth) {
+  grid-column: 1 / -1;
 }
 
 .root :global(.dshe-field) > label {
@@ -48,7 +124,8 @@
   min-width: 0;
   max-width: 100%;
   width: 100%;
-  padding: 6px 8px;
+  min-height: 36px;
+  padding: 7px 10px;
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: var(--dsw-radius-sm, 8px);
   background: var(--dsw-alias-bg-base);
@@ -67,11 +144,19 @@
 .root :global(.dshe-grid) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  align-items: start;
+  gap: 14px 16px;
 }
 
 .root :global(.dshe-endpoint-row) > input {
-  flex: 1 1 120px;
+  flex: 1 1 160px;
+}
+
+.root :global(.dshe-endpoint-row) > :global(.dshe-btn) {
+  min-height: 36px;
+  padding: 6px 14px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .root :global(.dshe-check),

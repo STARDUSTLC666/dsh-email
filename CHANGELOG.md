@@ -1,5 +1,12 @@
 # 更新记录
 
+## 0.33.0 (2026-11-25)
+
+- **邮箱服务器 6 层自动识别（零新增依赖、零密码外发）**：账号卡片新增 **「自动识别 / Auto-detect」** 与认证接口 `action: "autodiscover"`，按「内置服务商 → 离线扩展库（含 139/189/沃邮箱/搜狐/Yeah/飞书/Yahoo/Fastmail/Zoho/Yandex/GMX/Mail.ru/Naver/Posteo 等）→ DNS MX 反查企业邮（含 AliDNS/Cloudflare 固定 IP DoH 兜底）→ DNS SRV → 域名 HTTPS Autoconfig XML → Mozilla Thunderbird ISPDB」分层探测；前后端立即剥离 `@` 前用户名、绝不触碰密码与令牌，内网/保留域名绝不外泄，拒收明文及私网目标，结果仅先预览、确认应用且切换服务器时自动清空旧授权码。
+- **邮箱账号卡片排版重构**：邮箱地址与「自动识别」置顶全宽等高对齐，消除两列网格右侧空洞与上下错位；将收信协议、代理、发信别名与收件文件夹收纳进默认折叠的 `高级设置` 面板（已配非默认值时自动展开）；同步更新中英文预设表（补齐 `exmail`）与自动识别文档。
+- **6-Layer Email Server Auto-Detection (Zero New Dependencies, Zero Credential Exposure)**: Added an **Auto-detect** control on account cards backed by authenticated `action: "autodiscover"` across built-in domains, a curated offline extended provider DB, DNS MX reverse-lookup (with pinned AliDNS/Cloudflare DoH fallback), DNS SRV, domain HTTPS Autoconfig XML, and Mozilla Thunderbird ISPDB. Strips everything before `@`, never touches credentials, blocks intranet/private domains from public lookups, rejects plaintext/private-target discoveries, previews before applying, and clears saved passwords when switching servers.
+- **Account Card Layout Redesign**: Promoted the email address + Auto-detect row to full width with matched control heights, top-aligned 2-column form rows, grouped protocol/proxy/alias/folder controls into a collapsible **Advanced settings** disclosure, and updated bilingual presets (`exmail`) and autodiscovery docs.
+
 ## 0.32.2 (2026-11-24)
 
 - 信使的三种默认表情统一使用 5:2 横幅，缩短信使弹窗并完整显示角色。

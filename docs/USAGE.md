@@ -159,11 +159,28 @@ work:
 
 原有的「服务器预设（自定义服务商，高级）」保持不变：多个账号复用同一组服务器时继续用预设更省事，只有单个账号需要手填端点时用「自定义服务器（手动填写）」。两者互不冲突，账号自己写的 `imap`/`smtp` 仍优先于所选预设。
 
+### 邮箱服务器自动识别
+
+在「设置 → 邮件 → 邮箱账号」卡片里填完邮箱地址后，可点击输入框右侧的 **「自动识别」**，按以下分层顺序探测服务器参数：
+
+1. **内置服务商域名**（离线秒出）：QQ / Foxmail / 163 / 126 / 新浪 / 阿里 / Gmail / Outlook / iCloud / AgentMail。
+2. **内置离线扩展库**（离线秒出）：常见国内外个人与企业邮箱（如 139 / 189 / 沃邮箱 / 搜狐 / Yeah / 188 / 飞书 / Yahoo / Fastmail / Zoho / Yandex / GMX / WEB.DE / Mail.ru / Naver / Daum / mailbox.org / Posteo 等）。
+3. **DNS MX 反查**：针对使用自定义域名的企业/高校邮箱，自动识别腾讯企业邮、阿里企业邮、网易企业邮（含免费企业邮）、飞书企业邮、263 企业邮、Google Workspace、Microsoft 365、Zoho、Fastmail、iCloud+ 等托管服务商。
+4. **DNS SRV（RFC 6186 / RFC 8314）**：查询 `_imaps._tcp` / `_submissions._tcp` / `_pop3s._tcp` 等标准记录（内网域名也会仅在本地 DNS 中查询）。
+5. **域名 Autoconfig XML & Thunderbird ISPDB（HTTPS）**：仅在公网域名未命中前四层时，通过公网防 SSRF 下载器查询域名自有 `config-v1.1.xml` 与 Mozilla Thunderbird ISPDB（完全免费、无需 API Key）。
+
+安全与隐私边界：
+- **不发送用户名与密码**：点击前即剥离 `@` 之前的部分，仅按域名查询；接口不读取授权码、密码或 OAuth 令牌。
+- **内网域名不外泄**：`.local` / `.internal` / `.lan` / 私网 IP 等内网域名不会向公网 Autoconfig 或 Thunderbird ISPDB 发起请求。
+- **拒绝明文配置**：自动过滤 `socketType: plain` 与 POP3 `STARTTLS`，优先选择隐式 SSL/TLS，且公网 XML/SRV 不允许指向 `localhost` 或私网地址。
+- **先预览再应用**：探测结果只做卡片内预览，**不会自动保存或自动发凭据测试**；确认应用且目标服务器发生变化时，会自动清空旧授权码，防止旧密码发往新服务器。
+
 ### 常用邮箱预设
 
 | provider | IMAP | SMTP |
 |---|---|---|
 | `qq` | imap.qq.com:993 (SSL) | smtp.qq.com:465 (SSL) |
+| `exmail` | imap.exmail.qq.com:993 (SSL) | smtp.exmail.qq.com:465 (SSL) |
 | `163` | imap.163.com:993 | smtp.163.com:465 |
 | `126` | imap.126.com:993 | smtp.126.com:465 |
 | `sina` | imap.sina.com:993 | smtp.sina.com:465 |

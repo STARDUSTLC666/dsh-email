@@ -105,3 +105,5 @@ export { EmailMailboxBackend, installEmailMailbox, MAILBOX_ROUTE } from './mailb
 export { prepareMailBody, sanitizeOutgoingHtml } from './outgoing-body.js'
 export { replyLanguage, replyDate } from './reply-locale.js'
 export { MailConsumerBackend, normalizeMailConsumers, type EmailArrivalEvent, type EmailArrivalHandler, type EmailTasksStatus, type MailConsumerConfig } from './mail-consumers.js'
+export { autodiscoverEmailServer, extractDiscoveryDomain, matchBuiltInDomain, matchMxRecords, matchOfflineProvider, parseAutoconfigXml, parsePublicDnsMxAnswer, parsePublicDnsSrvAnswer } from './autodiscover.js'
+export type { AutodiscoverDependencies, AutodiscoverOptions, AutodiscoverResult, AutodiscoverSource, DiscoveredEndpoint } from './autodiscover.js'

@@ -1,6 +1,7 @@
 import { type EmailSettingsValue } from './settings.js';
 import { type EmailConfig, type ProviderPreset, type ServerPreset } from './config.js';
 import { type OAuth2State } from './oauth2.js';
+import { type AutodiscoverDependencies, type AutodiscoverResult } from './autodiscover.js';
 import type { EmailWatchResult } from './types.js';
 /** Same-origin route the browser settings section talks to. */
 export declare const SETTINGS_ROUTE = "/_dsh/dsh-email/settings";
@@ -194,6 +195,8 @@ export declare class EmailSettingsBackend {
     constructor(ctx: any, scope: any, rowConfig: EmailConfig, apiFetch?: typeof fetch | undefined);
     /** Wired by apply(): the email_watch core; 'web' keeps its own cursor scope. */
     watchImpl?: (account: string, folder: string, limit: number, scope: string) => Promise<EmailWatchResult>;
+    /** Test/embedder seam for deterministic autodiscover fixtures; never settable by HTTP callers. */
+    autodiscoverDeps?: AutodiscoverDependencies;
     private get namespace();
     private get currentConfig();
     private userSection;
@@ -340,7 +343,19 @@ export declare class EmailSettingsBackend {
     responseJson(res: any, status: number, body: unknown): void;
     /** Only registered authenticated connection routes may use this transport. */
     fetch(request: Request, asset?: boolean): Promise<Response>;
-    handle(req: any, res: any, transport?: symbol): Promise<void>;
+    /**
+     * Discover mail endpoints for an email address or domain without touching
+     * any credentials, passwords, or OAuth tokens. Only the extracted domain
+     * ever enters DNS or public HTTPS lookups.
+     */
+    autodiscover(input: unknown, allowOnlineLookup?: boolean, signal?: AbortSignal): Promise<{
+        found: true;
+        result: AutodiscoverResult;
+    } | {
+        found: false;
+        domain: string;
+    }>;
+    handle(req: any, res: any, transport?: symbol, signal?: AbortSignal): Promise<void>;
     /** GET-only authenticated route serving the whale-girl courier image. */
     handleAsset(req: any, res: any, transport?: symbol): void;
 }
