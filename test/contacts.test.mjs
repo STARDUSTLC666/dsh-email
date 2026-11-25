@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import fs from 'node:fs/promises'
+import path, { join } from 'node:path'
 import { runInNewContext } from 'node:vm'
 import { readFileSync } from 'node:fs'
 import {
@@ -259,6 +260,31 @@ test('a damaged address book is reported instead of silently replaced', async (t
   await writeFile(join(store.root, 'contacts-v1.json'), '{not json')
   await assert.rejects(() => store.list(), error => error instanceof ContactsError && error.code === 'contact-storage')
   assert.equal(await readFile(join(store.root, 'contacts-v1.json'), 'utf8'), '{not json', 'the original file is preserved')
+})
+
+test('legacy contacts migration rejects an external file substituted at the open boundary', async t => {
+  const home = await tempHome(t), store = new ContactsStore(home)
+  await mkdir(store.root, { recursive: true })
+  const legacy = join(store.root, 'contacts-v1.json'), outside = join(home, 'outside-contacts.json')
+  await writeFile(legacy, JSON.stringify({ version: 1, contacts: [] }))
+  await writeFile(outside, JSON.stringify({ version: 1, contacts: [] }))
+  const originalOpen = fs.open
+  let replaced = false
+  fs.open = async (file, ...args) => {
+    if (!replaced && path.resolve(String(file)) === path.resolve(legacy)) {
+      replaced = true
+      await fs.rename(legacy, legacy + '.checked')
+      if (process.platform === 'win32') await fs.link(outside, legacy)
+      else await fs.symlink(outside, legacy)
+    }
+    return originalOpen.call(fs, file, ...args)
+  }
+  try {
+    await assert.rejects(store.list(), error => error instanceof ContactsError && error.code === 'contact-storage')
+    assert.equal(replaced, true)
+  } finally {
+    fs.open = originalOpen
+  }
 })
 
 /** Mailbox backend fixture: one account, one message, a real private address book. */

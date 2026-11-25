@@ -1,5 +1,11 @@
 # 更新记录
 
+## 0.33.3 (2026-11-25)
+
+- 为旧联系人迁移设置读取上限，并拒绝元数据检查后被替换的文件。
+- Bound legacy contacts migration reads and reject files replaced after metadata validation.
+
+
 ## 0.33.2 (2026-11-25)
 
 - IMAP、SMTP、OAuth 与设置错误诊断统一隐藏 URI 中的用户凭据，覆盖 HTTP/SOCKS 代理、仅含令牌的用户名和密码中的原始 `@`，同时保留服务器地址以及正常路径、查询和 fragment 信息。
