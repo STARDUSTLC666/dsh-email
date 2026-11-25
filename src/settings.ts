@@ -59,7 +59,7 @@ export const EmailSettingsSchema: z = z.object({
   // One proxy for both endpoints: a machine either routes its traffic or not.
   // Empty means「直连」, with the conventional HTTPS_PROXY / ALL_PROXY variables
   // still honoured as a fallback.
-  proxy: z.string().default(''),
+  proxy: z.string().role('secret').default(''),
 })
 
 export interface EmailSettingsValue {

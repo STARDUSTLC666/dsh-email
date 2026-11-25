@@ -343,7 +343,8 @@ test('authenticated settings route exposes autodiscover action safely without to
     }],
   }))
   assert.equal(clearRes.status, 200)
-  const clearedYaml = (await clearRes.json()).value.accountsYaml
+  const { openSettingsText } = await import('../lib/settings-secrets.js')
+  const clearedYaml = openSettingsText('accountsYaml', (await clearRes.json()).value.accountsYaml)
   const parsed = parseAccountsYaml(clearedYaml).map.work
   assert.equal(parsed.password, undefined)
   assert.equal(parsed.imap.host, 'imap.feishu.cn')

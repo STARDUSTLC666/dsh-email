@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { Readable } from 'node:stream'
 import { EmailSettingsBackend, installEmailSettingsWeb, SETTINGS_API_ROUTE, WHALE_API_ROUTE } from '../lib/web.js'
 import { EmailSettingsSchema } from '../lib/settings.js'
+import { openSettingsText } from '../lib/settings-secrets.js'
 
 const host = '10.0.0.10:3080'
 function fixture() {
@@ -127,7 +128,7 @@ test('native projected cards remain editable without losing mapped accounts', as
   const backend = new EmailSettingsBackend({ settings: { describe: () => [], update: async (_ns, section) => writes.push(section) } }, { config, get: () => value }, config)
   const snapshot = await backend.snapshot()
   assert.deepEqual(snapshot.configurationManagedAccounts, [])
-  assert.equal(snapshot.settings.value.accountsYaml, value.accountsYaml)
+  assert.equal(openSettingsText('accountsYaml', snapshot.settings.value.accountsYaml), value.accountsYaml)
   await backend.save({ ...snapshot.settings.value, replyLocale: 'en', uiLocale: 'zh' }, 0)
   assert.equal(writes[0].replyLocale, 'en')
   assert.equal(writes[0].uiLocale, 'zh')

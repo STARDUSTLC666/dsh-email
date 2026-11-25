@@ -11,6 +11,7 @@ import { redactCredentials, smtpAuthOf } from '../lib/mail-client.js'
 import { EmailSettingsBackend, SETTINGS_API_ROUTE } from '../lib/web.js'
 import { parseAccountsYaml, resolveEmailSettings } from '../lib/config.js'
 import { getFreshAccessToken, writeTokenStore } from '../lib/oauth2.js'
+import { openSettingsText } from '../lib/settings-secrets.js'
 
 // All credentials and mail messages in this file are invented fixtures.
 process.env.DSH_HOME = mkdtempSync(join(tmpdir(), 'email-review-'))
@@ -31,7 +32,7 @@ async function serialize(accountsYaml, accounts) {
   }))
   const result = await response.json()
   assert.equal(result.ok, true, JSON.stringify(result))
-  return result.value.accountsYaml
+  return openSettingsText('accountsYaml', result.value.accountsYaml)
 }
 
 test('OAuth SMTP delivers a fixture over the actual Nodemailer XOAUTH2 transport', async t => {

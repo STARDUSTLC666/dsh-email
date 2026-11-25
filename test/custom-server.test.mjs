@@ -8,6 +8,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { EmailSettingsBackend, SETTINGS_API_ROUTE } from '../lib/web.js'
 import { EmailSettingsSchema } from '../lib/settings.js'
 import { parseAccountsYaml, parseServerPresets, resolveEmailSettings } from '../lib/index.js'
+import { openSettingsText } from '../lib/settings-secrets.js'
 
 // ---------------------------------------------------------------------------
 // Client editor harness: the shipped card handlers rendered with a minimal React
@@ -211,7 +212,7 @@ function request(body) {
 const serialize = async (backend, accounts, accountsYaml = '') => {
   const response = await backend.fetch(request({ action: 'serializeAccounts', accounts, accountsYaml, defaultAccount: '' }))
   assert.equal(response.status, 200)
-  return (await response.json()).value.accountsYaml
+  return openSettingsText('accountsYaml', (await response.json()).value.accountsYaml)
 }
 
 test('a custom-server card writes its endpoints into the account and no provider key', async () => {
@@ -355,7 +356,7 @@ test('custom endpoints survive serialize, settings save, and reloading an isolat
       // can satisfy the persistence assertions.
       const reopened = backend()
       const snapshot = await reopened.snapshot()
-      const stored = parseAccountsYaml(snapshot.settings.value.accountsYaml).map.corp
+      const stored = parseAccountsYaml(openSettingsText('accountsYaml', snapshot.settings.value.accountsYaml)).map.corp
       const resolved = resolveEmailSettings(readValue()).accounts.get('corp')
       for (const [kind, endpoint] of Object.entries(expected)) {
         assert.deepEqual(stored[kind], endpoint)

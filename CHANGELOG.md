@@ -1,5 +1,13 @@
 # 更新记录
 
+## 0.33.1 (2026-11-25)
+
+- 邮件设置快照与账号序列化改用不透明会话引用传递凭据，浏览器不再收到账号 YAML、授权码、API Key、OAuth 应用密钥或含密码的代理地址原文。保存和连接测试由后端还原，保留注释与未修改密码；模块或宿主重启后，旧引用明确要求重新加载。
+- 账号 YAML 与 JSON 解析错误不再回显附近配置内容；旧设置 schema 中的代理字段也标记为 secret。
+- AgentMail 返回无效 JSON 时使用固定错误提示，避免解析诊断将服务响应中回显的 API Key 带回设置页或工具。
+- Settings snapshots and account serialization now return opaque session references for credential-bearing values. The backend restores drafts for saves and connection tests while preserving comments and unchanged secrets. References from a restarted module or host require a settings reload; YAML/JSON parser diagnostics no longer echo source excerpts.
+- Invalid AgentMail JSON responses now produce a fixed diagnostic so echoed API keys cannot leak through parser errors to the settings page or tools.
+
 ## 0.33.0 (2026-11-25)
 
 - **邮箱服务器 6 层自动识别（零新增依赖、零密码外发）**：账号卡片新增 **「自动识别 / Auto-detect」** 与认证接口 `action: "autodiscover"`，按「内置服务商 → 离线扩展库（含 139/189/沃邮箱/搜狐/Yeah/飞书/Yahoo/Fastmail/Zoho/Yandex/GMX/Mail.ru/Naver/Posteo 等）→ DNS MX 反查企业邮（含 AliDNS/Cloudflare 固定 IP DoH 兜底）→ DNS SRV → 域名 HTTPS Autoconfig XML → Mozilla Thunderbird ISPDB」分层探测；前后端立即剥离 `@` 前用户名、绝不触碰密码与令牌，内网/保留域名绝不外泄，拒收明文及私网目标，结果仅先预览、确认应用且切换服务器时自动清空旧授权码。

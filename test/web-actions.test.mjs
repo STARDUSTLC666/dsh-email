@@ -7,6 +7,7 @@ import { apply, EmailPool } from '../lib/index.js'
 import { OUTLOOK_OAUTH2_CLIENT_ID, parseAccountsYaml, parseServerPresets, PROVIDER_NAMES, PROVIDER_PRESETS, resolveEmailSettings, serializeAccountsYaml } from '../lib/config.js'
 import { oauth2TokenFile, readTokenStore, writeTokenStore } from '../lib/oauth2.js'
 import { hostVerdict, postVerdict, SETTINGS_API_ROUTE } from '../lib/web.js'
+import { inspectSettingsReply } from './settings-reply.mjs'
 
 const BASE = {
   provider: 'qq',
@@ -142,7 +143,8 @@ function mount(t, options = {}) {
       method, headers: requestHeaders,
       ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
     }))
-    return { status: response.status, body: await response.json() }
+    const wireBody = await response.json()
+    return { status: response.status, body: inspectSettingsReply(wireBody), wireBody }
   }
   return {
     get: () => call(undefined, { method: 'GET' }),
@@ -192,10 +194,8 @@ test('snapshot carries accountsDetail (raw/list/defaultAccount) and the builtin 
   assert.equal(workCard.user, 'w@qq.com')
   assert.equal(workCard.hasPassword, true)
   assert.equal('raw' in value.accountsDetail, false, 'the parsed mapping must not be echoed as a second copy of the secrets')
-  // The cards are the only account projection the editor consumes, and they
-  // carry `hasPassword` rather than the value. (settings.value.accountsYaml does
-  // carry plaintext by design — the advanced editor edits that text, and the key
-  // is declared secret in the settings schema.)
+  // Cards carry hasPassword; the wire YAML is an opaque reference. The test
+  // helper above opens it only to inspect the preserved server-side document.
   for (const card of value.accountsDetail.list) {
     assert.equal('password' in card, false, `card ${card.name} must not carry a password value`)
     assert.equal(typeof card.hasPassword, 'boolean')

@@ -218,6 +218,8 @@ Security & privacy guarantees:
 | `bodySearchLimit` | `30` | Number of messages for the body fallback scan (5–200) |
 | `proxy` | none | Connection proxy such as `http://127.0.0.1:7897`; when omitted, `HTTPS_PROXY`/`ALL_PROXY` and `NO_PROXY` decide — see "Proxy" below |
 
+The settings API returns opaque session references for account YAML and credential fields. The page passes these references back for serialization, saves and connection tests; stored plaintext credentials are kept on the backend. Reload email settings after a host or plugin-module restart. Hand-written local configuration still uses ordinary YAML; references are never persisted.
+
 ### Proxy
 
 When the network only reaches a mail server through a proxy (Gmail's SMTP/IMAP do not connect directly on some networks), give the account a `proxy`:

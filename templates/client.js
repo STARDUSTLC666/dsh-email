@@ -5664,7 +5664,7 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
              * 的服务商下拉里 —— 不然要等下一次 GET 才看得到自己刚加的名字。
              */
             const [customNames, setCustomNames] = useState([]);
-            /** 最近一次成功保存/序列化后的 accountsYaml 原文：serializeAccounts 的种子（注释保留链）。 */
+            /** 最近一次成功保存/序列化后的不透明账号引用；仅后端可读取原文和凭据。 */
             const savedYamlRef = useRef(null);
             /** 当前该写进 value.accountsYaml 的文本（卡片序列化产物优先）。 */
             const accountsYamlRef = useRef(null);

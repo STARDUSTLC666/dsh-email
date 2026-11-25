@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { Readable } from 'node:stream'
 import { isMap, parseDocument, type Document, type YAMLMap } from 'yaml'
 import { SETTINGS_NAMESPACE, toEmailConfig, validateSettingsValue, type EmailSettingsValue } from './settings.js'
+import { openSettingsText, openSettingsValue, publicSettingsValue, sealSettingsText } from './settings-secrets.js'
 import {
   isOAuth2Account,
   mailHostProblem,
@@ -48,6 +49,13 @@ export const SETTINGS_ROUTE = '/_dsh/dsh-email/settings'
 export const SETTINGS_API_ROUTE = '/api/dsh-email/settings'
 export const WHALE_API_ROUTE = '/api/dsh-email/whale'
 const AUTHENTICATED_CARRIER = Symbol('DSH authenticated connection')
+
+/** Parser diagnostics can quote nearby YAML, including multiline passwords. */
+function safeSettingsMessage(error: unknown, fallback: string): string {
+  const message = messageOf(error, fallback)
+  if (/accountsYaml.*(?:YAML|解析)|(?:YAML|yaml).*(?:parse|syntax|错误)/i.test(message)) return 'accountsYaml 不是合法的 YAML，请检查账号配置。 / Invalid account YAML.'
+  return redactCredentials(message)
+}
 
 /** The connection carrier supplies authentication; a header alone never does. */
 function carrierVerdict(request: Request): { status: number; message: string } | undefined {
@@ -472,7 +480,8 @@ function readAccountsDraft(
     yamlDefault = parsed.defaultAccount
   } catch (caught) {
     // No mapping could be read: report it and hand back an empty draft.
-    return { list: [], error: messageOf(caught, 'accountsYaml 解析失败') }
+    const message = messageOf(caught, 'accountsYaml 解析失败')
+    return { list: [], error: message.includes('对象映射') ? 'accountsYaml 必须是一个对象映射（账号名 -> 账号配置）' : safeSettingsMessage(caught, 'accountsYaml 解析失败') }
   }
   const verdict = adjudicateAccounts(raw, yamlDefault, rowDefault)
   return {
@@ -1162,8 +1171,8 @@ export class EmailSettingsBackend {
     const value = this.scope.get() as EmailSettingsValue
     const whale = findWhaleAsset()
     const presets = presetsSnapshot(value.serverPresets)
-    // The cards describe the *effective* accountsYaml — the same text the
-    // advanced editor shows, and the same source the accounts field reads.
+    // Cards describe the effective YAML; the browser only retains an opaque
+    // reference to that document as its serialization/save baseline.
     const effective = this.effectiveStored()
     const draft = readAccountsDraft(this.scope.config ? value.accountsYaml : effective.accountsYaml ?? '', presets.custom, effective.defaultAccount, tokenLookup())
     const configurationManagedAccounts = this.configurationManagedAccounts()
@@ -1171,7 +1180,7 @@ export class EmailSettingsBackend {
       settings: {
         // Native hosts may project a map into YAML for the old card editor.
         // It is not a migration request and must not ride along with general edits.
-        value: configurationManagedAccounts.length ? { ...value, accountsYaml: '' } : value,
+        value: publicSettingsValue(configurationManagedAccounts.length ? { ...value, accountsYaml: '' } : value),
         revision: descriptor?.revision ?? 0,
         applies: descriptor?.applies ?? 'live',
       },
@@ -1199,6 +1208,7 @@ export class EmailSettingsBackend {
   }
 
   async save(value: EmailSettingsValue, expectedRevision: number) {
+    value = openSettingsValue(value, this.scope.config ? undefined : this.scope.get())
     // Rules have an explicit, separate save action. A stale account autosave
     // must never restore an older trust policy after another tab changed it.
     value = { ...value, trustedRecipientsYaml: (this.scope.get() as EmailSettingsValue).trustedRecipientsYaml ?? '' }
@@ -1266,6 +1276,7 @@ export class EmailSettingsBackend {
    * what was actually tried — including on failure.
    */
   async test(value: EmailSettingsValue, accountName?: string) {
+    value = openSettingsValue(value)
     validateSettingsValue(value, presetNamesIn(value?.serverPresets ?? this.scope.get()?.serverPresets))
     // null projects the complete draft: test the form as the user typed it.
     // serverPresets rides along as the provider lookup source, exactly as it
@@ -1387,7 +1398,7 @@ export class EmailSettingsBackend {
         expires_in: start.expiresIn,
       }
     } catch (error) {
-      return { ok: false, message: messageOf(error, '登录失败：请稍后重试') }
+      return { ok: false, message: safeSettingsMessage(error, '登录失败：请稍后重试') }
     }
   }
 
@@ -1407,7 +1418,7 @@ export class EmailSettingsBackend {
     } catch (error) {
       // Every failure of a poll is a login failure the user has to see, so it
       // leaves as the flat { ok:false, message } the page renders.
-      return { ok: false, message: messageOf(error, '登录失败：请稍后重试') }
+      return { ok: false, message: safeSettingsMessage(error, '登录失败：请稍后重试') }
     }
   }
 
@@ -1461,8 +1472,8 @@ export class EmailSettingsBackend {
   }
 
   async handle(req: any, res: any, transport?: symbol, signal?: AbortSignal) {
-    // The snapshot includes editable credentials. Loopback addresses and
-    // request headers cannot replace the host's connection authentication.
+    // Loopback addresses and request headers cannot replace the host's
+    // connection authentication, including for opaque credential references.
     if (transport !== AUTHENTICATED_CARRIER) {
       this.responseJson(res, 401, { ok: false, error: { code: 'unauthorized', message: 'Use the authenticated connection route' } })
       return
@@ -1471,7 +1482,7 @@ export class EmailSettingsBackend {
       try {
         this.responseJson(res, 200, { ok: true, value: await this.snapshot() })
       } catch (error) {
-        this.responseJson(res, 503, { ok: false, error: { code: 'unavailable', message: messageOf(error, 'unknown error') } })
+        this.responseJson(res, 503, { ok: false, error: { code: 'unavailable', message: '邮件设置暂不可用，请重新加载。 / Email settings are unavailable; reload settings.' } })
       }
       return
     }
@@ -1485,15 +1496,23 @@ export class EmailSettingsBackend {
       const chunks: Buffer[] = []
       for await (const chunk of req) {
         const part = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-        if (chunks.reduce((n, c) => n + c.length, 0) + part.length > 256 * 1024) throw new RangeError('request body too large')
+        // Sealed YAML is base64-encoded; allow that overhead without admitting
+        // a larger decoded document than the existing settings-size limit.
+        if (chunks.reduce((n, c) => n + c.length, 0) + part.length > 384 * 1024) throw new RangeError('request body too large')
         chunks.push(part)
       }
       body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
     } catch (error) {
-      this.responseJson(res, 400, { ok: false, error: { code: 'invalid-request', message: messageOf(error, 'unknown error') } })
+      this.responseJson(res, 400, { ok: false, error: { code: 'invalid-request', message: error instanceof RangeError ? 'request body too large' : 'Invalid JSON request' } })
       return
     }
     try {
+      // Keep the original decoded body limit. The wire envelope has extra room
+      // solely for authenticated encryption and base64 encoding.
+      const decoded = { ...body }
+      if (body?.value && typeof body.value === 'object') decoded.value = openSettingsValue(body.value)
+      if (typeof body?.accountsYaml === 'string') decoded.accountsYaml = openSettingsText('accountsYaml', body.accountsYaml)
+      if (Buffer.byteLength(JSON.stringify(decoded), 'utf8') > 256 * 1024) throw new RangeError('request body too large')
       if (body?.action === 'oauthCancel') {
         if(typeof body.account!=='string'||!body.account.trim())throw new Error('Account required')
         cancelOAuthFlow(body.account);this.responseJson(res,200,{ok:true})
@@ -1526,7 +1545,7 @@ export class EmailSettingsBackend {
       } else if (body?.action === 'parseAccounts') {
         // Pure and always 200: the editor calls this on every keystroke, so a
         // half-typed document is the normal case, not an HTTP failure.
-        const text = typeof body.value?.accountsYaml === 'string' ? body.value.accountsYaml : ''
+        const text = typeof body.value?.accountsYaml === 'string' ? openSettingsText('accountsYaml', body.value.accountsYaml) : ''
         const presets = typeof body.serverPresets === 'string'
           ? customPresetsOf(body.serverPresets).custom
           : customPresetsOf((this.scope.get() as EmailSettingsValue).serverPresets).custom
@@ -1550,7 +1569,7 @@ export class EmailSettingsBackend {
           if (name === 'defaultAccount') throw new Error('账号名不能是 defaultAccount（该键保留给默认账号）')
           cards.push({ ...entry, name })
         }
-        const source = typeof body.accountsYaml === 'string' ? body.accountsYaml : ''
+        const source = typeof body.accountsYaml === 'string' ? openSettingsText('accountsYaml', body.accountsYaml) : ''
         const chosen = typeof body.defaultAccount === 'string' ? body.defaultAccount.trim() : ''
         // The body may carry the preset table the page is editing: a custom
         // preset name is only persistable when the table in effect defines it.
@@ -1562,7 +1581,7 @@ export class EmailSettingsBackend {
         this.responseJson(res, 200, {
           ok: true,
           value: {
-            accountsYaml: written.accountsYaml,
+            accountsYaml: sealSettingsText('accountsYaml', written.accountsYaml),
             ...(written.commentsDropped === true ? { commentsDropped: true } : {}),
             // A card that says nothing about its password keeps the stored one;
             // this flag is the honest signal that it could not be kept because
@@ -1575,9 +1594,10 @@ export class EmailSettingsBackend {
       }
     } catch (error) {
       const conflict = (error as any)?.code === 'SETTINGS_CONFLICT'
-      this.responseJson(res, conflict ? 409 : 400, {
+      const reload = (error as any)?.code === 'SETTINGS_RELOAD_REQUIRED'
+      this.responseJson(res, conflict || reload ? 409 : 400, {
         ok: false,
-        error: { code: conflict ? 'settings-conflict' : 'rejected', message: messageOf(error, 'unknown error') },
+        error: { code: reload ? 'settings-reload-required' : conflict ? 'settings-conflict' : 'rejected', message: safeSettingsMessage(error, 'unknown error') },
       })
     }
   }
