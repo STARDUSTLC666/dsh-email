@@ -71,7 +71,7 @@ dsh plugin --profile desktop add dsh-email
 ## 文档与反馈
 
 - [完整使用、配置与边界](https://github.com/STARDUSTLC666/dsh-email/blob/main/docs/REFERENCE.zh.md) · [更新记录](https://github.com/STARDUSTLC666/dsh-email/blob/main/CHANGELOG.md) · [验证历史](https://github.com/STARDUSTLC666/dsh-email/blob/main/docs/VALIDATION.md)
-- 欢迎 Star、提交 [Issues](https://github.com/STARDUSTLC666/dsh-email/issues) 与 [PR](https://github.com/STARDUSTLC666/dsh-email/pulls)（反馈请附版本与复现步骤，并移除凭据）。
+- 欢迎 Star、提交 [Issues](https://github.com/STARDUSTLC666/dsh-email/issues)（反馈请附版本与复现步骤，并移除凭据）。
 
 ## License
 

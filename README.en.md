@@ -71,7 +71,7 @@ Check updates at the bottom of the workbench or native plugin details. Automatic
 ## Documentation & feedback
 
 - [Full usage, configuration and limits](https://github.com/STARDUSTLC666/dsh-email/blob/main/docs/REFERENCE.en.md) · [Release notes](https://github.com/STARDUSTLC666/dsh-email/blob/main/CHANGELOG.md) · [Validation history](https://github.com/STARDUSTLC666/dsh-email/blob/main/docs/VALIDATION.md)
-- Stars, [Issues](https://github.com/STARDUSTLC666/dsh-email/issues), and [PRs](https://github.com/STARDUSTLC666/dsh-email/pulls) are welcome (strip credentials first).
+- Stars and [Issues](https://github.com/STARDUSTLC666/dsh-email/issues) are welcome (strip credentials first).
 
 ## License
 

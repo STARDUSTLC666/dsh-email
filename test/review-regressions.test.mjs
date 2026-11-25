@@ -153,6 +153,19 @@ test('a server error quoted back to the user never carries the credential', () =
   assert.equal(redactCredentials('LOGIN failed for outlook.office365.com'), 'LOGIN failed for outlook.office365.com')
 })
 
+test('transport URI userinfo credentials are redacted from diagnostics', () => {
+  for (const [url, visible] of [
+    ['http://proxy-user:proxy-secret-123@proxy.example:8080', 'http://<已隐去的凭据>@proxy.example:8080'],
+    ['socks5://user:encoded%40secret@socks.example:1080', 'socks5://<已隐去的凭据>@socks.example:1080'],
+    ['https://:only-password@fallback.example', 'https://<已隐去的凭据>@fallback.example'],
+    ['http://user:p@ss@proxy.example', 'http://<已隐去的凭据>@proxy.example'],
+    ['https://synthetic-user-token@api.example', 'https://<已隐去的凭据>@api.example'],
+  ]) assert.equal(redactCredentials('Could not reach ' + url), 'Could not reach ' + visible)
+  for (const url of ['https://mail.example/status', 'https://mail.example/path@segment', 'https://mail.example/?recipient=person@example.test', 'https://mail.example/#person@example.test']) {
+    assert.equal(redactCredentials('Could not reach ' + url), 'Could not reach ' + url)
+  }
+})
+
 test('incomplete-account guidance keeps provider choices through credential redaction', () => {
   let failure
   try { resolveEmailSettings({}) } catch (error) { failure = error }

@@ -1,5 +1,10 @@
 # 更新记录
 
+## 0.33.2 (2026-11-25)
+
+- IMAP、SMTP、OAuth 与设置错误诊断统一隐藏 URI 中的用户凭据，覆盖 HTTP/SOCKS 代理、仅含令牌的用户名和密码中的原始 `@`，同时保留服务器地址以及正常路径、查询和 fragment 信息。
+- IMAP, SMTP, OAuth and settings diagnostics now redact URI userinfo, including HTTP/SOCKS proxy credentials, token-only usernames and passwords containing a raw `@`, while preserving server addresses and normal paths, queries and fragments.
+
 ## 0.33.1 (2026-11-25)
 
 - 邮件设置快照与账号序列化改用不透明会话引用传递凭据，浏览器不再收到账号 YAML、授权码、API Key、OAuth 应用密钥或含密码的代理地址原文。保存和连接测试由后端还原，保留注释与未修改密码；模块或宿主重启后，旧引用明确要求重新加载。
