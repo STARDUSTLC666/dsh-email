@@ -148,7 +148,7 @@ test('whale courier supports header summon toggle, headpat expressions/particles
 
   assert.equal(card.getAttribute('data-whale-mood'), 'deliver')
   assert.equal(card.getAttribute('data-dsh-style'), 'harness')
-  assert.equal(card.getAttribute('data-dsh-font'), 'arcade')
+  assert.equal(card.getAttribute('data-dsh-font'), 'auto')
   assert.match(bubble.textContent, /摸摸头/)
   assert.equal(patBadge.getAttribute('hidden'), '')
 
@@ -175,7 +175,7 @@ test('whale courier supports header summon toggle, headpat expressions/particles
   happyTimer[1].fn()
   assert.equal(card.getAttribute('data-whale-mood'), 'deliver')
   assert.equal(card.getAttribute('data-dsh-style'), 'harness')
-  assert.equal(card.getAttribute('data-dsh-font'), 'arcade')
+  assert.equal(card.getAttribute('data-dsh-font'), 'auto')
   assert.equal(img.src, WHALE_API_ROUTE.replace(/^\/+/, ''))
 
   // Check Mail with no new messages -> switches to ?mood=check and reports empty inbox.

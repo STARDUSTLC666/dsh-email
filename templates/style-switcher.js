@@ -16,21 +16,21 @@ export const DSH_DEFAULT_STYLE = 'harness';
 
 export const DSH_FONT_STORAGE_KEY = 'dsh-stardust:ui-font';
 export const DSH_FONT_EVENT = 'dsh-stardust-font';
-export const DSH_DEFAULT_FONT = 'arcade';
+export const DSH_DEFAULT_FONT = 'auto';
 
 export const DSH_FONTS = Object.freeze([
   Object.freeze({
     id: 'arcade',
-    zh: '幼圆等宽（默认）',
+    zh: '幼圆等宽',
     zhShort: '幼圆',
-    en: 'YouYuan Mono (Default)',
+    en: 'YouYuan Mono',
     enShort: 'YouYuan',
   }),
   Object.freeze({
     id: 'auto',
-    zh: '跟随风格专属字',
+    zh: '跟随风格专属字（默认）',
     zhShort: '专属字',
-    en: 'Match Style Font',
+    en: 'Match Style Font (Default)',
     enShort: 'Style Font',
   }),
   Object.freeze({
@@ -120,8 +120,8 @@ export const DSH_STYLES = Object.freeze([
     zhShort: '薄荷',
     en: 'Airy Mint',
     enShort: 'Mint',
-    swatch: '#0f766e',
-    surface: '#f5fafb',
+    swatch: '#0f8f6a',
+    surface: '#f6fbf9',
   }),
   Object.freeze({
     id: 'glass',
@@ -129,8 +129,8 @@ export const DSH_STYLES = Object.freeze([
     zhShort: '琉璃',
     en: 'Daylight Glass',
     enShort: 'Glass',
-    swatch: '#4f6df5',
-    surface: '#f3f7ff',
+    swatch: '#5b5bd6',
+    surface: '#eef1fb',
   }),
   Object.freeze({
     id: 'eink',
@@ -161,12 +161,12 @@ export const DSH_STYLES = Object.freeze([
   }),
   Object.freeze({
     id: 'win98',
-    zh: '千禧复古',
-    zhShort: '复古98',
-    en: 'Retro 98',
-    enShort: 'Retro 98',
-    swatch: '#1b4f9c',
-    surface: '#dcdcdc',
+    zh: '云母流光',
+    zhShort: '云母',
+    en: 'Mica Fluent',
+    enShort: 'Mica',
+    swatch: '#005fb8',
+    surface: '#eff1f5',
   }),
   Object.freeze({
     id: 'songhui',
@@ -181,10 +181,10 @@ export const DSH_STYLES = Object.freeze([
     id: 'frutiger',
     zh: '晴空水晶',
     zhShort: '水晶',
-    en: 'Aqua Gloss',
+    en: 'Aqua Crystal',
     enShort: 'Aqua',
     swatch: '#0ea5e9',
-    surface: '#eaf7ff',
+    surface: '#e4f4ff',
   }),
   Object.freeze({
     id: 'gazette',

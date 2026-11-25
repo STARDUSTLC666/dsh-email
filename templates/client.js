@@ -5963,7 +5963,7 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                     fallback: ".dsh-style-switcher",
                     side: "bottom",
                     title: dt("13 套明亮风格与 8 套双层字体", "13 Bright Styles & 8 Dual-Layer Fonts"),
-                    desc: dt("实时切换 13 套明亮/柔和工作台风格与 8 套中英双层字体（默认「幼圆等宽」），跨所有 DSH 插件自动同步。", "Switch live across 13 bright/soft workbench styles and 8 Chinese+Latin font pairings (default: YouYuan Mono), synced across all DSH plugins."),
+                    desc: dt("实时切换 13 套明亮/柔和工作台风格与 8 套中英双层字体（默认「跟随风格专属字」），跨所有 DSH 插件自动同步。", "Switch live across 13 bright/soft workbench styles and 8 Chinese+Latin font pairings (default: style-matched font), synced across all DSH plugins."),
                 },
                 {
                     id: "compose-drafts",

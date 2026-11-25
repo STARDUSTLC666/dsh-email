@@ -164,7 +164,7 @@ test('never-too-dark slate adaptation and all 13 [data-dsh-style] palettes + 8 D
     Array.from(W.styles, item => item.id),
     ['harness', 'cream', 'claude', 'pixel8bit', 'mint', 'glass', 'eink', 'blueprint', 'risograph', 'win98', 'songhui', 'frutiger', 'gazette'],
   )
-  assert.equal(W.defaultFont, 'arcade')
+  assert.equal(W.defaultFont, 'auto')
   assert.deepEqual(
     Array.from(W.fonts, item => item.id),
     ['arcade', 'auto', 'songkai', 'fangsong', 'poster', 'retro98', 'serif', 'modern'],
@@ -172,7 +172,7 @@ test('never-too-dark slate adaptation and all 13 [data-dsh-style] palettes + 8 D
   // Soft breathable slate in host dark mode under harness (never pitch black).
   assert.match(EMAIL_CSS, /body\[data-ds-dark-theme\] \[data-dsh-style=harness\][\s\S]*?#1f232b/i)
   assert.match(EMAIL_CSS, /#272c36/i)
-  assert.match(EMAIL_CSS, /#ececec[\s\S]*#1b4f9c/i, 'win98 platinum toolbar contrast rule present')
+  assert.match(EMAIL_CSS, /#e6ecf6[\s\S]*#005fb8/i, 'win98 Mica Fluent backdrop + accent present')
   assert.doesNotMatch(EMAIL_CSS, /--dsw-alias-bg-base:#000(?:000)?[;}]/i)
   assert.doesNotMatch(EMAIL_CSS, /#090a0f|#0b0d13/i)
   // All 12 custom daylight presets define their bright base surfaces.
@@ -180,14 +180,14 @@ test('never-too-dark slate adaptation and all 13 [data-dsh-style] palettes + 8 D
     ['cream', '#faf7f0'],
     ['claude', '#f5f4ed'],
     ['pixel8bit', '#f4f6e8'],
-    ['mint', '#f5fafb'],
-    ['glass', '#f3f7ff'],
+    ['mint', '#f6fbf9'],
+    ['glass', '#eef1fb'],
     ['eink', '#f2f1ec'],
     ['blueprint', '#eaf3fb'],
     ['risograph', '#faf6ee'],
-    ['win98', '#dcdcdc'],
+    ['win98', '#eff1f5'],
     ['songhui', '#f7f3e8'],
-    ['frutiger', '#eaf7ff'],
+    ['frutiger', '#e4f4ff'],
     ['gazette', '#f6f3ec'],
   ]) {
     assert.ok(
@@ -214,7 +214,7 @@ test('style & font switchers sync via localStorage, custom events, and portaled 
   })
 
   assert.equal(W.readStyle(), 'harness')
-  assert.equal(W.readFont(), 'arcade')
+  assert.equal(W.readFont(), 'auto')
   for (const preset of ['cream', 'claude', 'pixel8bit', 'mint', 'gazette', 'harness']) {
     assert.equal(W.writeStyle(preset), preset)
     assert.equal(storage.get('dsh-stardust:ui-style'), preset)
@@ -230,13 +230,13 @@ test('style & font switchers sync via localStorage, custom events, and portaled 
     assert.equal(attrs.get('data-dsh-font'), fontId)
   }
   assert.equal(dispatched.some(ev => ev.type === 'dsh-stardust-font' && ev.detail?.font === 'songkai'), true)
-  assert.equal(W.writeFont('unknown-font'), 'arcade', 'invalid font falls back to arcade')
+  assert.equal(W.writeFont('unknown-font'), 'auto', 'invalid font falls back to auto')
 
   // Restricted storage sandbox must not throw.
   const restricted = loadClient({ throwStorage: true })
   assert.equal(restricted.W.readStyle(), 'harness')
   assert.equal(restricted.W.writeStyle('mint'), 'mint')
-  assert.equal(restricted.W.readFont(), 'arcade')
+  assert.equal(restricted.W.readFont(), 'auto')
   assert.equal(restricted.W.writeFont('songkai'), 'songkai')
 })
 
