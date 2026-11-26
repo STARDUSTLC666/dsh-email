@@ -1,4 +1,5 @@
 import { resolve } from 'node:path'
+import { readFile } from 'node:fs/promises'
 import { clampInt, PROVIDER_PRESETS } from './config.js'
 import { messageOf } from './mail-client.js'
 import { NOT_LOGGED_IN_MESSAGE, oauth2StateOf } from './oauth2.js'
@@ -54,6 +55,29 @@ function attachmentPaths(value: unknown, exec?: unknown): string[] | undefined {
   const cwd = context?.agent?.session?.header?.cwd
   const base = typeof cwd === 'string' && cwd.trim() ? cwd : process.cwd()
   return normalizeAttachmentPaths(value)?.map(path => resolve(base, path))
+}
+
+/** 正文文件的上限：净化器的 html 上限是 256 KiB，这里留一倍余量。 */
+const MAX_BODY_FILE_BYTES = 512 * 1024
+
+/**
+ * 读 textFile / htmlFile：路径按会话工作区解析（与 attachments 同一口径）。
+ * 打不开或超过上限就抛错——把「文件不存在」当成空正文，等于又回到空信静默发送的老问题。
+ */
+async function readBodyFile(value: unknown, exec: unknown, label: string): Promise<string | undefined> {
+  if (typeof value !== 'string' || value.trim() === '') return undefined
+  const context = exec as { agent?: { session?: { header?: { cwd?: string } } } } | undefined
+  const cwd = context?.agent?.session?.header?.cwd
+  const base = typeof cwd === 'string' && cwd.trim() ? cwd : process.cwd()
+  const path = resolve(base, value.trim())
+  let buf: Buffer
+  try {
+    buf = await readFile(path)
+  } catch (error) {
+    throw new Error(label + ' 读取失败：' + path + '（' + (error instanceof Error ? error.message : String(error)) + '）')
+  }
+  if (buf.byteLength > MAX_BODY_FILE_BYTES) throw new Error(label + ' 文件超过 512 KiB：' + path)
+  return buf.toString('utf8')
 }
 
 export interface EmailToolDefinition {
@@ -175,15 +199,25 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
         const args = rawArgs as EmailSendArgs
         if (typeof args.to !== 'string' || args.to.trim() === '') throw new Error('to 不能为空')
         if (typeof args.subject !== 'string' || args.subject.trim() === '') throw new Error('subject 不能为空')
+        // 显式参数优先；参数没给（或只有空白）时才读文件，两处都空就是真正的空正文。
+        const text = typeof args.text === 'string' && args.text.trim() !== ''
+          ? args.text
+          : await readBodyFile(args.textFile, exec, 'textFile')
+        const html = typeof args.html === 'string' && args.html.trim() !== ''
+          ? args.html
+          : await readBodyFile(args.htmlFile, exec, 'htmlFile')
+        if (!(typeof text === 'string' && text.trim() !== '') && !(typeof html === 'string' && html.trim() !== '')) {
+          throw new Error('请填写 text/html 正文，或用 textFile/htmlFile 指向正文文件')
+        }
         return await getPool().send(
           args.account,
           args.to.trim(),
           args.subject.trim(),
-          typeof args.text === 'string' ? args.text : undefined,
+          typeof text === 'string' ? text : undefined,
           typeof args.cc === 'string' && args.cc.trim() !== '' ? args.cc.trim() : undefined,
           attachmentPaths(args.attachments, exec),
           executionSignal(exec),
-          args.html,
+          typeof html === 'string' ? html : undefined,
         )
       }
     },

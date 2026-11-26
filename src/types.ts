@@ -207,6 +207,10 @@ export interface EmailSendArgs extends AccountArg {
   subject: string
   text?: string
   html?: string
+  /** Path to a file holding the plain-text body; `text` wins when both are given. */
+  textFile?: string
+  /** Path to a file holding the HTML body; `html` wins when both are given. */
+  htmlFile?: string
   cc?: string
   /** Absolute paths (or paths relative to the dsh process cwd) to attach. */
   attachments?: string[]
