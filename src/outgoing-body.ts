@@ -64,7 +64,11 @@ export function sanitizeOutgoingHtml(value: unknown, options: OutgoingHtmlOption
                 const cid = resolveInlineCid(node.attribs?.src, (options.cids ?? []).slice());
                 if (!cid)
                     return escapeMailHtml(String(node.attribs?.alt || ''));
-                const imageAttrs = ['src="cid:' + cid + '"'], alt = String(node.attribs?.alt || '');
+                const imageAttrs = ['src="cid:' + cid + '"'];
+                // Fall back to the attachment name so a client without HTML still learns what the
+                // picture was, even when the caller wrote <img src="cid:x.png"> with no alt.
+                const name = options.cids?.[Number(cid.slice(3)) - 1] ?? '';
+                const alt = String(node.attribs?.alt || '') || name;
                 if (alt)
                     imageAttrs.push('alt="' + escapeMailHtml(alt) + '"');
                 for (const key of ['width', 'height']) {
@@ -117,6 +121,22 @@ export function sanitizeOutgoingHtml(value: unknown, options: OutgoingHtmlOption
     }
     return visit(parseDocument(value).children, 0);
 }
+/**
+ * Plain-text alternative for a body that is only markup (typically a lone inline image).
+ * Without it a text-only client would show an empty message and `text` would be ''.
+ */
+function plainFallback(safe: string, options: OutgoingHtmlOptions): string {
+    const stripped = stripHtml(safe);
+    if (stripped.trim())
+        return stripped;
+    const names = [...safe.matchAll(/src="cid:img(\d+)"/g)]
+        .map(match => options.cids?.[Number(match[1]) - 1])
+        .filter((name): name is string => typeof name === 'string' && name !== '');
+    if (names.length)
+        return names.map(name => '[' + name + ']').join(' ');
+    return safe.trim() ? '（本邮件为 HTML 正文，请用支持 HTML 的客户端查看）' : '';
+}
+
 export function prepareMailBody(text: unknown, html?: unknown, options: OutgoingHtmlOptions = {}): {
     text: string;
     html?: string;
@@ -126,7 +146,7 @@ export function prepareMailBody(text: unknown, html?: unknown, options: Outgoing
     if (html === undefined || html === '')
         return { text: text as string || '' };
     const safe = sanitizeOutgoingHtml(html, options);
-    const plain = typeof text === 'string' && text.trim() ? text : stripHtml(safe);
+    const plain = typeof text === 'string' && text.trim() ? text : plainFallback(safe, options);
     if (!safe.trim() && !plain.trim())
         throw new Error('邮件正文为空 / The message body is empty');
     return { text: plain, ...(safe.trim() ? { html: safe } : {}) };

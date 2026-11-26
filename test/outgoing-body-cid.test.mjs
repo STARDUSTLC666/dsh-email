@@ -59,3 +59,43 @@ test('email_send 真正发信时只给被引用的附件挂 cid，并把图改�
   assert.equal(mail.attachments[1].cid, undefined)
   assert.equal(mail.text, '说明')
 })
+
+test('没有 alt 时用附件名兜底，纯图正文也给出纯文本替代', () => {
+  const body = prepareMailBody(undefined, '<img src="cid:chart-2.png" width="520">', { cids: CIDS })
+  assert.match(body.html, /<img src="cid:img2" alt="chart-2.png" width="520">/)
+  assert.equal(body.text, '[chart-2.png]')
+})
+
+test('只有标记的正文不会留下空 text', () => {
+  const body = prepareMailBody(undefined, '<table><tr><td style="border-top:1px solid #ccc"></td></tr></table>', { cids: CIDS })
+  assert.equal(body.text, '（本邮件为 HTML 正文，请用支持 HTML 的客户端查看）')
+})
+
+test('非光栅附件（.svg/.html/.txt）不能被当作内联图发出', async t => {
+  const home = await mkdtemp(join(tmpdir(), 'email-cid-raster-'))
+  t.after(() => rm(home, { recursive: true, force: true }))
+  const chart = join(home, 'chart.png'), vector = join(home, 'chart.svg'), page = join(home, 'page.html')
+  await writeFile(chart, PNG)
+  await writeFile(vector, '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><script>alert(1)</script></svg>')
+  await writeFile(page, '<p>hi</p>')
+  const settings = resolveEmailSettings({ provider: 'exmail', user: 'me@example.test', password: 'synthetic' })
+  const pool = new EmailPool(settings)
+  let mail = null
+  pool.transporter = () => ({
+    async sendMail(options) {
+      mail = options
+      return { messageId: '<cid@example.test>', accepted: ['to@example.test'], rejected: [], response: '250 OK' }
+    },
+    close() {},
+  })
+  await pool.send(undefined, 'to@example.test', '内联图白名单', '说明', undefined, [chart, vector, page], undefined,
+    '<p>说明</p><img src="cid:chart.png" alt="柱状图"><img src="cid:chart.svg" alt="矢量图"><img src="cid:page.html" alt="网页">')
+  assert.match(mail.html, /<img src="cid:img1" alt="柱状图">/)
+  assert.doesNotMatch(mail.html, /cid:img2|cid:img3|<img src="cid:chart/)
+  assert.match(mail.html, /矢量图/)
+  assert.match(mail.html, /网页/)
+  assert.equal(mail.attachments[0].cid, 'img1')
+  assert.equal(mail.attachments[0].contentDisposition, 'inline')
+  assert.equal(mail.attachments[1].cid, undefined)
+  assert.equal(mail.attachments[2].cid, undefined)
+})
