@@ -1,5 +1,26 @@
 # 更新记录
 
+## 0.34.1 (2026-11-26)
+
+- **代理通道加固（#64 补丁）**：
+  - 修复 `connectHttpProxy` 在代理单包返回 `200 Connection Established` 附带隧道首字节（如 SMTP/IMAP 欢迎横幅）或带正文体的 `407` 等错误响应时，因流模式 `socket.unshift` 引发递归死循环与内存暴涨的严重缺陷；改用非流式 `'readable'` 阶段解析，错误响应立即拒绝、隧道首字节完整保留。
+  - 为 `fetchWithProxy` 补齐 `gzip` / `x-gzip` / `deflate`（含 raw deflate）/ `br` 响应体透明解压（安全处理空正文与 `HEAD`），为 HTTP 响应头阶段补齐 `timeoutMs` 超时约束，移除会导致宿主包装 `globalThis.fetch` 后静默绕过 `HTTPS_PROXY` 的分支，强制单次代理连接使用 `Connection: close`，在 `POST` → `303`/`301`/`302` → `GET` 重定向时清理残留 `Content-Length`/`Content-Type`，并支持 `NO_PROXY` 匹配方括号 IPv6 地址。
+  - 修复 Google OAuth 流式读取响应时多字节 UTF-8 跨分片截断与读体中断错误归类问题。
+- **本地草稿批量删除体验修复（#65 补丁）**：
+  - 修复切换工作台标签页返回草稿后「全选」复选框半选（`indeterminate`）状态丢失的问题。
+  - 修复所选草稿在刷新时转为发送中导致批量删除确认弹窗状态残留、或确认弹窗打开时点击写邮件产生双弹窗叠加的问题。
+  - 修复在禁用草稿（发送中）复选框上 `Shift+点击` 后残留状态影响后续键盘空格勾选的问题，并补齐 `Shift+空格` 键盘范围选择。
+  - 批量删除成功后即使随后列表刷新失败也先即时移除已确认删除的条目，并清理删除附件后残留的空 `draft-uploads/<id>` 目录；修正英文及多语言单数文案。
+
+- **Proxy Transport Hardening (#64 follow-up)**:
+  - Fixed a fatal flowing-mode `socket.unshift()` infinite-loop/OOM bug in `connectHttpProxy` whenever an HTTP CONNECT proxy returned trailing tunnel bytes (e.g. an SMTP/IMAP banner) or a non-empty `407`/error response body in the same TCP packet.
+  - Added transparent `gzip` / `x-gzip` / `deflate` (zlib + raw) / `br` response decompression in `fetchWithProxy` (safely handling empty bodies and `HEAD`), enforced `options.timeoutMs` on the HTTP response phase, removed the `globalThis.fetch` identity check that could silently bypass `HTTPS_PROXY` when hosts wrap `fetch`, forced `Connection: close` on one-shot proxied sockets, stripped stale `Content-Length`/`Content-Type` on `POST`→`GET` redirects, and supported bracketed IPv6 literals in `NO_PROXY`.
+  - Fixed chunk-boundary UTF-8 decoding and mid-body stream error classification in Google OAuth.
+- **Batch Draft Deletion UI & Cleanup Fixes (#65 follow-up)**:
+  - Restored the select-all checkbox's native `indeterminate` state when switching away from and back to the Drafts tab.
+  - Cleared `batchDeleteOpen` automatically when selected drafts disappear/transition to `sending` or when a compose request opens the editor, preventing phantom re-opens and stacked modals.
+  - Prevented `Shift+Click` on disabled (`sending`) rows from leaking into later keyboard toggles, added keyboard `Shift+Space` range selection, applied optimistic removal before post-delete list refresh, removed now-empty `draft-uploads/<id>` directories after owned upload cleanup, and fixed singular/plural copy across locales.
+
 ## 0.34.0 (2026-11-26)
 
 - **Google / Outlook OAuth 完整代理支持（修复 #64）**：Google OAuth（授权码交换、用户信息校验与令牌刷新）与 Microsoft / Outlook OAuth2（设备码发起、轮询与令牌刷新）现统一复用与 IMAP/SMTP 一致的代理策略，支持账号级/全局 `proxy`（`http://`、`https://`、`socks://`、`socks4/4a`、`socks5/5h` 及代理认证）、`direct` 直连覆盖，以及 `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` / `NO_PROXY` 环境变量；零新增依赖，保持严格 TLS 证书校验（合并系统根证书）与凭据脱敏。

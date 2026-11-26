@@ -241,8 +241,9 @@ test('batch delete removes dozens of drafts atomically, cleans owned uploads, ke
   assert.equal(remaining.length, 5)
   assert.deepEqual(new Set(remaining.map(d => d.id)), new Set(created.slice(25).map(d => d.id)))
 
-  // Owned upload of deleted draft is gone; referenced original and kept draft upload remain.
+  // Owned upload of deleted draft (and its now-empty upload folder) is gone; referenced original and kept draft upload remain.
   await assert.rejects(stat(ownedDeletePath), { code: 'ENOENT' })
+  await assert.rejects(stat(join(x.store.root, 'draft-uploads', created[1].id)), { code: 'ENOENT' })
   assert.equal(await readFile(originalPath, 'utf8'), 'must stay intact')
   assert.equal(await readFile(ownedKeepPath, 'utf8'), 'keep-me-copy')
 
@@ -320,4 +321,49 @@ test('batch delete enforces confirmation, bounds, unique valid ids and carrier C
   assert.equal((await x.request({ action: 'deleteMany', confirmed: true, items: [validItem] }, { origin: 'https://evil.test' })).status, 403)
   assert.equal((await x.request({ action: 'deleteMany', confirmed: true, items: [validItem] }, { 'x-dsh-email-draft': '' })).status, 403)
   assert.equal((await x.store.list()).length, 1, 'rejected requests never delete drafts')
+})
+
+test('batch delete skips a scheduled draft that transitions into sending concurrently while deleting other selected drafts', async t => {
+  let enterSend
+  const sendingStarted = new Promise(resolve => { enterSend = resolve })
+  let releaseSend
+  const allowFinish = new Promise(resolve => { releaseSend = resolve })
+  const x = await setup(t, async (...args) => {
+    enterSend()
+    await allowFinish
+    return { account: args[0], messageId: '<scheduled-race@example.test>', accepted: ['alice@example.test'], rejected: [], response: '250 accepted' }
+  })
+
+  const normal = await x.backend.create({ ...x.fields, subject: '普通草稿' })
+  let scheduled = await x.backend.create({ ...x.fields, subject: '即将触发的定时草稿' })
+  const sendAt = new Date(Date.now() + 600_000).toISOString()
+  scheduled = await x.backend.action({ ...x.fields, action: 'update', id: scheduled.id, revision: scheduled.revision, sendAt })
+  const preview = await x.backend.action({ action: 'preview', id: scheduled.id, revision: scheduled.revision })
+  scheduled = (await x.backend.action({ action: 'schedule', id: scheduled.id, preview: preview.id, confirmed: true, sendAt })).draft
+  assert.equal(scheduled.state, 'scheduled')
+
+  // User opened the batch-delete dialog with the scheduled revision; before confirmation, scheduler starts sending it.
+  x.tick(601_000)
+  const runPromise = x.backend.runScheduled()
+  await sendingStarted
+
+  const outcome = await x.backend.action({
+    action: 'deleteMany',
+    confirmed: true,
+    items: [
+      { id: normal.id, revision: normal.revision },
+      { id: scheduled.id, revision: scheduled.revision },
+    ],
+  })
+  assert.deepEqual(outcome.removed, [normal.id])
+  assert.deepEqual(outcome.skipped, [{ id: scheduled.id, reason: 'busy' }])
+
+  // Let the scheduled delivery finish; it must land cleanly in 'sent' state with its receipt.
+  releaseSend()
+  await runPromise
+  const finalList = await x.store.list()
+  assert.equal(finalList.length, 1)
+  assert.equal(finalList[0].id, scheduled.id)
+  assert.equal(finalList[0].state, 'sent')
+  assert.equal(finalList[0].receipt?.messageId, '<scheduled-race@example.test>')
 })

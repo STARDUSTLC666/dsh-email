@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, open, readFile, realpath, rename, stat, unlink } from 'node:fs/promises'
+import { mkdir, open, readFile, realpath, rename, rmdir, stat, unlink } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import lockfile from 'proper-lockfile'
@@ -186,7 +186,10 @@ export class DraftStore {
     try {
       const root = await realpath(join(this.root, 'draft-uploads', id)), target = await realpath(file.path)
       const comparable = (path: string): string => process.platform === 'win32' ? path.toLowerCase() : path
-      if (comparable(target).startsWith(comparable(root + sep)) && comparable(dirname(target)) === comparable(root)) await unlink(file.path)
+      if (comparable(target).startsWith(comparable(root + sep)) && comparable(dirname(target)) === comparable(root)) {
+        await unlink(file.path)
+        await rmdir(root).catch(() => {})
+      }
     } catch { /* Never remove a referenced original or a path outside this draft's owned upload directory. */ }
   }
   async sendLock<T>(id: string, action: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> {

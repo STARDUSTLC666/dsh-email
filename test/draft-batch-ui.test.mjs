@@ -3,12 +3,13 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
 
-function mountDraftWorkbench({ initialDrafts, onDeleteMany, cached = null } = {}) {
+function mountDraftWorkbench({ initialDrafts, onDeleteMany, onList, cached = null } = {}) {
   const source = readFileSync(new URL('../templates/panels/drafts.js', import.meta.url), 'utf8')
     .replace('let draftUiCache = null;', `let draftUiCache = ${cached ? JSON.stringify(cached) : 'null'};`)
     .replace('async function draftApi(', 'async function _unusedDraftApi(') + '\nthis.DraftWorkbench = DraftWorkbench;'
 
   let drafts = structuredClone(initialDrafts)
+  let props = { active: true, defaultAccount: 'default', composeRequest: null, onComposeFinished() {} }
   const slots = []
   const pendingUpdates = []
   const effects = []
@@ -16,7 +17,8 @@ function mountDraftWorkbench({ initialDrafts, onDeleteMany, cached = null } = {}
   let cursor = 0
   let dirty = false
   let view = null
-  const selectAllInput = { indeterminate: false }
+  let selectAllInput = { indeterminate: false }
+  let mountedSelectAll = false
 
   const h = (type, props, ...children) => ({ type, props: props || {}, children: children.flat(Infinity) })
   const useState = initial => {
@@ -70,8 +72,16 @@ function mountDraftWorkbench({ initialDrafts, onDeleteMany, cached = null } = {}
     uiCss: css,
     async draftApi(action, payload = {}) {
       calls.push({ action, payload })
-      if (action === 'list') return { drafts: structuredClone(drafts), accounts: ['default'], attachmentLimits: {}, attachmentLimit: 20 * 1024 * 1024 }
+      if (action === 'list') {
+        if (onList) return await onList(drafts)
+        return { drafts: structuredClone(drafts), accounts: ['default'], attachmentLimits: {}, attachmentLimit: 20 * 1024 * 1024 }
+      }
       if (action === 'rules') return { accounts: ['default'], revision: 1, policies: {} }
+      if (action === 'create') {
+        const created = makeDraft(drafts.length + 100)
+        drafts = [created, ...drafts]
+        return structuredClone(created)
+      }
       if (action === 'deleteMany') {
         if (onDeleteMany) {
           const result = await onDeleteMany(payload, next => { drafts = next }, drafts)
@@ -108,10 +118,18 @@ function mountDraftWorkbench({ initialDrafts, onDeleteMany, cached = null } = {}
     }
     cursor = 0
     dirty = false
-    view = sandbox.DraftWorkbench({ active: true, defaultAccount: 'default', composeRequest: null, onComposeFinished() {} })
-    // Attach the simulated DOM node to the selectAllRef span so indeterminate updates run.
+    view = sandbox.DraftWorkbench(props)
+    // Simulate real DOM mount/unmount of the select-all checkbox so remounting resets `.indeterminate` to false.
     const refHost = findAll(view, n => n.type === 'span' && n.props.ref)[0]
-    if (refHost) refHost.props.ref.current = { querySelector: () => selectAllInput }
+    if (refHost) {
+      if (!mountedSelectAll) {
+        selectAllInput = { indeterminate: false }
+        mountedSelectAll = true
+      }
+      refHost.props.ref.current = { querySelector: () => selectAllInput }
+    } else {
+      mountedSelectAll = false
+    }
   }
 
   async function flush() {
@@ -129,7 +147,9 @@ function mountDraftWorkbench({ initialDrafts, onDeleteMany, cached = null } = {}
     flush,
     render,
     calls,
-    selectAllInput,
+    get selectAllInput() { return selectAllInput },
+    setProps(next) { props = { ...props, ...next }; render() },
+    setServerDrafts(next) { drafts = structuredClone(next) },
     getView: () => view,
     findAll: predicate => findAll(view, predicate),
     textOf,
@@ -200,7 +220,7 @@ test('DraftWorkbench supports indeterminate select-all, Shift+Click range select
   assert.ok(dialog)
   const dialogText = ui.textOf(dialog)
   assert.match(dialogText, /Includes scheduled drafts/)
-  assert.match(dialogText, /And 1 more drafts/, 'preview caps at 5 items and summarizes the rest')
+  assert.match(dialogText, /And 1 more draft(?!s)/, 'preview caps at 5 items and uses singular grammar for 1 hidden draft')
 
   // Confirm deletion -> sends deleteMany with all 6 deletable items and updates list + success notice.
   const confirmBtn = ui.findAll(n => n.type === 'Button' && ui.textOf(n).includes('Confirm delete (6)'))[0]
@@ -261,7 +281,86 @@ test('DraftWorkbench warns on unsaved edits, handles partial skip and keeps dial
   assert.equal(ui.findAll(n => n.type === 'Dialog' && n.props.title === 'Delete selected local drafts').length, 0)
   const warn = ui.findAll(n => n.type === 'Status' && n.props.tone === 'warn')[0]
   assert.ok(warn)
-  assert.match(ui.textOf(warn), /Deleted 1 local drafts; 1 skipped/)
+  assert.match(ui.textOf(warn), /Deleted 1 local draft; 1 skipped/)
   // Deleted dirty draft #1 was cleared, so remaining draft #2 is not marked Unsaved.
   assert.doesNotMatch(ui.textOf(ui.getView()), /Unsaved/)
+})
+
+test('DraftWorkbench restores indeterminate after tab switch, clears stale shift/modal state, handles compose collision and removes deleted drafts even if reload fails', async () => {
+  const initialDrafts = [
+    makeDraft(1),
+    makeDraft(2, { state: 'sending' }),
+    makeDraft(3),
+    makeDraft(4),
+  ]
+  let failReload = false
+  const ui = mountDraftWorkbench({
+    initialDrafts,
+    async onList(current) {
+      if (failReload) throw new Error('transient list refresh error')
+      return { drafts: structuredClone(current), accounts: ['default'], attachmentLimits: {}, attachmentLimit: 20 * 1024 * 1024 }
+    },
+  })
+  await ui.flush()
+
+  // 1. Check draft #1 -> indeterminate is true; switch away and back -> fresh DOM input restores indeterminate === true.
+  ui.findAll(n => n.type === 'Checkbox')[1].props.onChange(true)
+  await ui.flush()
+  assert.equal(ui.selectAllInput.indeterminate, true)
+
+  ui.setProps({ active: false })
+  await ui.flush()
+  ui.setProps({ active: true })
+  await ui.flush()
+  assert.equal(ui.selectAllInput.indeterminate, true, 'indeterminate must be restored on remount after tab switch')
+
+  // 2. Shift+pointerdown on disabled sending row #2 must NOT leak shift state into a subsequent Spacebar toggle on row #4.
+  const rowSpans = ui.findAll(n => n.type === 'span' && typeof n.props.onPointerDownCapture === 'function')
+  rowSpans[1].props.onPointerDownCapture({ shiftKey: true })
+  rowSpans[3].props.onKeyDownCapture({ key: ' ', shiftKey: false })
+  ui.findAll(n => n.type === 'Checkbox')[4].props.onChange(true)
+  await ui.flush()
+  const checkedAfterSpace = ui.findAll(n => n.type === 'div' && n.props['data-checked'] === 'true')
+  assert.equal(checkedAfterSpace.length, 2, 'only #1 and #4 should be checked, not range #1..#4')
+
+  // Clear selection, check only #1, open batch delete dialog (verify singular confirmation copy).
+  ui.findAll(n => n.type === 'Button' && ui.textOf(n) === 'Clear selection')[0].props.onClick()
+  await ui.flush()
+  ui.findAll(n => n.type === 'Checkbox')[1].props.onChange(true)
+  await ui.flush()
+  ui.findAll(n => n.type === 'Button' && ui.textOf(n).includes('Delete selected (1)'))[0].props.onClick()
+  await ui.flush()
+  let batchDialog = ui.findAll(n => n.type === 'Dialog' && n.props.title === 'Delete selected local drafts')[0]
+  assert.ok(batchDialog)
+  assert.match(ui.textOf(batchDialog), /Deletes 1 selected local draft and its plugin-uploaded copies/)
+
+  // 3. If #1 transitions to sending on refresh while dialog is open, batchDeleteOpen resets so checking #3 later does not pop up the dialog.
+  ui.setServerDrafts([makeDraft(1, { state: 'sending' }), makeDraft(2, { state: 'sending' }), makeDraft(3), makeDraft(4)])
+  ui.findAll(n => n.type === 'Button' && ui.textOf(n) === 'Refresh list')[0].props.onClick()
+  await ui.flush()
+  assert.equal(ui.findAll(n => n.type === 'Dialog' && n.props.title === 'Delete selected local drafts').length, 0)
+  ui.findAll(n => n.type === 'Checkbox')[3].props.onChange(true)
+  await ui.flush()
+  assert.equal(ui.findAll(n => n.type === 'Dialog' && n.props.title === 'Delete selected local drafts').length, 0, 'checking another draft must not re-open stale batch dialog')
+
+  // 4. Open batch delete dialog, then trigger composeRequest -> batch dialog closes so two dialogs never stack.
+  ui.findAll(n => n.type === 'Button' && ui.textOf(n).includes('Delete selected (1)'))[0].props.onClick()
+  await ui.flush()
+  assert.equal(ui.findAll(n => n.type === 'Dialog' && n.props.title === 'Delete selected local drafts').length, 1)
+  ui.setProps({ composeRequest: { id: 'compose-1', account: 'default' } })
+  await ui.flush()
+  assert.equal(ui.findAll(n => n.type === 'Dialog' && n.props.title === 'Delete selected local drafts').length, 0)
+  assert.equal(ui.findAll(n => n.type === 'Dialog' && n.props.title === 'Compose').length, 1)
+  // Close composer cleanly.
+  ui.findAll(n => n.type === 'Dialog' && n.props.title === 'Compose')[0].props.onClose()
+  await ui.flush()
+
+  // 5. If deleteMany succeeds and subsequent reload() fails, deleted drafts are still immediately removed from the rendered list.
+  ui.findAll(n => n.type === 'Button' && ui.textOf(n).includes('Delete selected (1)'))[0].props.onClick()
+  await ui.flush()
+  failReload = true
+  await ui.findAll(n => n.type === 'Button' && ui.textOf(n).includes('Confirm delete (1)'))[0].props.onClick()
+  await ui.flush()
+  assert.equal(ui.findAll(n => n.type === 'div' && n.props['data-dsh-row'] !== undefined).length, 4, 'optimistic filter removed deleted draft #3 despite reload failure')
+  assert.match(ui.textOf(ui.getView()), /transient list refresh error/)
 })

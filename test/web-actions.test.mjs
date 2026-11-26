@@ -1555,7 +1555,17 @@ const OAUTH_DEVICE_OK = {
   interval: 5,
 }
 
+const PROXY_ENV_KEYS = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy', 'ALL_PROXY', 'all_proxy', 'NO_PROXY', 'no_proxy']
+
 function oauthFetch(t, handler) {
+  const saved = Object.fromEntries(PROXY_ENV_KEYS.map(key => [key, process.env[key]]))
+  for (const key of PROXY_ENV_KEYS) delete process.env[key]
+  t.after(() => {
+    for (const key of PROXY_ENV_KEYS) {
+      if (saved[key] === undefined) delete process.env[key]
+      else process.env[key] = saved[key]
+    }
+  })
   const calls = []
   t.mock.method(globalThis, 'fetch', async (url, init) => {
     calls.push({ url: String(url), params: Object.fromEntries(new URLSearchParams(String(init?.body ?? ''))) })

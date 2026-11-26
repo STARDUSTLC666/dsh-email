@@ -191,9 +191,12 @@ function DraftWorkbench({ active, defaultAccount, composeRequest, onComposeFinis
     if (lastCheckedRef.current && !valid.has(lastCheckedRef.current)) lastCheckedRef.current = null;
   }, [data.drafts]);
   useEffect(() => {
+    if (batchDeleteOpen && (!active || activeCheckedIds.length === 0)) setBatchDeleteOpen(false);
+  }, [batchDeleteOpen, active, activeCheckedIds.length]);
+  useEffect(() => {
     const input = selectAllRef.current?.querySelector?.('input[type="checkbox"]');
     if (input) input.indeterminate = someDeletableChecked;
-  }, [someDeletableChecked]);
+  }, [someDeletableChecked, active, data.drafts.length > 0]);
   useEffect(() => {
     if (!dirty) return;
     const guard = event => { event.preventDefault(); event.returnValue = ""; };
@@ -257,6 +260,7 @@ function DraftWorkbench({ active, defaultAccount, composeRequest, onComposeFinis
     const draft = target.kind === 'new'
       ? await draftApi('create', { account: target.account || '', to: '', cc: '', subject: '', text: '' })
       : await draftApi('get', { id: target.id });
+    setBatchDeleteOpen(false);
     adopt(draft);
     setEditorOpen(true);
     setPending(null);
@@ -265,10 +269,11 @@ function DraftWorkbench({ active, defaultAccount, composeRequest, onComposeFinis
 
   function requestSwitch(target) {
     if (target.kind === 'open' && target.id === selected?.id && dirty) {
+      setBatchDeleteOpen(false);
       setEditorOpen(true);
       return;
     }
-    if (dirty) setPending(target);
+    if (dirty) { setBatchDeleteOpen(false); setPending(target); }
     else if (target.kind === 'close') { setEditorOpen(false); setLocalAction(null); }
     else void run(() => switchTo(target));
   }
@@ -405,6 +410,11 @@ function DraftWorkbench({ active, defaultAccount, composeRequest, onComposeFinis
         setAcknowledged(false);
         setEditorOpen(false);
         setLocalAction(null);
+        setPending(null);
+        setNotice('');
+      }
+      if (removedIds.length > 0) {
+        setData(old => ({ ...old, drafts: old.drafts.filter(draft => !removedSet.has(draft.id)) }));
       }
       setCheckedIds(old => old.filter(item => !removedSet.has(item)));
       setBatchDeleteOpen(false);
@@ -419,7 +429,9 @@ function DraftWorkbench({ active, defaultAccount, composeRequest, onComposeFinis
       } else if (removedIds.length > 0 && skipped.length > 0) {
         setListNotice({
           tone: 'warn',
-          text: dt('已删除 ', 'Deleted ') + removedIds.length + dt(' 份本地草稿；', ' local drafts; ') + skipped.length + dt(' 份因正在提交、已在别处修改或已被移除而跳过。', ' skipped because they are submitting, changed elsewhere, or already removed.'),
+          text: (removedIds.length === 1
+            ? dt('已删除 1 份本地草稿；', 'Deleted 1 local draft; ')
+            : dt('已删除 ', 'Deleted ') + removedIds.length + dt(' 份本地草稿；', ' local drafts; ')) + skipped.length + dt(' 份因正在提交、已在别处修改或已被移除而跳过。', ' skipped because they are submitting, changed elsewhere, or already removed.'),
         });
       } else {
         setListNotice({
@@ -569,14 +581,19 @@ function DraftWorkbench({ active, defaultAccount, composeRequest, onComposeFinis
   },
   h(W.Status, { tone: 'error' }, error),
   h('p', { className: draftCss.hint },
-    dt('即将删除所选 ', 'Deletes ') + checkedDrafts.length + dt(' 份本地草稿及插件上传的附件副本；引用的原文件和邮箱中的邮件不会删除。', ' selected local drafts and their plugin-uploaded copies. Original files and mailbox messages stay intact.')),
+    checkedDrafts.length === 1
+      ? dt('即将删除所选 1 份本地草稿及插件上传的附件副本；引用的原文件和邮箱中的邮件不会删除。', 'Deletes 1 selected local draft and its plugin-uploaded copies. Original files and mailbox messages stay intact.')
+      : dt('即将删除所选 ', 'Deletes ') + checkedDrafts.length + dt(' 份本地草稿及插件上传的附件副本；引用的原文件和邮箱中的邮件不会删除。', ' selected local drafts and their plugin-uploaded copies. Original files and mailbox messages stay intact.')),
   checkedScheduledCount > 0 ? h(W.Status, { tone: 'warn' }, dt('其中包含定时发送中的草稿，删除后将取消对应的定时发送。', 'Includes scheduled drafts; deleting them cancels those scheduled sends.')) : null,
   checkedIncludesDirty ? h(W.Status, { tone: 'warn' }, dt('包含当前有未保存编辑的草稿，删除后未保存内容将一并丢弃。', 'Includes a draft with unsaved edits, which will be discarded.')) : null,
   h('ul', { className: draftCss.batchSummary },
     batchPreviewItems.map(draft => h('li', { key: draft.id },
       h('strong', null, draft.subject || dt('未命名草稿', 'Untitled draft')),
       h('small', { className: draftCss.hint }, (draft.account || dt('尚未选择账号', 'No account selected')) + ' · ' + (selected?.id === draft.id && dirty ? dt('未保存', 'Unsaved') : draftState(draft.state))))),
-    batchHiddenCount > 0 ? h('li', { key: 'more', className: draftCss.hint }, dt('以及其余 ', 'And ') + batchHiddenCount + dt(' 份草稿', ' more drafts')) : null)) : null;
+    batchHiddenCount > 0 ? h('li', { key: 'more', className: draftCss.hint },
+      batchHiddenCount === 1
+        ? dt('以及其余 1 份草稿', 'And 1 more draft')
+        : dt('以及其余 ', 'And ') + batchHiddenCount + dt(' 份草稿', ' more drafts')) : null)) : null;
 
   return h(React.Fragment, null,
     active ? h('section', { className: draftCss.drafts, 'aria-label': dt('邮件草稿', 'Email drafts') },
@@ -624,8 +641,9 @@ function DraftWorkbench({ active, defaultAccount, composeRequest, onComposeFinis
           },
           h('span', {
             className: draftCss.checkHit,
-            onPointerDownCapture: event => { shiftHeldRef.current = Boolean(event.shiftKey); },
-            onClickCapture: event => { if (event.shiftKey) shiftHeldRef.current = true; },
+            onPointerDownCapture: event => { shiftHeldRef.current = !(busy || isSending) && Boolean(event.shiftKey); },
+            onKeyDownCapture: event => { if (event.key === ' ' || event.key === 'Enter') shiftHeldRef.current = !(busy || isSending) && Boolean(event.shiftKey); },
+            onClickCapture: event => { if (!(busy || isSending) && event.shiftKey) shiftHeldRef.current = true; },
           }, h(W.Checkbox, {
             hiddenLabel: true,
             label: dt('选择草稿：', 'Select draft: ') + title,

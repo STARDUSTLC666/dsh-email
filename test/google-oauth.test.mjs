@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {createHash} from 'node:crypto'
 import {readFileSync} from 'node:fs'
 import {createServer as httpsServer} from 'node:https'
+import {gzipSync} from 'node:zlib'
 import {GoogleOAuth,GOOGLE_TOKEN_URL,GOOGLE_MAIL_SCOPE} from '../lib/google-oauth.js'
 import {resolveEmailSettings} from '../lib/config.js'
 import {fetchWithProxy} from '../lib/proxy.js'
@@ -147,4 +148,57 @@ test('GoogleOAuth completes full login, userinfo and refresh through real SOCKS5
  assert.equal(httpProxy.seen[0].method,'CONNECT')
  assert.equal(httpProxy.seen[0].target,'oauth2.googleapis.com:443')
  assert.equal(googleHits.length,3)
+})
+
+test('GoogleOAuth decodes gzipped + split-UTF8 proxied responses and maps mid-body stream errors to connection failure',async t=>{
+ // 1. Gzipped JSON response through real HTTP CONNECT proxy completes login cleanly.
+ const mockGoogle=httpsServer({key:TEST_KEY,cert:TEST_CERT},(req,res)=>{
+  const body=req.url==='/token'
+   ?JSON.stringify({access_token:'gzip-tok',refresh_token:'gzip-ref',scope:GOOGLE_MAIL_SCOPE,expires_in:3600})
+   :JSON.stringify({email:cfg.user,email_verified:true,name:'测试用户'})
+  const gz=gzipSync(Buffer.from(body))
+  res.writeHead(200,{'content-type':'application/json','content-encoding':'gzip','content-length':String(gz.length)})
+  res.end(gz)
+ })
+ await new Promise(resolve=>mockGoogle.listen(0,'127.0.0.1',resolve))
+ t.after(()=>new Promise(resolve=>mockGoogle.close(resolve)))
+ const httpProxy=await startHttpProxy({rewriteTarget:()=>({host:'127.0.0.1',port:mockGoogle.address().port})})
+ t.after(()=>httpProxy.close())
+
+ let store={version:1,accounts:{}}
+ const auth=new GoogleOAuth(
+  {read:()=>structuredClone(store),write:x=>{store=structuredClone(x)}},
+  {proxyFetch:(input,init,proxy)=>fetchWithProxy(input,init,proxy,{tls:{rejectUnauthorized:false}})},
+ )
+ t.after(()=>auth.dispose())
+ const start=await auth.start('gmail',{...cfg,proxy:httpProxy.url})
+ assert.equal((await fetch(callback(start))).status,200)
+ assert.equal(store.accounts.gmail.refreshToken,'gzip-ref')
+
+ // 2. Split multi-byte UTF-8 chunks in userinfo decode without corruption, and mid-body stream error reports connection failure.
+ const splitPayload=Buffer.from(JSON.stringify({email:cfg.user,email_verified:true,name:'张伟测试'}))
+ const splitIdx=splitPayload.indexOf(Buffer.from('张'))+1 // split right inside a 3-byte UTF-8 char
+ let callCount=0
+ const splitAuth=new GoogleOAuth(
+  {read:()=>structuredClone(store),write:x=>{store=structuredClone(x)}},
+  {fetch:async url=>{
+   callCount++
+   if(String(url)===GOOGLE_TOKEN_URL) return json({access_token:'split-tok',refresh_token:'split-ref',scope:GOOGLE_MAIL_SCOPE,expires_in:3600})
+   return new Response(new ReadableStream({start(c){c.enqueue(splitPayload.subarray(0,splitIdx));c.enqueue(splitPayload.subarray(splitIdx));c.close()}}),{status:200})
+  }},
+ )
+ t.after(()=>splitAuth.dispose())
+ const s2=await splitAuth.start('gmail2',cfg)
+ assert.equal((await fetch(callback(s2))).status,200)
+ assert.equal(callCount,2)
+
+ const brokenStreamAuth=new GoogleOAuth(
+  {read:()=>structuredClone(store),write:x=>{store=structuredClone(x)}},
+  {fetch:async ()=>new Response(new ReadableStream({start(c){c.enqueue(Buffer.from('{"access_to'));c.error(new Error('socket reset'))}}),{status:200})},
+ )
+ t.after(()=>brokenStreamAuth.dispose())
+ const s3=await brokenStreamAuth.start('gmail3',cfg)
+ const cb3=await fetch(callback(s3))
+ assert.equal(cb3.status,400)
+ assert.match(await cb3.text(),/无法连接 Google 登录服务/)
 })

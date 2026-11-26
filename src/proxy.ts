@@ -22,12 +22,11 @@
  */
 import { request as requestHttp, type IncomingMessage } from 'node:http'
 import { connect as connectTcp, isIP, type Socket } from 'node:net'
-import { Readable } from 'node:stream'
+import { PassThrough, Readable, type Transform } from 'node:stream'
 import { connect as connectTls, type ConnectionOptions } from 'node:tls'
+import { createBrotliDecompress, createGunzip, createInflate, createInflateRaw } from 'node:zlib'
 import { SocksClient } from 'socks'
 import { mailTlsOptions } from './mail-tls.js'
-
-const NATIVE_FETCH = globalThis.fetch
 
 /** The variable names git, curl and the Node ecosystem all agree on, in priority order. */
 const PROXY_ENV_NAMES = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy', 'ALL_PROXY', 'all_proxy'] as const
@@ -98,13 +97,18 @@ function isLoopbackTarget(host: string): boolean {
 function noProxyBypassed(host: string, env: NodeJS.ProcessEnv): boolean {
   const raw = NO_PROXY_ENV_NAMES.map(name => env[name]).find(value => typeof value === 'string' && value.trim() !== '')
   if (raw === undefined) return false
-  const target = host.toLowerCase()
+  const target = host.trim().toLowerCase().replace(/^\[(.*)\]$/, '$1')
+  if (target === '') return false
   return raw.split(',').some(entry => {
     const pattern = entry.trim().toLowerCase()
     if (pattern === '') return false
     if (pattern === '*') return true
-    // NO_PROXY entries are plain hosts, optional port, optional leading dot.
-    const bare = pattern.replace(/^\./, '').replace(/:\d+$/, '')
+    // NO_PROXY entries are plain hosts, IPv6 literals, optional port, optional leading dot.
+    const withoutPort = pattern.startsWith('[')
+      ? pattern.replace(/^\[([^\]]+)\](?::\d+)?$/, '$1')
+      : (isIP(pattern) === 6 ? pattern : pattern.replace(/:\d+$/, ''))
+    const bare = withoutPort.replace(/^\./, '')
+    if (bare === '') return false
     return target === bare || target.endsWith(`.${bare}`)
   })
 }
@@ -199,39 +203,52 @@ async function connectHttpProxy(url: URL, host: string, port: number, timeoutMs:
   return new Promise((resolve, reject) => {
     let buffered = Buffer.alloc(0)
     let settled = false
-    const finish = (error: Error | null): void => {
+    const finish = (error: Error | null, rest?: Buffer): void => {
       if (settled) return
       settled = true
       clearTimeout(timer)
-      socket.removeListener('data', onData)
+      socket.removeListener('readable', onReadable)
       socket.removeListener('error', onError)
       socket.removeListener('close', onClose)
       signal?.removeEventListener('abort', onAbort)
-      if (error !== null) { socket.destroy(); reject(error) } else resolve(socket)
+      if (error !== null) {
+        socket.destroy()
+        reject(error)
+        return
+      }
+      // Because we stayed in non-flowing `'readable'` mode, unshifting any
+      // trailing tunnel bytes (e.g. an SMTP banner coalesced into the CONNECT
+      // packet) buffers them safely for the caller without looping or dropping.
+      if (rest !== undefined && rest.length > 0) socket.unshift(rest)
+      resolve(socket)
     }
     const timer = setTimeout(() => finish(proxyError('代理 CONNECT 协商超时', 'PROXY_TIMEOUT')), timeoutMs)
     const onError = (error: Error): void => finish(proxyError(`代理连接中断：${error.message}`, 'PROXY_UNREACHABLE'))
     const onClose = (): void => finish(proxyError('代理在 CONNECT 响应前关闭了连接', 'PROXY_CLOSED'))
     const onAbort = (): void => finish(signal?.reason instanceof Error ? signal.reason : new Error('代理连接已取消'))
-    const onData = (chunk: Buffer): void => {
-      buffered = Buffer.concat([buffered, chunk])
-      const end = buffered.indexOf('\r\n\r\n')
-      if ((end < 0 ? buffered.length : end + 4) > MAX_HEADER_BYTES) { finish(proxyError('代理 CONNECT 响应头过长', 'PROXY_BAD_RESPONSE')); return }
-      if (end < 0) return
-      const head = buffered.subarray(0, end).toString('latin1')
-      const status = Number(/^HTTP\/1\.[01] ([1-5]\d\d)(?:\s|$)/.exec(head)?.[1] ?? '0')
-      const rest = buffered.subarray(end + 4)
-      // Anything after the header block is the tunnel's own first bytes, so it
-      // is handed back to the socket before the TLS layer starts reading.
-      if (rest.length > 0) socket.unshift(rest)
-      if (status < 200 || status >= 300) {
-        const line = head.split('\r\n')[0] ?? ''
-        finish(proxyError(`代理拒绝了 CONNECT ${authority(host, port)}：HTTP ${status} ${line}`.trim(), 'PROXY_CONNECT_REFUSED'))
+    const onReadable = (): void => {
+      let chunk: Buffer | null
+      while (!settled && (chunk = socket.read() as Buffer | null) !== null) {
+        buffered = Buffer.concat([buffered, chunk])
+        const end = buffered.indexOf('\r\n\r\n')
+        if ((end < 0 ? buffered.length : end + 4) > MAX_HEADER_BYTES) {
+          finish(proxyError('代理 CONNECT 响应头过长', 'PROXY_BAD_RESPONSE'))
+          return
+        }
+        if (end < 0) continue
+        const head = buffered.subarray(0, end).toString('latin1')
+        const status = Number(/^HTTP\/1\.[01] ([1-5]\d\d)(?:\s|$)/.exec(head)?.[1] ?? '0')
+        if (status < 200 || status >= 300) {
+          const line = head.split('\r\n')[0] ?? ''
+          finish(proxyError(`代理拒绝了 CONNECT ${authority(host, port)}：HTTP ${status} ${line}`.trim(), 'PROXY_CONNECT_REFUSED'))
+          return
+        }
+        const rest = buffered.subarray(end + 4)
+        finish(null, rest)
         return
       }
-      finish(null)
     }
-    socket.on('data', onData)
+    socket.on('readable', onReadable)
     socket.once('error', onError)
     socket.once('close', onClose)
     signal?.addEventListener('abort', onAbort, { once: true })
@@ -363,32 +380,128 @@ function normalizeRequestHeaders(
   const headers = new Headers(input)
   if (defaultContentType !== undefined && !headers.has('content-type')) headers.set('content-type', defaultContentType)
   if (bodyLength !== undefined && !headers.has('content-length')) headers.set('content-length', String(bodyLength))
-  if (!headers.has('connection')) headers.set('connection', 'close')
+  // Each proxied request owns a one-shot non-pooled socket; force close so
+  // caller-supplied keep-alive headers never leave idle sockets open.
+  headers.set('connection', 'close')
   for (const [key, value] of Object.entries(extra)) headers.set(key, value)
   const record: Record<string, string> = {}
   headers.forEach((value, key) => { record[key] = value })
   return record
 }
 
-function incomingToResponse(res: IncomingMessage, signal?: AbortSignal): Response {
+const SUPPORTED_CONTENT_ENCODINGS = new Set(['gzip', 'x-gzip', 'deflate', 'br'])
+
+function parseContentEncodings(header: string | null): string[] {
+  if (!header) return []
+  const list = header.split(',').map(part => part.trim().toLowerCase()).filter(part => part !== '' && part !== 'identity')
+  if (list.length === 0 || list.some(part => !SUPPORTED_CONTENT_ENCODINGS.has(part))) return []
+  return list
+}
+
+function decodeResponseStream(res: IncomingMessage, encodings: string[], signal?: AbortSignal): Readable {
+  if (encodings.length === 0) {
+    if (signal !== undefined) {
+      const onAbort = (): void => { res.destroy(signal.reason instanceof Error ? signal.reason : new Error('Request aborted')) }
+      const cleanup = (): void => { signal.removeEventListener('abort', onAbort) }
+      signal.addEventListener('abort', onAbort, { once: true })
+      res.once('end', cleanup)
+      res.once('close', cleanup)
+      res.once('error', cleanup)
+    }
+    return res
+  }
+
+  const output = new PassThrough()
+  const decoders: Transform[] = []
+  let pipelineStarted = false
+  let cleaned = false
+
+  const abortAll = (error?: Error): void => {
+    if (cleaned) return
+    cleaned = true
+    signal?.removeEventListener('abort', onAbort)
+    res.removeListener('readable', onReadable)
+    res.removeListener('end', onEmptyEnd)
+    res.removeListener('error', onResError)
+    res.removeListener('close', onResClose)
+    res.on('error', () => {})
+    for (const dec of decoders) {
+      dec.on('error', () => {})
+      dec.destroy()
+    }
+    if (!res.destroyed) res.destroy()
+    if (!output.destroyed) {
+      if (error !== undefined) output.destroy(error)
+      else output.destroy()
+    }
+  }
+
+  const onAbort = (): void => {
+    abortAll(signal?.reason instanceof Error ? signal.reason : new Error('Request aborted'))
+  }
+  const onResError = (error: Error): void => abortAll(error)
+  const onResClose = (): void => {
+    if (!cleaned && !res.complete) abortAll(new Error('Premature close'))
+  }
+  const onEmptyEnd = (): void => {
+    res.removeListener('readable', onReadable)
+    signal?.removeEventListener('abort', onAbort)
+    if (!pipelineStarted && !output.destroyed) output.end()
+  }
+  const onReadable = (): void => {
+    if (cleaned || pipelineStarted) return
+    const first = res.read() as Buffer | null
+    if (first === null) return
+    if (first.length === 0) {
+      res.once('readable', onReadable)
+      return
+    }
+    pipelineStarted = true
+    res.removeListener('end', onEmptyEnd)
+    for (let i = encodings.length - 1; i >= 0; i--) {
+      const enc = encodings[i]
+      const isOuter = i === encodings.length - 1
+      const dec = enc === 'br'
+        ? createBrotliDecompress()
+        : enc === 'deflate'
+          ? (isOuter && (first[0] & 0x0f) !== 0x08 ? createInflateRaw() : createInflate())
+          : createGunzip()
+      dec.on('error', err => abortAll(err))
+      decoders.push(dec)
+    }
+    for (let i = 0; i + 1 < decoders.length; i++) decoders[i].pipe(decoders[i + 1])
+    decoders[decoders.length - 1].pipe(output)
+    decoders[0].write(first)
+    if (res.readableEnded) decoders[0].end()
+    else res.pipe(decoders[0])
+  }
+
+  if (signal !== undefined) signal.addEventListener('abort', onAbort, { once: true })
+  res.once('readable', onReadable)
+  res.once('end', onEmptyEnd)
+  res.on('error', onResError)
+  res.once('close', onResClose)
+  output.once('end', () => { signal?.removeEventListener('abort', onAbort) })
+  output.once('close', () => {
+    signal?.removeEventListener('abort', onAbort)
+    if (!output.writableEnded) abortAll()
+  })
+  return output
+}
+
+function incomingToResponse(res: IncomingMessage, method: string, signal?: AbortSignal): Response {
   const status = res.statusCode ?? 0
   const headers = new Headers()
   for (let i = 0; i + 1 < res.rawHeaders.length; i += 2) {
     headers.append(res.rawHeaders[i], res.rawHeaders[i + 1])
   }
-  if (NULL_BODY_STATUSES.has(status)) {
+  if (method === 'HEAD' || NULL_BODY_STATUSES.has(status)) {
     res.resume()
     return new Response(null, { status, statusText: res.statusMessage ?? '', headers })
   }
-  if (signal !== undefined) {
-    const onAbort = (): void => { res.destroy(signal.reason instanceof Error ? signal.reason : new Error('Request aborted')) }
-    const cleanup = (): void => { signal.removeEventListener('abort', onAbort) }
-    signal.addEventListener('abort', onAbort, { once: true })
-    res.once('end', cleanup)
-    res.once('close', cleanup)
-    res.once('error', cleanup)
-  }
-  const stream = Readable.toWeb(res) as unknown as ReadableStream<Uint8Array>
+  const encodings = parseContentEncodings(headers.get('content-encoding'))
+  const body = decodeResponseStream(res, encodings, signal)
+  const stream = Readable.toWeb(body) as unknown as ReadableStream<Uint8Array>
   return new Response(stream, { status, statusText: res.statusMessage ?? '', headers })
 }
 
@@ -402,6 +515,8 @@ async function sendSingleProxiedRequest(
   const signal = init?.signal ?? undefined
   signal?.throwIfAborted()
   const timeoutMs = Math.max(1000, options.timeoutMs ?? 30000)
+  const deadline = Date.now() + timeoutMs
+  const remainingMs = (): number => Math.max(1, deadline - Date.now())
   const proxyUrl = parseProxyUrl(proxyHref)
   if (proxyUrl === undefined) throw proxyError('代理地址为空', 'PROXY_INVALID')
   const targetHost = url.hostname.replace(/^\[(.*)\]$/, '$1')
@@ -417,20 +532,20 @@ async function sendSingleProxiedRequest(
   const extraHeaders: Record<string, string> = { host: url.host }
 
   if (url.protocol === 'https:') {
-    const tunnel = await openProxiedSocket(proxyUrl, targetHost, targetPort, { timeoutMs, signal, tls: options.tls })
-    socket = await upgradeProxiedTls(tunnel, targetHost, timeoutMs, options.tls, signal)
+    const tunnel = await openProxiedSocket(proxyUrl, targetHost, targetPort, { timeoutMs: remainingMs(), signal, tls: options.tls })
+    socket = await upgradeProxiedTls(tunnel, targetHost, remainingMs(), options.tls, signal)
     requestHost = targetHost
     requestPort = targetPort
     requestPath = url.pathname + url.search
   } else if (isHttpProxy) {
-    socket = await connectToProxy(proxyUrl, timeoutMs, signal, options.tls)
+    socket = await connectToProxy(proxyUrl, remainingMs(), signal, options.tls)
     requestHost = proxyUrl.hostname.replace(/^\[(.*)\]$/, '$1')
     requestPort = proxyPort(proxyUrl)
     requestPath = url.origin + url.pathname + url.search
     const auth = basicProxyAuthorization(proxyUrl)
     if (auth !== undefined) extraHeaders['proxy-authorization'] = auth
   } else {
-    socket = await openProxiedSocket(proxyUrl, targetHost, targetPort, { timeoutMs, signal, tls: options.tls })
+    socket = await openProxiedSocket(proxyUrl, targetHost, targetPort, { timeoutMs: remainingMs(), signal, tls: options.tls })
     requestHost = targetHost
     requestPort = targetPort
     requestPath = url.pathname + url.search
@@ -453,7 +568,9 @@ async function sendSingleProxiedRequest(
       headers,
       createConnection: () => socket,
     })
+    const timer = setTimeout(() => fail(proxyError(`通过代理请求 ${url.host} 超时`, 'PROXY_TIMEOUT')), remainingMs())
     const cleanup = (): void => {
+      clearTimeout(timer)
       signal?.removeEventListener('abort', onAbort)
       req.removeListener('response', onResponse)
       req.removeListener('error', onError)
@@ -483,7 +600,7 @@ async function sendSingleProxiedRequest(
       cleanup()
       // Keep an error listener on the request after headers arrive so late socket errors cannot go unhandled.
       req.on('error', () => {})
-      resolve(incomingToResponse(res, signal))
+      resolve(incomingToResponse(res, method, signal))
     }
     req.once('response', onResponse)
     req.once('error', onError)
@@ -510,15 +627,13 @@ export async function fetchWithProxy(
 ): Promise<Response> {
   const directFetch = options.directFetch ?? globalThis.fetch
   const env = options.env ?? process.env
-  const explicitConfigured = explicitProxy !== undefined && explicitProxy !== null && explicitProxy.trim() !== ''
   const redirectMode = init?.redirect ?? 'follow'
   let currentUrl = input instanceof URL ? new URL(input.href) : new URL(input)
   let currentInit = init
 
   for (let redirects = 0; ; redirects++) {
     const proxy = resolveProxyUrl(explicitProxy, env, currentUrl.hostname)
-    const bypassEnvForMock = !explicitConfigured && options.env === undefined && directFetch !== NATIVE_FETCH
-    if (proxy === undefined || bypassEnvForMock) {
+    if (proxy === undefined) {
       return directFetch(currentUrl.href, currentInit)
     }
     const response = await sendSingleProxiedRequest(proxy, currentUrl, currentInit, options)
@@ -530,6 +645,9 @@ export async function fetchWithProxy(
     await response.body?.cancel().catch(() => {})
     if (redirects >= 5) throw new TypeError('Too many redirects')
     const nextUrl = new URL(location, currentUrl)
+    if (nextUrl.protocol !== 'http:' && nextUrl.protocol !== 'https:') {
+      throw new TypeError(`Unsupported redirect protocol: ${nextUrl.protocol}`)
+    }
     const nextHeaders = new Headers(currentInit?.headers)
     if (nextUrl.origin !== currentUrl.origin) {
       nextHeaders.delete('authorization')
@@ -538,6 +656,13 @@ export async function fetchWithProxy(
     }
     const currentMethod = (currentInit?.method ?? 'GET').toUpperCase()
     const switchToGet = response.status === 303 || ((response.status === 301 || response.status === 302) && currentMethod === 'POST')
+    if (switchToGet) {
+      nextHeaders.delete('content-length')
+      nextHeaders.delete('content-type')
+      nextHeaders.delete('content-encoding')
+      nextHeaders.delete('content-language')
+      nextHeaders.delete('content-location')
+    }
     currentUrl = nextUrl
     currentInit = {
       ...currentInit,

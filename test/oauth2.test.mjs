@@ -43,11 +43,25 @@ function writeTokens(accounts) {
 
 const OAUTH_ACCOUNT = { user: 'me@outlook.com', clientId: 'client-1' }
 
+const PROXY_ENV_KEYS = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy', 'ALL_PROXY', 'all_proxy', 'NO_PROXY', 'no_proxy']
+
+function clearProxyEnv(t) {
+  const saved = Object.fromEntries(PROXY_ENV_KEYS.map(key => [key, process.env[key]]))
+  for (const key of PROXY_ENV_KEYS) delete process.env[key]
+  t.after(() => {
+    for (const key of PROXY_ENV_KEYS) {
+      if (saved[key] === undefined) delete process.env[key]
+      else process.env[key] = saved[key]
+    }
+  })
+}
+
 /**
  * Install a fetch stub for one test. Every response is a real `Response`, so
  * the code under test parses exactly what the authority would send.
  */
 function mockFetch(t, handler) {
+  clearProxyEnv(t)
   const calls = []
   t.mock.method(globalThis, 'fetch', async (url, init) => {
     const body = new URLSearchParams(String(init?.body ?? ''))
@@ -282,6 +296,7 @@ test('device flow: AADSTS 65001 reports the missing permission grant', async t =
 })
 
 test('device flow: a network failure is reported as one, not as a login rejection', async t => {
+  clearProxyEnv(t)
   writeTokens({})
   t.mock.method(globalThis, 'fetch', async () => { throw new TypeError('fetch failed') })
   await assert.rejects(startDeviceFlow('work', OAUTH_ACCOUNT), /无法连接微软登录服务/)

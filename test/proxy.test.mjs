@@ -2,9 +2,10 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer as httpServer } from 'node:http'
 import { createServer as httpsServer } from 'node:https'
-import { createServer } from 'node:net'
+import { connect as connectTcp, createServer } from 'node:net'
 import { createServer as tlsServer } from 'node:tls'
 import { readFileSync } from 'node:fs'
+import { brotliCompressSync, deflateRawSync, deflateSync, gzipSync } from 'node:zlib'
 import { resolveEmailSettings } from '../lib/index.js'
 import { fetchWithProxy, openProxiedSocket, parseProxyUrl, resolveProxyUrl } from '../lib/proxy.js'
 import { startHttpProxy, startSocks5Proxy } from './helpers/proxy-peer.mjs'
@@ -277,4 +278,207 @@ test('fetchWithProxy forwards plain HTTP through HTTP proxy, honours env/NO_PROX
   for (let i = 0; i < 100 && !holdRes; i++) await new Promise(r => setTimeout(r, 10))
   ctrl.abort(new Error('abort-proxied-fetch'))
   await assert.rejects(slowReq, /abort-proxied-fetch/)
+})
+
+test('connectHttpProxy handles coalesced CONNECT+banner packets and 407 error bodies without looping', async t => {
+  const sockets = new Set()
+  const bannerServer = createServer(sock => {
+    sockets.add(sock)
+    sock.on('error', () => {})
+    sock.once('data', () => {
+      sock.write('HTTP/1.1 200 Connection Established\r\n\r\n220 smtp.example ESMTP\r\n', 'latin1')
+    })
+  })
+  const errorBodyServer = createServer(sock => {
+    sockets.add(sock)
+    sock.on('error', () => {})
+    sock.once('data', () => {
+      sock.end('HTTP/1.1 407 Proxy Authentication Required\r\nContent-Length: 26\r\n\r\n<html>Auth Required</html>', 'latin1')
+    })
+  })
+  await new Promise(resolve => bannerServer.listen(0, '127.0.0.1', resolve))
+  await new Promise(resolve => errorBodyServer.listen(0, '127.0.0.1', resolve))
+  t.after(async () => {
+    for (const s of sockets) s.destroy()
+    await new Promise(resolve => bannerServer.close(resolve))
+    await new Promise(resolve => errorBodyServer.close(resolve))
+  })
+
+  const tunnel = await openProxiedSocket(`http://127.0.0.1:${bannerServer.address().port}`, 'smtp.example', 25, { timeoutMs: 2000 })
+  const banner = await new Promise(resolve => tunnel.once('data', chunk => resolve(chunk.toString('latin1'))))
+  assert.equal(banner, '220 smtp.example ESMTP\r\n')
+  tunnel.destroy()
+
+  await assert.rejects(
+    openProxiedSocket(`http://127.0.0.1:${errorBodyServer.address().port}`, 'oauth2.googleapis.com', 443, { timeoutMs: 2000 }),
+    /HTTP 407/,
+  )
+})
+
+test('fetchWithProxy decompresses gzip/deflate/br (including empty & HEAD), enforces timeoutMs, closes keep-alive sockets and sanitizes POST->303 redirects', async t => {
+  let openSockets = 0
+  let stalledRes
+  const target = await startHttpsTarget(t, (req, res) => {
+    if (req.url === '/gzip') {
+      const body = gzipSync(Buffer.from(JSON.stringify({ ok: true, enc: 'gzip' })))
+      res.writeHead(200, { 'content-type': 'application/json', 'content-encoding': 'gzip', 'content-length': String(body.length) })
+      res.end(body)
+      return
+    }
+    if (req.url === '/deflate') {
+      const body = deflateSync(Buffer.from(JSON.stringify({ ok: true, enc: 'deflate' })))
+      res.writeHead(200, { 'content-type': 'application/json', 'content-encoding': 'deflate' })
+      res.end(body)
+      return
+    }
+    if (req.url === '/deflate-raw') {
+      const body = deflateRawSync(Buffer.from(JSON.stringify({ ok: true, enc: 'raw' })))
+      res.writeHead(200, { 'content-type': 'application/json', 'content-encoding': 'deflate' })
+      res.end(body)
+      return
+    }
+    if (req.url === '/br') {
+      const body = brotliCompressSync(Buffer.from(JSON.stringify({ ok: true, enc: 'br' })))
+      res.writeHead(200, { 'content-type': 'application/json', 'content-encoding': 'br' })
+      res.end(body)
+      return
+    }
+    if (req.url === '/empty-gzip') {
+      res.writeHead(200, { 'content-type': 'text/plain', 'content-encoding': 'gzip', 'content-length': '0' })
+      res.end()
+      return
+    }
+    if (req.url === '/hang') {
+      stalledRes = res
+      return
+    }
+    if (req.url === '/post-303') {
+      res.writeHead(303, { location: '/after-303' })
+      res.end()
+      return
+    }
+    if (req.url === '/after-303') {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ method: req.method, contentLength: req.headers['content-length'] ?? null, contentType: req.headers['content-type'] ?? null }))
+      return
+    }
+    res.writeHead(200, { 'content-type': 'text/plain', connection: 'keep-alive', 'content-length': '2' })
+    res.end('ok')
+  })
+  const plainTarget = httpServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'text/plain', connection: 'keep-alive', 'content-length': '2' })
+    res.end('ok')
+  })
+  plainTarget.on('connection', s => { openSockets++; s.on('close', () => { openSockets-- }) })
+  await new Promise(resolve => plainTarget.listen(0, '127.0.0.1', resolve))
+  t.after(() => {
+    stalledRes?.destroy()
+    plainTarget.closeAllConnections?.()
+    return new Promise(resolve => plainTarget.close(resolve))
+  })
+
+  const proxy = await startHttpProxy()
+  const forwardProxy = await startHttpProxy({ rewriteTarget: () => ({ host: '127.0.0.1', port: plainTarget.address().port }) })
+  t.after(async () => { await proxy.close(); await forwardProxy.close() })
+
+  for (const [path, expected] of [
+    ['/gzip', { ok: true, enc: 'gzip' }],
+    ['/deflate', { ok: true, enc: 'deflate' }],
+    ['/deflate-raw', { ok: true, enc: 'raw' }],
+    ['/br', { ok: true, enc: 'br' }],
+  ]) {
+    const res = await fetchWithProxy(`${target.url}${path}`, {}, proxy.url, { tls: { ca: TEST_CERT } })
+    assert.deepEqual(await res.json(), expected, path)
+  }
+
+  // Empty compressed response and HEAD with Content-Encoding must not throw zlib errors.
+  const emptyGzip = await fetchWithProxy(`${target.url}/empty-gzip`, {}, proxy.url, { tls: { ca: TEST_CERT } })
+  assert.equal(await emptyGzip.text(), '')
+  const headGzip = await fetchWithProxy(`${target.url}/gzip`, { method: 'HEAD' }, proxy.url, { tls: { ca: TEST_CERT } })
+  assert.equal(headGzip.status, 200)
+  assert.equal(await headGzip.text(), '')
+
+  // options.timeoutMs bounds stalled HTTP response headers after CONNECT+TLS succeeds.
+  await assert.rejects(
+    fetchWithProxy(`${target.url}/hang`, {}, proxy.url, { tls: { ca: TEST_CERT }, timeoutMs: 1000 }),
+    /超时/,
+  )
+
+  // POST -> 303 -> GET must strip stale Content-Length and Content-Type.
+  const redirected = await fetchWithProxy(
+    `${target.url}/post-303`,
+    { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', 'content-length': '11' }, body: 'hello=world' },
+    proxy.url,
+    { tls: { ca: TEST_CERT } },
+  )
+  assert.deepEqual(await redirected.json(), { method: 'GET', contentLength: null, contentType: null })
+
+  // Caller-supplied Connection: keep-alive must still close one-shot sockets cleanly.
+  const keepAliveRes = await fetchWithProxy('http://oauth-fixture.example/', { headers: { connection: 'keep-alive' } }, forwardProxy.url)
+  assert.equal(await keepAliveRes.text(), 'ok')
+  for (let i = 0; i < 50 && openSockets > 0; i++) await new Promise(r => setTimeout(r, 10))
+  assert.equal(openSockets, 0, 'one-shot proxied socket must not stay open')
+})
+
+test('fetchWithProxy supports dual-TLS https:// proxy to https:// target, honours env proxy even when globalThis.fetch is wrapped, and matches IPv6 NO_PROXY', async t => {
+  const target = await startHttpsTarget(t, (req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ dualTls: true, path: req.url }))
+  })
+  const tlsProxySockets = new Set()
+  const tlsProxy = tlsServer({ key: TEST_KEY, cert: TEST_CERT }, client => {
+    tlsProxySockets.add(client)
+    client.on('error', () => {})
+    client.on('close', () => tlsProxySockets.delete(client))
+    let buf = Buffer.alloc(0)
+    const onData = chunk => {
+      buf = Buffer.concat([buf, chunk])
+      const end = buf.indexOf('\r\n\r\n')
+      if (end < 0) return
+      client.off('data', onData)
+      const rest = buf.subarray(end + 4)
+      const upstream = connectTcp({ host: '127.0.0.1', port: target.port })
+      tlsProxySockets.add(upstream)
+      upstream.on('error', () => client.destroy())
+      upstream.on('close', () => tlsProxySockets.delete(upstream))
+      upstream.once('connect', () => {
+        client.write('HTTP/1.1 200 Connection Established\r\n\r\n', 'latin1')
+        if (rest.length > 0) upstream.write(rest)
+        client.pipe(upstream)
+        upstream.pipe(client)
+      })
+    }
+    client.on('data', onData)
+  })
+  await new Promise(resolve => tlsProxy.listen(0, '127.0.0.1', resolve))
+  t.after(async () => {
+    for (const s of tlsProxySockets) s.destroy()
+    await new Promise(resolve => tlsProxy.close(resolve))
+  })
+
+  const dualRes = await fetchWithProxy(
+    `${target.url}/dual-check`,
+    { method: 'GET', redirect: 'error' },
+    `https://localhost:${tlsProxy.address().port}`,
+    { tls: { ca: TEST_CERT } },
+  )
+  assert.deepEqual(await dualRes.json(), { dualTls: true, path: '/dual-check' })
+
+  // Even when a host wraps globalThis.fetch after module load, HTTPS_PROXY must still route through the proxy.
+  const origFetch = globalThis.fetch
+  let wrappedCalled = false
+  globalThis.fetch = async () => { wrappedCalled = true; return new Response('direct-bypass') }
+  const savedHttpsProxy = process.env.HTTPS_PROXY
+  process.env.HTTPS_PROXY = 'http://127.0.0.1:1'
+  t.after(() => {
+    globalThis.fetch = origFetch
+    if (savedHttpsProxy === undefined) delete process.env.HTTPS_PROXY
+    else process.env.HTTPS_PROXY = savedHttpsProxy
+  })
+  await assert.rejects(fetchWithProxy('https://oauth2.googleapis.com/token', {}), /无法连接代理/)
+  assert.equal(wrappedCalled, false, 'wrapping globalThis.fetch must never silently bypass HTTPS_PROXY')
+
+  // IPv6 literals in NO_PROXY match bracketed URL hostnames.
+  assert.equal(resolveProxyUrl(undefined, { HTTPS_PROXY: 'http://127.0.0.1:8080', NO_PROXY: '2001:db8::1' }, '[2001:db8::1]'), undefined)
+  assert.equal(resolveProxyUrl(undefined, { HTTPS_PROXY: 'http://127.0.0.1:8080', NO_PROXY: '[2001:db8::1]:443' }, '[2001:db8::1]'), undefined)
 })
