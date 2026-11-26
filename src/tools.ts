@@ -175,6 +175,8 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
         const args = rawArgs as EmailSendArgs
         if (typeof args.to !== 'string' || args.to.trim() === '') throw new Error('to 不能为空')
         if (typeof args.subject !== 'string' || args.subject.trim() === '') throw new Error('subject 不能为空')
+        // Mirrors email_reply: a send with neither text nor html would succeed and deliver a blank message.
+        if (!(typeof args.text === 'string' && args.text.trim()) && !(typeof args.html === 'string' && args.html.trim())) throw new Error('请填写 text 或 html 正文')
         return await getPool().send(
           args.account,
           args.to.trim(),
