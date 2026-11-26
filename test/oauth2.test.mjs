@@ -10,6 +10,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { startHttpProxy, startSocks5Proxy } from './helpers/proxy-peer.mjs'
 
 // DSH_HOME decides where the token store lives, so it is pinned before the
 // plugin is imported: oauth2TokenFile() reads it on every call, but pinning it
@@ -817,4 +818,61 @@ test('the built-in community application is the default, and an account can over
   assert.equal(custom.code, 'ABCD-EFGH')
   assert.equal(own.length, 1)
   assert.equal(own[0].params.client_id, 'own-app', 'an account that names one overrides the built-in app')
+})
+
+test('Outlook OAuth2 device-code login, poll and token refresh route through configured proxy and redact credentials on failure', async t => {
+  const socks = await startSocks5Proxy({ failReply: 0x05 })
+  const httpProxy = await startHttpProxy({ status: 407 })
+  t.after(async () => { await socks.close(); await httpProxy.close() })
+
+  // 1. startDeviceFlow tunnels login.microsoftonline.com:443 through the account SOCKS5 proxy.
+  await assert.rejects(
+    startDeviceFlow('proxied-outlook', { ...OAUTH_ACCOUNT, proxy: `socks5://u:proxy-secret-outlook@127.0.0.1:${socks.port}` }),
+    err => {
+      assert.match(err.message, /无法连接微软登录服务/)
+      assert.doesNotMatch(err.message, /proxy-secret-outlook/)
+      return true
+    },
+  )
+  assert.equal(socks.seen.length, 1)
+  assert.equal(socks.seen[0].host, 'login.microsoftonline.com')
+  assert.equal(socks.seen[0].port, 443)
+
+  // 2. pollDeviceFlow uses the proxy stored on the pending flow (or an updated cfg.proxy override).
+  // Seed a pending flow via mocked direct start, then poll with an explicit HTTP proxy.
+  {
+    mockFetch(t, () => jsonResponse(DEVICE_OK))
+    const started = await startDeviceFlow('proxied-poll', OAUTH_ACCOUNT)
+    assert.equal(started.code, 'ABCD-EFGH')
+  }
+  await assert.rejects(
+    pollDeviceFlow('proxied-poll', { proxy: `http://u:poll-secret-val@127.0.0.1:${httpProxy.port}` }),
+    err => {
+      assert.match(err.message, /无法连接微软登录服务/)
+      assert.match(err.message, /HTTP 407/)
+      assert.doesNotMatch(err.message, /poll-secret-val/)
+      return true
+    },
+  )
+  assert.equal(httpProxy.seen.length, 1)
+  assert.equal(httpProxy.seen[0].method, 'CONNECT')
+  assert.equal(httpProxy.seen[0].target, 'login.microsoftonline.com:443')
+
+  // 3. getFreshAccessToken refresh tunnels through cfg.proxy and preserves the stored token on proxy failure.
+  writeTokens({
+    'proxied-refresh': {
+      user: OAUTH_ACCOUNT.user,
+      clientId: OAUTH_ACCOUNT.clientId,
+      refreshToken: 'refresh-keep-me',
+      accessToken: 'expired',
+      expiresAt: 0,
+    },
+  })
+  await assert.rejects(
+    getFreshAccessToken('proxied-refresh', { ...OAUTH_ACCOUNT, proxy: socks.url }),
+    /无法连接微软登录服务/,
+  )
+  assert.equal(socks.seen.length, 2)
+  assert.equal(socks.seen[1].host, 'login.microsoftonline.com')
+  assert.equal(readTokenStore().accounts['proxied-refresh'].refreshToken, 'refresh-keep-me')
 })

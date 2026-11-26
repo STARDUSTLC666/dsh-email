@@ -2,6 +2,7 @@
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { OAuth2TokenEntry, OAuth2TokenStore } from './oauth2.js';
+import { fetchWithProxy } from './proxy.js';
 export const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 export const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 export const GOOGLE_USERINFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo';
@@ -11,6 +12,7 @@ export interface GoogleAccount {
     clientId?: string;
     clientSecret?: string;
     oauthProvider?: 'google' | 'microsoft';
+    proxy?: string;
 }
 interface Repository {
     read(): OAuth2TokenStore;
@@ -18,6 +20,7 @@ interface Repository {
 }
 interface Dependencies {
     fetch?: typeof fetch;
+    proxyFetch?: (input: string | URL, init: RequestInit | undefined, proxy?: string) => Promise<Response>;
     now?: () => number;
 }
 interface Flow {
@@ -56,9 +59,13 @@ export class GoogleOAuth {
     }>();
     private readonly refreshing = new Map<string, Promise<string>>();
     private readonly generation = new Map<string, number>();
-    private readonly fetcher: typeof fetch;
+    private readonly fetcher: (input: string | URL, init?: RequestInit, proxy?: string) => Promise<Response>;
     private now: () => number;
-    constructor(private readonly repo: Repository, dependencies: Dependencies = {}) { this.fetcher = dependencies.fetch ?? ((input, init) => globalThis.fetch(input, init)); this.now = dependencies.now ?? Date.now; }
+    constructor(private readonly repo: Repository, dependencies: Dependencies = {}) {
+        this.fetcher = dependencies.proxyFetch
+            ?? (dependencies.fetch ? ((input, init) => dependencies.fetch!(input, init)) : ((input, init, proxy) => fetchWithProxy(input, init, proxy)));
+        this.now = dependencies.now ?? Date.now;
+    }
     private close(flow: Flow): void { clearTimeout(flow.timer); flow.server.close(); flow.server.closeIdleConnections?.(); }
     cancel(name: string): void {
         this.generation.set(name, (this.generation.get(name) || 0) + 1);
@@ -93,8 +100,11 @@ export class GoogleOAuth {
             return this.start(name, cfg, current);
         }
         const old = this.flows.get(name);
-        if (old && old.binding === stamp && old.expires > this.now() && old.status === 'pending')
+        if (old && old.binding === stamp && old.expires > this.now() && old.status === 'pending') {
+            old.cfg = { ...cfg };
+            old.current = current;
             return { url: old.url, expiresIn: Math.ceil((old.expires - this.now()) / 1000) };
+        }
         this.cancel(name);
         const generation = this.generation.get(name);
         const task = (async () => {
@@ -136,13 +146,13 @@ export class GoogleOAuth {
                 this.starts.delete(name);
         }
     }
-    private async json(url: string, init?: RequestInit): Promise<{
+    private async json(url: string, init?: RequestInit, proxy?: string): Promise<{
         response: Response;
         doc: Record<string, unknown>;
     }> {
         let result: Response;
         try {
-            result = await this.fetcher(url, { ...init, redirect: 'error', signal: AbortSignal.timeout(15000) });
+            result = await this.fetcher(url, { ...init, redirect: 'error', signal: AbortSignal.timeout(15000) }, proxy);
         }
         catch {
             throw new GoogleOAuthError('无法连接 Google 登录服务，请检查网络后重试；已有登录数据保留 / Google connection failed; existing login data kept');
@@ -221,11 +231,13 @@ export class GoogleOAuth {
         }
         flow.status = 'processing';
         try {
+            const active = flow.current?.();
+            const proxy = active ? active.proxy : flow.cfg.proxy;
             const parameters = { grant_type: 'authorization_code', client_id: client(flow.cfg), code, redirect_uri: flow.redirect, code_verifier: flow.verifier, ...(flow.cfg.clientSecret ? { client_secret: flow.cfg.clientSecret } : {}) };
-            const { response: result, doc } = await this.json(GOOGLE_TOKEN_URL, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(parameters) });
+            const { response: result, doc } = await this.json(GOOGLE_TOKEN_URL, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(parameters) }, proxy);
             if (!result.ok)
                 throw new GoogleOAuthError('Google 授权码交换失败，请核对 Desktop app 客户端配置后重新登录 / Google code exchange failed; check Desktop app credentials');
-            const accessToken = this.validAccess(doc), identity = await this.json(GOOGLE_USERINFO_URL, { headers: { authorization: 'Bearer ' + accessToken } });
+            const accessToken = this.validAccess(doc), identity = await this.json(GOOGLE_USERINFO_URL, { headers: { authorization: 'Bearer ' + accessToken } }, proxy);
             if (!identity.response.ok || identity.doc.email_verified !== true || typeof identity.doc.email !== 'string' || identity.doc.email.toLowerCase() !== flow.cfg.user.trim().toLowerCase())
                 throw new GoogleOAuthError('登录邮箱与该账号不一致，未保存令牌 / Signed-in mailbox differs from this account; tokens were not saved');
             const current = flow.current?.();
@@ -275,7 +287,7 @@ export class GoogleOAuth {
         if (running)
             return running;
         const generation = this.generation.get(name), task = (async () => {
-            const { response: result, doc } = await this.json(GOOGLE_TOKEN_URL, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'refresh_token', client_id: client(cfg), refresh_token: entry.refreshToken, ...(cfg.clientSecret ? { client_secret: cfg.clientSecret } : {}) }) });
+            const { response: result, doc } = await this.json(GOOGLE_TOKEN_URL, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'refresh_token', client_id: client(cfg), refresh_token: entry.refreshToken, ...(cfg.clientSecret ? { client_secret: cfg.clientSecret } : {}) }) }, cfg.proxy);
             const store = this.repo.read(), current = store.accounts[name];
             if (generation !== this.generation.get(name) || !matches(current, cfg) || current.refreshToken !== entry.refreshToken)
                 throw new GoogleOAuthError('Google 登录已改变，请重新操作 / Google login changed');

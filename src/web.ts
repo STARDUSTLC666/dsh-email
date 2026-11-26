@@ -1412,7 +1412,7 @@ export class EmailSettingsBackend {
   async oauthPoll(name: unknown): Promise<Record<string, unknown>> {
     try {
       const { name: account,cfg } = this.oauthAccount(name, 'oauthPoll')
-      const result = cfg.oauthProvider === 'google' ? pollGoogleFlow(account,cfg) : await pollDeviceFlow(account)
+      const result = cfg.oauthProvider === 'google' ? pollGoogleFlow(account,cfg) : await pollDeviceFlow(account, cfg)
       if (result.status === 'pending') return { ok: true, status: 'pending' }
       return { ok: true, status: 'ok', user: result.user }
     } catch (error) {

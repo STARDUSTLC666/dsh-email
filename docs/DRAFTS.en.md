@@ -63,6 +63,6 @@ The draft limit counts the original attachments. Mail servers can also limit the
 
 File locks and atomic replacement protect concurrent processes. The plugin preserves corrupt storage and reports an error.
 
-Deletion removes the local draft and plugin-uploaded copies, retaining original files and mailbox messages. The workbench supports both new drafts and threaded reply/reply-all/forward drafts (preserving `In-Reply-To`/`References` headers from Mailbox or `email_draft`), while `email_reply` remains available for direct tool-driven replies.
+Deletion removes the local draft and plugin-uploaded copies, retaining original files and mailbox messages; the draft list also supports multi-select, select-all, and Shift-click range selection for batch deletion (drafts currently submitting or edited elsewhere are preserved and reported). The workbench supports both new drafts and threaded reply/reply-all/forward drafts (preserving `In-Reply-To`/`References` headers from Mailbox or `email_draft`), while `email_reply` remains available for direct tool-driven replies.
 
 See [0.15.0 validation](validation/0.15.0.md) for tested and unverified environments.

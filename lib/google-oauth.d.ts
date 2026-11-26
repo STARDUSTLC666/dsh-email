@@ -8,6 +8,7 @@ export interface GoogleAccount {
     clientId?: string;
     clientSecret?: string;
     oauthProvider?: 'google' | 'microsoft';
+    proxy?: string;
 }
 interface Repository {
     read(): OAuth2TokenStore;
@@ -15,6 +16,7 @@ interface Repository {
 }
 interface Dependencies {
     fetch?: typeof fetch;
+    proxyFetch?: (input: string | URL, init: RequestInit | undefined, proxy?: string) => Promise<Response>;
     now?: () => number;
 }
 export declare class GoogleOAuthError extends Error {

@@ -51,13 +51,54 @@
   overflow: clip;
 }
 
-.drafts .draftRow {
+.batchBar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 12px;
+  border-block-end: var(--dsh-control-border-width, 0.5px) solid var(--dsw-alias-border-l2);
+}
+
+.batchSelect {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.checkHit {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  min-inline-size: 24px;
+  min-block-size: 24px;
+}
+
+.draftRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding-inline-start: 12px;
+}
+
+.draftRow[data-checked="true"] {
+  background: var(--dsw-alias-interactive-bg-hover-accent);
+}
+
+.drafts .draftOpen {
+  flex: 1;
+  min-width: 0;
   display: grid;
   align-items: center;
   grid-template-columns: minmax(0, 1fr) minmax(68px, auto);
   justify-content: stretch;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 10px 12px 10px 8px;
   text-align: start;
   border: 0;
   box-shadow: none;
@@ -68,14 +109,14 @@
   border-block-start: var(--dsh-control-border-width, 0.5px) solid var(--dsw-alias-border-l2);
 }
 
-.draftRow > span:first-child {
+.draftOpen > span:first-child {
   display: grid;
   min-width: 0;
   gap: 2px;
   overflow-wrap: anywhere;
 }
 
-.draftRow strong {
+.draftOpen strong {
   font-size: 13px;
   line-height: 18px;
   font-weight: 600;
@@ -84,6 +125,35 @@
 .draftState {
   justify-self: end;
   text-align: end;
+}
+
+.batchSummary {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 10px;
+  list-style: none;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm, 8px);
+  background: var(--dsw-alias-bg-base);
+}
+
+.batchSummary > li {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.batchSummary > li + li {
+  padding-block-start: 6px;
+  border-block-start: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.batchSummary strong {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
 }
 
 .composer.composer {
@@ -267,6 +337,14 @@
 
 .recipients [data-blocked="true"] {
   color: var(--dsw-alias-state-error-primary);
+}
+
+@media (pointer: coarse) {
+  .checkHit {
+    min-inline-size: 44px;
+    min-block-size: 44px;
+    justify-content: center;
+  }
 }
 
 @media (max-width: 520px) {

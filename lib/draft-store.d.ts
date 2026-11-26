@@ -41,6 +41,16 @@ export interface DraftFields {
     html?: string;
     sendAt?: string;
 }
+export type DraftBatchSkipReason = 'missing' | 'conflict' | 'busy';
+export interface DraftBatchSkip {
+    id: string;
+    reason: DraftBatchSkipReason;
+}
+export interface DraftBatchRemoveResult {
+    removed: string[];
+    skipped: DraftBatchSkip[];
+    removedScheduled: boolean;
+}
 export declare class DraftError extends Error {
     readonly code: string;
     constructor(message: string, code?: string);
@@ -60,6 +70,10 @@ export declare class DraftStore {
     create(fields: DraftFields, attachments?: DraftAttachment[], signal?: AbortSignal, reply?: EmailDraft['reply']): Promise<EmailDraft>;
     change(id: string, expectedRevision: unknown, action: (draft: EmailDraft) => void, signal?: AbortSignal): Promise<EmailDraft>;
     remove(id: string, revision: unknown, signal?: AbortSignal): Promise<void>;
+    removeMany(items: ReadonlyArray<{
+        id: unknown;
+        revision: unknown;
+    }>, signal?: AbortSignal): Promise<DraftBatchRemoveResult>;
     removeOwnedFile(id: string, file: DraftAttachment): Promise<void>;
     sendLock<T>(id: string, action: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T>;
     uploadPath(id: string, filename: string): {

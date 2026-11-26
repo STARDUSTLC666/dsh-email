@@ -1,5 +1,15 @@
 # 更新记录
 
+## 0.34.0 (2026-11-26)
+
+- **Google / Outlook OAuth 完整代理支持（修复 #64）**：Google OAuth（授权码交换、用户信息校验与令牌刷新）与 Microsoft / Outlook OAuth2（设备码发起、轮询与令牌刷新）现统一复用与 IMAP/SMTP 一致的代理策略，支持账号级/全局 `proxy`（`http://`、`https://`、`socks://`、`socks4/4a`、`socks5/5h` 及代理认证）、`direct` 直连覆盖，以及 `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` / `NO_PROXY` 环境变量；零新增依赖，保持严格 TLS 证书校验（合并系统根证书）与凭据脱敏。
+- **本地草稿批量删除（解决 #65）**：草稿列表新增多选复选框、全选（含半选 `indeterminate` 态）、`Shift+点击` 范围连续选择与 `批量删除` 确认弹窗；弹窗展示删除摘要、定时草稿取消提示与未保存编辑提醒，后端通过单次加锁原子写入批量清理草稿及插件上传副本，自动保留正在提交或已在别处修改的草稿并明确反馈跳过原因，不触碰引用原文件与邮箱服务器邮件。
+- **视觉主题刷新**：同步包含弱势皮肤（晴空薄荷、晴昼琉璃、晴空水晶、云母流光）重做与默认字体切换为跟随风格专属字（`auto`）。
+
+- **Full Proxy Support for Google & Outlook OAuth (Fixes #64)**: Google OAuth (token exchange, userinfo verification, and token refresh) and Microsoft/Outlook OAuth2 (device-code start, polling, and token refresh) now honour the same proxy routing as IMAP/SMTP—account/global `proxy` (`http://`, `https://`, `socks://`, `socks4/4a`, `socks5/5h` with proxy auth), `'direct'` bypass, and `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` / `NO_PROXY` environment variables—with zero extra dependencies, strict TLS certificate validation (including OS roots), and credential redaction.
+- **Batch Local Draft Deletion (Fixes #65)**: Added per-draft checkboxes, indeterminate select-all, `Shift+Click` range selection, and a batch delete confirmation dialog with a summary preview and scheduled/unsaved warnings. Deletions execute atomically under one file lock, clean up plugin-owned upload copies, keep referenced original files and mailbox messages untouched, and safely skip drafts that are currently submitting or concurrently edited elsewhere.
+- **Theme Refresh**: Includes the refreshed Mint, Glass, Frutiger, and Mica Fluent skins and the style-matched (`auto`) default font pairing.
+
 ## 0.33.3 (2026-11-25)
 
 - 为旧联系人迁移设置读取上限，并拒绝元数据检查后被替换的文件。

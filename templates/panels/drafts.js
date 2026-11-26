@@ -156,8 +156,14 @@ function DraftWorkbench({ active, defaultAccount, composeRequest, onComposeFinis
   const [acknowledged, setAcknowledged] = useState(false);
   const [pending, setPending] = useState(null);
   const [localAction, setLocalAction] = useState(null);
+  const [checkedIds, setCheckedIds] = useState([]);
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
+  const [listNotice, setListNotice] = useState(null);
   const operation = useRef(false);
   const handledRequest = useRef(null);
+  const selectAllRef = useRef(null);
+  const lastCheckedRef = useRef(null);
+  const shiftHeldRef = useRef(false);
   const dirty = !!selected && !!form && JSON.stringify(form) !== JSON.stringify(draftForm(selected));
   const locked = !selected || selected.state !== 'draft';
   const sender = form?.account || defaultAccount;
@@ -165,10 +171,29 @@ function DraftWorkbench({ active, defaultAccount, composeRequest, onComposeFinis
   const denied = live?.matching?.rows.filter(row => row.blocked) || [];
   const attachmentCap = data.attachmentLimits?.[sender] ?? data.attachmentLimit ?? 20 * 1024 * 1024;
   const capLabel = draftAttachmentSize(attachmentCap);
+  const deletableDrafts = data.drafts.filter(draft => draft.state !== 'sending');
+  const deletableIdSet = new Set(deletableDrafts.map(draft => draft.id));
+  const activeCheckedIds = checkedIds.filter(draftId => deletableIdSet.has(draftId));
+  const checkedSet = new Set(activeCheckedIds);
+  const checkedDrafts = deletableDrafts.filter(draft => checkedSet.has(draft.id));
+  const allDeletableChecked = deletableDrafts.length > 0 && activeCheckedIds.length === deletableDrafts.length;
+  const someDeletableChecked = activeCheckedIds.length > 0 && activeCheckedIds.length < deletableDrafts.length;
 
   __stardustUpdatesGuard(React, "dsh-email.draft", { dirty, busy, retainOnClose: true });
   useEffect(() => { draftUiCache = { selected, form }; }, [selected, form]);
   useEffect(() => { if (active) void run(reload); }, [active]);
+  useEffect(() => {
+    const valid = new Set(data.drafts.filter(draft => draft.state !== 'sending').map(draft => draft.id));
+    setCheckedIds(old => {
+      const next = old.filter(draftId => valid.has(draftId));
+      return next.length === old.length ? old : next;
+    });
+    if (lastCheckedRef.current && !valid.has(lastCheckedRef.current)) lastCheckedRef.current = null;
+  }, [data.drafts]);
+  useEffect(() => {
+    const input = selectAllRef.current?.querySelector?.('input[type="checkbox"]');
+    if (input) input.indeterminate = someDeletableChecked;
+  }, [someDeletableChecked]);
   useEffect(() => {
     if (!dirty) return;
     const guard = event => { event.preventDefault(); event.returnValue = ""; };
@@ -318,13 +343,90 @@ function DraftWorkbench({ active, defaultAccount, composeRequest, onComposeFinis
       if (localAction === 'copy') {
         adopt(await draftApi('copy', { id: selected.id, revision: selected.revision, confirmed: true }));
       } else {
-        await draftApi('delete', { id: selected.id, revision: selected.revision, confirmed: true });
+        const deletedId = selected.id;
+        await draftApi('delete', { id: deletedId, revision: selected.revision, confirmed: true });
         setSelected(null);
         setForm(null);
         setEditorOpen(false);
         setLocalAction(null);
+        setCheckedIds(old => old.filter(item => item !== deletedId));
+        setListNotice(null);
       }
       await reload();
+    });
+  }
+
+  function toggleDraftChecked(draftId, nextChecked) {
+    const shift = shiftHeldRef.current;
+    const anchorId = lastCheckedRef.current;
+    shiftHeldRef.current = false;
+    lastCheckedRef.current = draftId;
+    setListNotice(null);
+    setCheckedIds(old => {
+      const current = new Set(old.filter(item => deletableIdSet.has(item)));
+      if (shift && anchorId && deletableIdSet.has(anchorId)) {
+        const ids = data.drafts.map(item => item.id);
+        const start = ids.indexOf(anchorId);
+        const end = ids.indexOf(draftId);
+        if (start >= 0 && end >= 0) {
+          const [lo, hi] = start <= end ? [start, end] : [end, start];
+          for (let i = lo; i <= hi; i++) {
+            if (!deletableIdSet.has(ids[i])) continue;
+            if (nextChecked) current.add(ids[i]);
+            else current.delete(ids[i]);
+          }
+          return [...current];
+        }
+      }
+      if (nextChecked) current.add(draftId);
+      else current.delete(draftId);
+      return [...current];
+    });
+  }
+
+  function toggleAllDrafts(nextChecked) {
+    setListNotice(null);
+    lastCheckedRef.current = null;
+    setCheckedIds(nextChecked ? deletableDrafts.map(draft => draft.id) : []);
+  }
+
+  function confirmBatchDelete() {
+    const targets = checkedDrafts.map(draft => ({ id: draft.id, revision: draft.revision }));
+    if (!targets.length) { setBatchDeleteOpen(false); return; }
+    return run(async () => {
+      const result = await draftApi('deleteMany', { items: targets, confirmed: true });
+      const removedIds = Array.isArray(result?.removed) ? result.removed : [];
+      const skipped = Array.isArray(result?.skipped) ? result.skipped : [];
+      const removedSet = new Set(removedIds);
+      if (selected && removedSet.has(selected.id)) {
+        setSelected(null);
+        setForm(null);
+        setPreview(null);
+        setAcknowledged(false);
+        setEditorOpen(false);
+        setLocalAction(null);
+      }
+      setCheckedIds(old => old.filter(item => !removedSet.has(item)));
+      setBatchDeleteOpen(false);
+      await reload();
+      if (removedIds.length > 0 && skipped.length === 0) {
+        setListNotice({
+          tone: 'success',
+          text: removedIds.length === 1
+            ? dt('已删除 1 份本地草稿。', 'Deleted 1 local draft.')
+            : dt('已删除 ', 'Deleted ') + removedIds.length + dt(' 份本地草稿。', ' local drafts.'),
+        });
+      } else if (removedIds.length > 0 && skipped.length > 0) {
+        setListNotice({
+          tone: 'warn',
+          text: dt('已删除 ', 'Deleted ') + removedIds.length + dt(' 份本地草稿；', ' local drafts; ') + skipped.length + dt(' 份因正在提交、已在别处修改或已被移除而跳过。', ' skipped because they are submitting, changed elsewhere, or already removed.'),
+        });
+      } else {
+        setListNotice({
+          tone: 'warn',
+          text: dt('未删除任何草稿：所选草稿正在提交、已在别处修改或已被移除，已刷新列表。', 'No drafts were deleted: selected drafts are submitting, changed elsewhere, or already removed. List refreshed.'),
+        });
+      }
     });
   }
 
@@ -453,18 +555,95 @@ function DraftWorkbench({ active, defaultAccount, composeRequest, onComposeFinis
   copy ? dt('会复制内容及附件为一份新的未发送草稿。若上次已提交或结果不明，请先核对邮箱，避免重复投递。', 'Copies content and attachments to a new unsent draft. Check the mailbox first if the original was submitted or its result is uncertain.')
     : dt('只删除本地草稿与插件上传的附件副本；引用的原文件和邮箱中的邮件不会删除。', 'Deletes this local draft and plugin-uploaded copies. Original files and mailbox messages stay intact.')) : null;
 
+  const checkedScheduledCount = checkedDrafts.filter(draft => draft.state === 'scheduled').length;
+  const checkedIncludesDirty = Boolean(selected && dirty && checkedSet.has(selected.id));
+  const batchPreviewItems = checkedDrafts.slice(0, 5);
+  const batchHiddenCount = Math.max(0, checkedDrafts.length - batchPreviewItems.length);
+  const batchDeleteDialog = batchDeleteOpen && checkedDrafts.length ? h(W.Dialog, {
+    title: dt('批量删除本地草稿', 'Delete selected local drafts'),
+    closeLabel, busy, onClose: () => { setBatchDeleteOpen(false); setError(''); },
+    footer: h(React.Fragment, null,
+      h(W.Button, { disabled: busy, onClick: () => { setBatchDeleteOpen(false); setError(''); } }, dt('取消', 'Cancel')),
+      h(W.Button, { variant: 'danger', icon: 'trash', disabled: busy, onClick: confirmBatchDelete },
+        dt('确认删除（', 'Confirm delete (') + checkedDrafts.length + dt('）', ')'))),
+  },
+  h(W.Status, { tone: 'error' }, error),
+  h('p', { className: draftCss.hint },
+    dt('即将删除所选 ', 'Deletes ') + checkedDrafts.length + dt(' 份本地草稿及插件上传的附件副本；引用的原文件和邮箱中的邮件不会删除。', ' selected local drafts and their plugin-uploaded copies. Original files and mailbox messages stay intact.')),
+  checkedScheduledCount > 0 ? h(W.Status, { tone: 'warn' }, dt('其中包含定时发送中的草稿，删除后将取消对应的定时发送。', 'Includes scheduled drafts; deleting them cancels those scheduled sends.')) : null,
+  checkedIncludesDirty ? h(W.Status, { tone: 'warn' }, dt('包含当前有未保存编辑的草稿，删除后未保存内容将一并丢弃。', 'Includes a draft with unsaved edits, which will be discarded.')) : null,
+  h('ul', { className: draftCss.batchSummary },
+    batchPreviewItems.map(draft => h('li', { key: draft.id },
+      h('strong', null, draft.subject || dt('未命名草稿', 'Untitled draft')),
+      h('small', { className: draftCss.hint }, (draft.account || dt('尚未选择账号', 'No account selected')) + ' · ' + (selected?.id === draft.id && dirty ? dt('未保存', 'Unsaved') : draftState(draft.state))))),
+    batchHiddenCount > 0 ? h('li', { key: 'more', className: draftCss.hint }, dt('以及其余 ', 'And ') + batchHiddenCount + dt(' 份草稿', ' more drafts')) : null)) : null;
+
   return h(React.Fragment, null,
     active ? h('section', { className: draftCss.drafts, 'aria-label': dt('邮件草稿', 'Email drafts') },
       h('header', { className: draftCss.toolbar },
         h('h2', { 'data-dsh-serif': '' }, dt('本地草稿', 'Local drafts') + ' · ' + data.drafts.length),
-        h(W.Button, { icon: 'refresh', 'aria-busy': busy || undefined, disabled: busy, onClick: () => run(reload) }, dt('刷新列表', 'Refresh list'))),
+        h(W.Button, { icon: 'refresh', 'aria-busy': busy || undefined, disabled: busy, onClick: () => { setListNotice(null); void run(reload); } }, dt('刷新列表', 'Refresh list'))),
       h('p', { className: draftCss.hint }, dt('草稿只保存在本机。模型可用 email_draft 准备内容，你在这里编辑、保存和确认发送。', 'Drafts stay on this device. Ask the model to prepare one with email_draft, then edit, save and confirm here.')),
-      !editorOpen ? h(W.Status, { tone: 'error' }, error) : null,
-      data.drafts.length ? h('div', { className: draftCss.draftList, 'data-dsh-card': '' }, data.drafts.map(draft =>
-        h(W.Button, { key: draft.id, variant: 'ghost', className: draftCss.draftRow, 'data-dsh-row': '', 'data-active': selected?.id === draft.id ? 'true' : 'false', disabled: busy, onClick: () => requestSwitch({ kind: 'open', id: draft.id }) },
-          h('span', null, h('strong', null, draft.subject || dt('未命名草稿', 'Untitled draft')), h('small', { className: draftCss.hint }, draft.account || dt('尚未选择账号', 'No account selected'))),
-          h('small', { className: clsx(draftCss.hint, draftCss.draftState) }, selected?.id === draft.id && dirty ? dt('未保存', 'Unsaved') : draftState(draft.state)))))
+      !editorOpen && !batchDeleteOpen ? h(W.Status, { tone: 'error' }, error) : null,
+      !editorOpen && !batchDeleteOpen && listNotice ? h(W.Status, { tone: listNotice.tone }, listNotice.text) : null,
+      data.drafts.length ? h('div', { className: draftCss.draftList, 'data-dsh-card': '' },
+        h('div', { className: draftCss.batchBar },
+          h('div', { className: draftCss.batchSelect },
+            h('span', { ref: selectAllRef, className: draftCss.checkHit },
+              h(W.Checkbox, {
+                label: activeCheckedIds.length > 0
+                  ? dt('全选', 'Select all') + ' · ' + activeCheckedIds.length + ' / ' + deletableDrafts.length
+                  : dt('全选', 'Select all'),
+                checked: allDeletableChecked,
+                disabled: busy || deletableDrafts.length === 0,
+                onChange: toggleAllDrafts,
+              })),
+            activeCheckedIds.length > 0 ? h(W.Button, {
+              variant: 'ghost',
+              disabled: busy,
+              onClick: () => toggleAllDrafts(false),
+            }, dt('取消选择', 'Clear selection')) : null),
+          h(W.Button, {
+            variant: 'danger',
+            icon: 'trash',
+            disabled: busy || activeCheckedIds.length === 0,
+            onClick: () => { setError(''); setListNotice(null); setBatchDeleteOpen(true); },
+          }, activeCheckedIds.length > 0
+            ? dt('批量删除（', 'Delete selected (') + activeCheckedIds.length + dt('）', ')')
+            : dt('批量删除', 'Delete selected'))),
+        data.drafts.map(draft => {
+          const title = draft.subject || dt('未命名草稿', 'Untitled draft');
+          const isChecked = checkedSet.has(draft.id);
+          const isSending = draft.state === 'sending';
+          return h('div', {
+            key: draft.id,
+            className: draftCss.draftRow,
+            'data-dsh-row': '',
+            'data-active': selected?.id === draft.id ? 'true' : 'false',
+            'data-checked': isChecked ? 'true' : 'false',
+          },
+          h('span', {
+            className: draftCss.checkHit,
+            onPointerDownCapture: event => { shiftHeldRef.current = Boolean(event.shiftKey); },
+            onClickCapture: event => { if (event.shiftKey) shiftHeldRef.current = true; },
+          }, h(W.Checkbox, {
+            hiddenLabel: true,
+            label: dt('选择草稿：', 'Select draft: ') + title,
+            checked: isChecked,
+            disabled: busy || isSending,
+            onChange: value => toggleDraftChecked(draft.id, value),
+          })),
+          h('span', { className: 'dsh-pixel-cursor', 'aria-hidden': 'true' }, '▶'),
+          h(W.Button, {
+            variant: 'ghost',
+            className: draftCss.draftOpen,
+            disabled: busy,
+            onClick: () => { setListNotice(null); requestSwitch({ kind: 'open', id: draft.id }); },
+          },
+          h('span', null, h('strong', null, title), h('small', { className: draftCss.hint }, draft.account || dt('尚未选择账号', 'No account selected'))),
+          h('small', { className: clsx(draftCss.hint, draftCss.draftState) }, selected?.id === draft.id && dirty ? dt('未保存', 'Unsaved') : draftState(draft.state))));
+        }))
         : h(W.Empty, { title: dt('还没有草稿', 'No drafts yet'), icon: 'mail' }, dt('点击上方“写邮件”开始。', 'Choose Compose above to begin.'))) :
-      !editorOpen && error && !pending ? h(W.Dialog, { title: composeTitle, closeLabel, onClose: () => setError('') }, h(W.Status, { tone: 'error' }, error)) : null,
-    editor, pendingDialog, localDialog);
+      !editorOpen && error && !pending && !batchDeleteOpen ? h(W.Dialog, { title: composeTitle, closeLabel, onClose: () => setError('') }, h(W.Status, { tone: 'error' }, error)) : null,
+    editor, pendingDialog, localDialog, batchDeleteDialog);
 }

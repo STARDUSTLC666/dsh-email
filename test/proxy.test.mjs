@@ -1,10 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { createServer as httpServer } from 'node:http'
+import { createServer as httpsServer } from 'node:https'
 import { createServer } from 'node:net'
 import { createServer as tlsServer } from 'node:tls'
 import { readFileSync } from 'node:fs'
 import { resolveEmailSettings } from '../lib/index.js'
-import { openProxiedSocket, parseProxyUrl, resolveProxyUrl } from '../lib/proxy.js'
+import { fetchWithProxy, openProxiedSocket, parseProxyUrl, resolveProxyUrl } from '../lib/proxy.js'
+import { startHttpProxy, startSocks5Proxy } from './helpers/proxy-peer.mjs'
 
 /** A CONNECT proxy that answers with `status`, then echoes whatever it tunnels. */
 async function stubProxy(status = 200) {
@@ -132,3 +135,146 @@ test('cancelling a pending CONNECT closes the proxy socket before its timeout',a
   for(let i=0;i<100&&sockets.size;i++)await new Promise(r=>setTimeout(r,10));
   assert.equal(sockets.size,0);
 });
+
+const TEST_KEY = readFileSync(new URL('./fixtures/smtp-test-key.pem', import.meta.url))
+const TEST_CERT = readFileSync(new URL('./fixtures/smtp-test-ca.pem', import.meta.url))
+
+async function startHttpsTarget(t, handler) {
+  const server = httpsServer({ key: TEST_KEY, cert: TEST_CERT }, handler)
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  t.after(() => new Promise(resolve => server.close(resolve)))
+  return { port: server.address().port, url: `https://localhost:${server.address().port}` }
+}
+
+test('fetchWithProxy tunnels HTTPS POST through HTTP CONNECT with Basic auth and validates TLS certificates', async t => {
+  const received = []
+  const target = await startHttpsTarget(t, (req, res) => {
+    const chunks = []
+    req.on('data', chunk => chunks.push(chunk))
+    req.on('end', () => {
+      received.push({ method: req.method, url: req.url, contentType: req.headers['content-type'], body: Buffer.concat(chunks).toString('utf8') })
+      res.writeHead(200, { 'content-type': 'application/json', 'x-multi': ['a', 'b'] })
+      res.end(JSON.stringify({ ok: true, via: 'http-connect' }))
+    })
+  })
+  const proxy = await startHttpProxy({ auth: { user: 'alice', pass: 'p@ss:word' } })
+  t.after(() => proxy.close())
+
+  const proxyUrl = `http://alice:${encodeURIComponent('p@ss:word')}@127.0.0.1:${proxy.port}`
+  const response = await fetchWithProxy(
+    `${target.url}/token`,
+    { method: 'POST', redirect: 'error', body: new URLSearchParams({ grant_type: 'refresh_token', code: 'abc' }) },
+    proxyUrl,
+    { tls: { ca: TEST_CERT } },
+  )
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), { ok: true, via: 'http-connect' })
+  assert.equal(proxy.seen.length, 1)
+  assert.equal(proxy.seen[0].method, 'CONNECT')
+  assert.equal(proxy.seen[0].target, `localhost:${target.port}`)
+  assert.equal(received.length, 1)
+  assert.equal(received[0].method, 'POST')
+  assert.equal(received[0].url, '/token')
+  assert.match(received[0].contentType, /application\/x-www-form-urlencoded/i)
+  assert.equal(received[0].body, 'grant_type=refresh_token&code=abc')
+
+  // Without trusting the test CA, TLS verification must reject before sending the POST body.
+  await assert.rejects(
+    fetchWithProxy(`${target.url}/token`, { method: 'POST', body: 'secret=1' }, proxyUrl),
+    /certificate|self.signed|verify/i,
+  )
+  assert.equal(received.length, 1, 'untrusted TLS peer must never receive the request body')
+
+  // Wrong proxy credentials must fail with HTTP 407.
+  await assert.rejects(
+    fetchWithProxy(`${target.url}/token`, { method: 'GET' }, `http://alice:wrong@127.0.0.1:${proxy.port}`, { tls: { ca: TEST_CERT } }),
+    /HTTP 407/,
+  )
+})
+
+test('fetchWithProxy tunnels HTTPS through SOCKS5 and authenticated SOCKS5h with remote hostname resolution', async t => {
+  const target = await startHttpsTarget(t, (req, res) => {
+    if (req.url === '/empty') { res.writeHead(204); res.end(); return }
+    if (req.url === '/redirect') { res.writeHead(302, { location: '/token' }); res.end(); return }
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ host: req.headers.host, path: req.url, auth: req.headers.authorization || '' }))
+  })
+
+  const openSocks = await startSocks5Proxy()
+  t.after(() => openSocks.close())
+  const res1 = await fetchWithProxy(
+    `${target.url}/v1/userinfo`,
+    { headers: { authorization: 'Bearer tok-1' }, redirect: 'error' },
+    openSocks.url,
+    { tls: { ca: TEST_CERT } },
+  )
+  assert.equal(res1.status, 200)
+  assert.deepEqual(await res1.json(), { host: `localhost:${target.port}`, path: '/v1/userinfo', auth: 'Bearer tok-1' })
+  assert.equal(openSocks.seen[0].host, 'localhost')
+  assert.equal(openSocks.seen[0].atyp, 0x03, 'domain name must be handed to SOCKS5 for remote resolution')
+
+  // 204 No Content must produce a valid Response without throwing on null body.
+  const empty = await fetchWithProxy(`${target.url}/empty`, { method: 'GET' }, openSocks.url, { tls: { ca: TEST_CERT } })
+  assert.equal(empty.status, 204)
+
+  // redirect: 'error' must block 3xx redirects through the proxy.
+  await assert.rejects(
+    fetchWithProxy(`${target.url}/redirect`, { redirect: 'error' }, openSocks.url, { tls: { ca: TEST_CERT } }),
+    /redirect/i,
+  )
+
+  const authSocks = await startSocks5Proxy({ auth: { user: 'socks-u', pass: 'socks-p' } })
+  t.after(() => authSocks.close())
+  const res2 = await fetchWithProxy(
+    `${target.url}/auth-ok`,
+    { method: 'GET' },
+    `socks5h://socks-u:socks-p@127.0.0.1:${authSocks.port}`,
+    { tls: { ca: TEST_CERT } },
+  )
+  assert.equal(res2.status, 200)
+  assert.equal(authSocks.seen[0].authUser, 'socks-u')
+})
+
+test('fetchWithProxy forwards plain HTTP through HTTP proxy, honours env/NO_PROXY/direct, and supports AbortSignal', async t => {
+  let holdRes
+  const plainTarget = httpServer((req, res) => {
+    if (req.url === '/slow') { holdRes = res; return }
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ url: req.url, host: req.headers.host, proxyAuth: req.headers['proxy-authorization'] || null }))
+  })
+  await new Promise(resolve => plainTarget.listen(0, '127.0.0.1', resolve))
+  const targetPort = plainTarget.address().port
+  t.after(() => { holdRes?.destroy(); return new Promise(resolve => plainTarget.close(resolve)) })
+
+  const proxy = await startHttpProxy({
+    auth: { user: 'u', pass: 'p' },
+    rewriteTarget: () => ({ host: '127.0.0.1', port: targetPort }),
+  })
+  t.after(() => proxy.close())
+
+  // Inherited HTTPS_PROXY routes non-loopback hosts through the proxy, stripping Proxy-Authorization before origin.
+  const envProxy = `http://u:p@127.0.0.1:${proxy.port}`
+  const viaEnv = await fetchWithProxy(
+    'http://oauth-fixture.example/check?x=1',
+    { method: 'GET' },
+    undefined,
+    { env: { HTTPS_PROXY: envProxy } },
+  )
+  assert.equal(viaEnv.status, 200)
+  assert.deepEqual(await viaEnv.json(), { url: '/check?x=1', host: 'oauth-fixture.example', proxyAuth: null })
+  assert.equal(proxy.seen[0].target, 'http://oauth-fixture.example/check?x=1')
+
+  // NO_PROXY and explicit 'direct' both bypass the environment proxy and invoke directFetch.
+  let directCalls = 0
+  const directFetch = async () => { directCalls++; return new Response('direct') }
+  assert.equal(await (await fetchWithProxy('http://oauth-fixture.example/a', {}, 'direct', { env: { HTTPS_PROXY: envProxy }, directFetch })).text(), 'direct')
+  assert.equal(await (await fetchWithProxy('http://oauth-fixture.example/b', {}, undefined, { env: { HTTPS_PROXY: envProxy, NO_PROXY: 'oauth-fixture.example' }, directFetch })).text(), 'direct')
+  assert.equal(directCalls, 2)
+
+  // AbortSignal cancels an in-flight proxied request cleanly.
+  const ctrl = new AbortController()
+  const slowReq = fetchWithProxy('http://oauth-fixture.example/slow', { signal: ctrl.signal }, envProxy)
+  for (let i = 0; i < 100 && !holdRes; i++) await new Promise(r => setTimeout(r, 10))
+  ctrl.abort(new Error('abort-proxied-fetch'))
+  await assert.rejects(slowReq, /abort-proxied-fetch/)
+})

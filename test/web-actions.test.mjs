@@ -8,6 +8,7 @@ import { OUTLOOK_OAUTH2_CLIENT_ID, parseAccountsYaml, parseServerPresets, PROVID
 import { oauth2TokenFile, readTokenStore, writeTokenStore } from '../lib/oauth2.js'
 import { hostVerdict, postVerdict, SETTINGS_API_ROUTE } from '../lib/web.js'
 import { inspectSettingsReply } from './settings-reply.mjs'
+import { startSocks5Proxy } from './helpers/proxy-peer.mjs'
 
 const BASE = {
   provider: 'qq',
@@ -2031,3 +2032,42 @@ test('proxy cards preserve stored credentials without echoing them and support d
   assert.equal(parseAccountsYaml(write.body.value.accountsYaml).map.work.password,'fixture-mail-password');
  }
 });
+
+test('oauthLogin and oauthPoll route Gmail and Outlook OAuth calls through the account SOCKS5 proxy without leaking credentials', async t => {
+  const socks = await startSocks5Proxy({ failReply: 0x05 })
+  t.after(() => socks.close())
+  const proxyWithCreds = `socks5://u:top-secret-proxy-pw@127.0.0.1:${socks.port}`
+  const yaml = [
+    `gmail: { provider: gmail, user: owner@gmail.com, authKind: oauth2, oauthProvider: google, clientId: 123-desktop.apps.googleusercontent.com, proxy: ${JSON.stringify(proxyWithCreds)} }`,
+    `outlook: { provider: outlook, user: owner@outlook.com, authKind: oauth2, proxy: ${JSON.stringify(proxyWithCreds)} }`,
+  ].join('\n') + '\n'
+  const { post } = mount(t, { value: { accountsYaml: yaml } })
+
+  // Gmail: start browser flow, trigger loopback callback, verify SOCKS5 received oauth2.googleapis.com:443.
+  const gStart = await post({ action: 'oauthLogin', account: 'gmail' })
+  assert.equal(gStart.status, 200)
+  assert.equal(gStart.body.ok, true)
+  assert.equal(gStart.body.status, 'pending')
+  const authUrl = new URL(gStart.body.url)
+  const cbUrl = new URL(authUrl.searchParams.get('redirect_uri'))
+  cbUrl.searchParams.set('state', authUrl.searchParams.get('state'))
+  cbUrl.searchParams.set('code', 'fixture-code')
+  const cbRes = await fetch(cbUrl)
+  assert.equal(cbRes.status, 400)
+  const gPoll = await post({ action: 'oauthPoll', account: 'gmail' })
+  assert.equal(gPoll.body.ok, false)
+  assert.match(gPoll.body.message, /无法连接 Google 登录服务/)
+  assert.doesNotMatch(gPoll.body.message, /top-secret-proxy-pw/)
+
+  // Outlook: oauthLogin immediately contacts login.microsoftonline.com:443 through the same account proxy.
+  const mStart = await post({ action: 'oauthLogin', account: 'outlook' })
+  assert.equal(mStart.status, 200)
+  assert.equal(mStart.body.ok, false)
+  assert.match(mStart.body.message, /无法连接微软登录服务/)
+  assert.doesNotMatch(mStart.body.message, /top-secret-proxy-pw/)
+
+  assert.deepEqual(
+    socks.seen.map(item => `${item.host}:${item.port}`),
+    ['oauth2.googleapis.com:443', 'login.microsoftonline.com:443'],
+  )
+})

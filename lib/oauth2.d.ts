@@ -41,7 +41,7 @@ export interface OAuth2TokenStore {
     accounts: Record<string, OAuth2TokenEntry>;
 }
 /** The part of a resolved account this module needs. */
-export type OAuth2AccountConfig = Pick<ResolvedEmailConfig, 'user' | 'clientId' | 'clientSecret' | 'oauthProvider'>;
+export type OAuth2AccountConfig = Pick<ResolvedEmailConfig, 'user' | 'clientId' | 'clientSecret' | 'oauthProvider' | 'proxy'>;
 export declare const startGoogleFlow: (name: string, cfg: OAuth2AccountConfig, current?: () => OAuth2AccountConfig | undefined) => Promise<{
     url: string;
     expiresIn: number;
@@ -121,7 +121,7 @@ export type OAuth2PollResult = {
  * Step 2: one poll. `pending` is the ordinary answer until the user finishes in
  * the browser; on success the token is persisted before this returns.
  */
-export declare function pollDeviceFlow(name: string): Promise<OAuth2PollResult>;
+export declare function pollDeviceFlow(name: string, cfg?: Pick<OAuth2AccountConfig, 'proxy'>): Promise<OAuth2PollResult>;
 /**
  * A usable access token for one account: the cached one while more than two
  * minutes of its life are left, otherwise a refresh. Concurrent callers share a

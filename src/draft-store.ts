@@ -20,6 +20,10 @@ export interface EmailDraft {
 }
 export interface DraftFields { account: string; to: string; cc: string; subject: string; text: string; html?: string; sendAt?: string }
 interface Document { version: 1; drafts: EmailDraft[] }
+export type DraftBatchSkipReason = 'missing' | 'conflict' | 'busy'
+export interface DraftBatchSkip { id: string; reason: DraftBatchSkipReason }
+export interface DraftBatchRemoveResult { removed: string[]; skipped: DraftBatchSkip[]; removedScheduled: boolean }
+
 export class DraftError extends Error { constructor(message: string, readonly code = 'draft-invalid') { super(message) } }
 const isId = (id: unknown): id is string => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id)
 
@@ -134,6 +138,48 @@ export class DraftStore {
       doc.drafts = doc.drafts.filter(d => d.id !== id); return draft
     }, signal)
     for (const file of removed.attachments) await this.removeOwnedFile(id, file)
+  }
+  async removeMany(items: ReadonlyArray<{ id: unknown; revision: unknown }>, signal?: AbortSignal): Promise<DraftBatchRemoveResult> {
+    if (!Array.isArray(items) || items.length === 0 || items.length > 50) throw new DraftError('请选择 1 到 50 份要删除的草稿')
+    const normalized: Array<{ id: string; revision: number }> = []
+    const seen = new Set<string>()
+    for (const item of items) {
+      if (!item || typeof item !== 'object' || Array.isArray(item) || !isId(item.id) || !Number.isSafeInteger(item.revision) || (item.revision as number) < 1 || seen.has(item.id)) {
+        throw new DraftError('草稿编号或版本号无效，请刷新列表后重试')
+      }
+      seen.add(item.id)
+      normalized.push({ id: item.id, revision: item.revision as number })
+    }
+    const outcome = await this.withLock(this.file, async current => {
+      const doc = await this.load()
+      current.throwIfAborted()
+      const byId = new Map(doc.drafts.map(draft => [draft.id, draft]))
+      const deleted: EmailDraft[] = []
+      const deletedIds = new Set<string>()
+      const skipped: DraftBatchSkip[] = []
+      for (const item of normalized) {
+        const draft = byId.get(item.id)
+        if (!draft) { skipped.push({ id: item.id, reason: 'missing' }); continue }
+        if (draft.state === 'sending') { skipped.push({ id: item.id, reason: 'busy' }); continue }
+        if (draft.revision !== item.revision) { skipped.push({ id: item.id, reason: 'conflict' }); continue }
+        deleted.push(draft)
+        deletedIds.add(draft.id)
+      }
+      if (deletedIds.size > 0) {
+        doc.drafts = doc.drafts.filter(draft => !deletedIds.has(draft.id))
+        current.throwIfAborted()
+        await this.write(doc)
+      }
+      return { deleted, skipped }
+    }, signal)
+    for (const draft of outcome.deleted) {
+      for (const file of draft.attachments) await this.removeOwnedFile(draft.id, file)
+    }
+    return {
+      removed: outcome.deleted.map(draft => draft.id),
+      skipped: outcome.skipped,
+      removedScheduled: outcome.deleted.some(draft => draft.state === 'scheduled'),
+    }
   }
   async removeOwnedFile(id: string, file: DraftAttachment): Promise<void> {
     if (!file.owned || !isId(id)) return

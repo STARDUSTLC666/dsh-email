@@ -161,6 +161,19 @@ export class EmailDraftBackend {
       return this.action({ action: 'rules' }, signal)
     }
     if (body.action === 'create') return view(await this.create({ ...body, attachments: [] }, signal)) // Browser attachments only come from its file chooser.
+    if (body.action === 'deleteMany') {
+      if (body.confirmed !== true) throw new DraftError('请先确认删除所选本地草稿与上传副本')
+      if (!Array.isArray(body.items) || body.items.length === 0 || body.items.length > 50) throw new DraftError('请选择 1 到 50 份要删除的草稿')
+      const items = body.items.map(entry => {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new DraftError('草稿编号或版本号无效，请刷新列表后重试')
+        const raw = entry as Record<string, unknown>
+        return { id: raw.id, revision: raw.revision }
+      })
+      const result = await this.store.removeMany(items, signal)
+      for (const removedId of result.removed) this.invalidate(removedId)
+      if (result.removedScheduled) void this.armSchedule()
+      return { removed: result.removed, skipped: result.skipped }
+    }
     const id = typeof body.id === 'string' ? body.id : '', draft = await this.store.get(id)
     if(body.action==='cancelSchedule'){
       return this.store.sendLock(id,async current=>{
@@ -189,7 +202,7 @@ export class EmailDraftBackend {
     }
     if (body.action === 'delete') {
       if (body.confirmed !== true) throw new DraftError('请先确认删除本地草稿与上传副本')
-      await this.store.remove(id, body.revision, signal); this.invalidate(id); return { removed: true }
+      await this.store.remove(id, body.revision, signal); this.invalidate(id); if (draft.state === 'scheduled') void this.armSchedule(); return { removed: true }
     }
     if (body.action === 'copy') {
       if (draft.revision !== body.revision) throw new DraftError('草稿已改变，请重新打开后复制', 'draft-conflict')

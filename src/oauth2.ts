@@ -24,6 +24,7 @@ import { clampInt, OUTLOOK_OAUTH2_CLIENT_ID, type ResolvedEmailConfig } from './
 import { isLegacyOAuth2Document, OAuth2StorageError, readOAuth2Document, writeOAuth2Document } from './oauth2-storage.js'
 import { GoogleOAuth } from './google-oauth.js'
 import { redactCredentials } from './credential-redaction.js'
+import { fetchWithProxy } from './proxy.js'
 
 /** The authority that serves both endpoints. `common` accepts any work/school/personal tenant. */
 export const OAUTH2_TENANT = 'common'
@@ -84,7 +85,7 @@ export interface OAuth2TokenStore {
 }
 
 /** The part of a resolved account this module needs. */
-export type OAuth2AccountConfig = Pick<ResolvedEmailConfig, 'user' | 'clientId' | 'clientSecret' | 'oauthProvider'>
+export type OAuth2AccountConfig = Pick<ResolvedEmailConfig, 'user' | 'clientId' | 'clientSecret' | 'oauthProvider' | 'proxy'>
 const google = new GoogleOAuth({ read: readTokenStore, write: writeTokenStore })
 export const startGoogleFlow = (name:string,cfg:OAuth2AccountConfig,current?:()=>OAuth2AccountConfig|undefined)=>google.start(name,cfg,current)
 export const pollGoogleFlow = (name:string,cfg:OAuth2AccountConfig)=>google.poll(name,cfg)
@@ -108,6 +109,7 @@ interface PendingFlow {
   expiresAt: number
   clientId: string
   user: string
+  proxy?: string
 }
 
 const pending = new Map<string, PendingFlow>()
@@ -317,16 +319,17 @@ interface TokenResponse {
   payload: unknown
 }
 
-/** POST one form body to the authority, always with a timeout. */
-async function postForm(url: string, params: Record<string, string>): Promise<TokenResponse> {
+/** POST one form body to the authority, always with a timeout and account/env proxy. */
+async function postForm(url: string, params: Record<string, string>, proxy?: string): Promise<TokenResponse> {
   let response: Response
   try {
-    response = await fetch(url, {
+    response = await fetchWithProxy(url, {
       method: 'POST',
+      redirect: 'error',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams(params).toString(),
       signal: AbortSignal.timeout(OAUTH2_REQUEST_TIMEOUT_MS),
-    })
+    }, proxy)
   } catch (error) {
     const raw = error instanceof Error ? error.message : String(error)
     throw new OAuth2Error('无法连接微软登录服务（login.microsoftonline.com）：' + redactCredentials(raw))
@@ -380,7 +383,7 @@ export async function startDeviceFlow(name: string, cfg: OAuth2AccountConfig): P
     // (「application not found」), which tells the user nothing about the one
     // field they have to fill in.
     if (clientId === '') throw new OAuth2Error(NO_CLIENT_ID_MESSAGE)
-    const { status, payload } = await postForm(DEVICE_CODE_URL, { client_id: clientId, scope: OAUTH2_SCOPE_TEXT })
+    const { status, payload } = await postForm(DEVICE_CODE_URL, { client_id: clientId, scope: OAUTH2_SCOPE_TEXT }, cfg.proxy)
     const doc = (payload !== null && typeof payload === 'object' ? payload : {}) as Record<string, unknown>
     if (status !== 200 || typeof doc.device_code !== 'string' || typeof doc.user_code !== 'string') {
       throw new OAuth2Error(classifyOAuthFailure(payload, status).message)
@@ -398,6 +401,7 @@ export async function startDeviceFlow(name: string, cfg: OAuth2AccountConfig): P
       expiresAt: Date.now() + expiresIn * 1000,
       clientId,
       user: (cfg.user ?? '').trim(),
+      ...(cfg.proxy !== undefined ? { proxy: cfg.proxy } : {}),
     }
     // A fresh code replaces whatever was pending: the old one is dead anyway.
     pending.set(name, flow)
@@ -417,7 +421,7 @@ export type OAuth2PollResult = { status: 'ok'; user: string } | { status: 'pendi
  * Step 2: one poll. `pending` is the ordinary answer until the user finishes in
  * the browser; on success the token is persisted before this returns.
  */
-export async function pollDeviceFlow(name: string): Promise<OAuth2PollResult> {
+export async function pollDeviceFlow(name: string, cfg?: Pick<OAuth2AccountConfig, 'proxy'>): Promise<OAuth2PollResult> {
   const flow = pending.get(name)
   if (flow === undefined) throw new OAuth2Error('尚未发起设备码登录：请先在设置页点击「登录」')
   if (Date.now() >= flow.expiresAt) {
@@ -428,7 +432,7 @@ export async function pollDeviceFlow(name: string): Promise<OAuth2PollResult> {
     grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
     client_id: flow.clientId,
     device_code: flow.deviceCode,
-  })
+  }, cfg !== undefined ? cfg.proxy : flow.proxy)
   const doc = (payload !== null && typeof payload === 'object' ? payload : {}) as Record<string, unknown>
   if (pending.get(name) !== flow) throw new OAuth2Error('登录已取消或被替换，请重新登录 / Sign-in cancelled or replaced')
   if (status === 200 && typeof doc.access_token === 'string') {
@@ -489,7 +493,7 @@ function refreshAccessToken(name: string, cfg: OAuth2AccountConfig, entry: OAuth
       client_id: clientIdOf(cfg),
       refresh_token: entry.refreshToken,
       scope: OAUTH2_SCOPE_TEXT,
-    })
+    }, cfg.proxy)
     const doc = (payload !== null && typeof payload === 'object' ? payload : {}) as Record<string, unknown>
     const current = readTokenStore().accounts[name]
     if (!current || current.provider === 'google' || current.refreshToken !== entry.refreshToken || current.clientId !== entry.clientId || current.user !== entry.user) throw new OAuth2Error('登录数据已改变，请重新操作 / Login data changed')

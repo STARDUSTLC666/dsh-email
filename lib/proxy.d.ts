@@ -1,26 +1,5 @@
-/**
- * Proxy dialling for the mail transports.
- *
- * IMAP does not come through here: ImapFlow already negotiates HTTP CONNECT and
- * SOCKS through its own `proxy` option, so `createImap` hands the URL over and
- * lets that implementation do the work.
- *
- * SMTP does not have that luxury — nodemailer ships no proxy support at all —
- * but the plugin already owns the SMTP socket through its `getSocket` hook, so
- * this module supplies the one thing that hook is missing: a socket that
- * reaches the mail host *through* the proxy. The caller keeps doing its own TLS
- * upgrade, which is why the returned socket is the raw tunnel and never a TLS
- * one: the SMTP layer starts TLS on it with `servername` set to the real mail
- * host, so certificate validation still checks the host the user configured
- * rather than the proxy they happen to use.
- *
- * Where the proxy comes from: the account's `proxy` field first, then the
- * conventional environment variables. The fallback matters because a desktop
- * app started from Explorer inherits the machine's environment, and on a
- * machine whose traffic is already routed (Clash, a corporate MITM, a SOCKS
- * gateway) the account should not have to repeat the endpoint by hand.
- */
 import { type Socket } from 'node:net';
+import { type ConnectionOptions } from 'node:tls';
 /** Schemes `parseProxyUrl` accepts, in the spelling the user writes them. */
 export declare const PROXY_SCHEMES: readonly ["http", "https", "socks", "socks4", "socks4a", "socks5", "socks5h"];
 /**
@@ -48,4 +27,21 @@ export declare function resolveProxyUrl(explicit: string | null | undefined, env
 export declare function openProxiedSocket(proxy: string | URL, host: string, port: number, options?: {
     timeoutMs?: number;
     signal?: AbortSignal;
+    tls?: Pick<ConnectionOptions, 'ca' | 'rejectUnauthorized'>;
 }): Promise<Socket>;
+export interface FetchWithProxyOptions {
+    env?: NodeJS.ProcessEnv;
+    directFetch?: typeof fetch;
+    tls?: Pick<ConnectionOptions, 'ca' | 'rejectUnauthorized'>;
+    timeoutMs?: number;
+}
+/**
+ * Fetch an HTTP(S) URL while honouring the same proxy rules as IMAP/SMTP:
+ * account/global `proxy` first, `'direct'` to bypass, then `HTTPS_PROXY` /
+ * `HTTP_PROXY` / `ALL_PROXY` (respecting `NO_PROXY` and loopback targets).
+ *
+ * Uses Node's built-in `http`/`https`/`tls` over `openProxiedSocket` so HTTP,
+ * HTTPS and SOCKS4/4a/5/5h proxies all work with zero extra dependencies and
+ * full TLS certificate validation (including OS CA roots).
+ */
+export declare function fetchWithProxy(input: string | URL, init: RequestInit | undefined, explicitProxy?: string | null, options?: FetchWithProxyOptions): Promise<Response>;

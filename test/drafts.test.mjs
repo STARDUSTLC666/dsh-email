@@ -181,3 +181,143 @@ test('header newlines and oversized text never enter draft storage', () => {
   assert.throws(() => draftFields({ to: 'a@example.test\nBcc: b@example.test' }))
   assert.throws(() => draftFields({ text: '中'.repeat(35000) }), /100 KiB/)
 })
+
+test('batch delete removes dozens of drafts atomically, cleans owned uploads, keeps originals and invalidates previews', async t => {
+  const x = await setup(t)
+  const originalPath = join(x.home, 'keep-original.txt')
+  await writeFile(originalPath, 'must stay intact')
+
+  const created = []
+  for (let i = 0; i < 30; i++) {
+    const draft = await x.backend.create({ ...x.fields, subject: `批量草稿 #${i + 1}`, ...(i === 0 ? { attachments: [originalPath] } : {}) })
+    created.push(draft)
+  }
+
+  // Upload an owned attachment on draft #1 (to be deleted) and draft #29 (to be kept).
+  const uploadFor = async (draft, text) => {
+    const res = await x.backend.fetch(new Request('http://127.0.0.1' + EMAIL_DRAFT_ROUTE, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/octet-stream',
+        'x-dsh-email-draft': '1',
+        'x-dsh-draft-id': draft.id,
+        'x-dsh-draft-revision': String(draft.revision),
+        'x-dsh-draft-filename': encodeURIComponent('copy.txt'),
+      },
+      body: text,
+    }))
+    assert.equal(res.status, 200)
+    return (await res.json()).value
+  }
+  created[1] = await uploadFor(created[1], 'delete-me-copy')
+  created[29] = await uploadFor(created[29], 'keep-me-copy')
+  const ownedDeletePath = (await x.store.get(created[1].id)).attachments[0].path
+  const ownedKeepPath = (await x.store.get(created[29].id)).attachments[0].path
+
+  // Schedule draft #2 so batch delete also verifies scheduled drafts are cancelled and never fire.
+  const sendAt = new Date(Date.now() + 600_000).toISOString()
+  created[2] = await x.backend.action({ ...x.fields, action: 'update', id: created[2].id, revision: created[2].revision, sendAt })
+  const schedPreview = await x.backend.action({ action: 'preview', id: created[2].id, revision: created[2].revision })
+  created[2] = (await x.backend.action({ action: 'schedule', id: created[2].id, preview: schedPreview.id, confirmed: true, sendAt })).draft
+  assert.equal(created[2].state, 'scheduled')
+
+  // Create a live preview for draft #3 that must be invalidated by batch deletion.
+  const livePreview = await x.backend.action({ action: 'preview', id: created[3].id, revision: created[3].revision })
+
+  const toDelete = created.slice(0, 25)
+  const response = await x.request({
+    action: 'deleteMany',
+    confirmed: true,
+    items: toDelete.map(d => ({ id: d.id, revision: d.revision })),
+  })
+  assert.equal(response.status, 200)
+  const payload = await response.json()
+  assert.equal(payload.ok, true)
+  assert.equal(payload.value.removed.length, 25)
+  assert.deepEqual(payload.value.skipped, [])
+
+  // Only the 5 untouched drafts remain.
+  const remaining = await x.store.list()
+  assert.equal(remaining.length, 5)
+  assert.deepEqual(new Set(remaining.map(d => d.id)), new Set(created.slice(25).map(d => d.id)))
+
+  // Owned upload of deleted draft is gone; referenced original and kept draft upload remain.
+  await assert.rejects(stat(ownedDeletePath), { code: 'ENOENT' })
+  assert.equal(await readFile(originalPath, 'utf8'), 'must stay intact')
+  assert.equal(await readFile(ownedKeepPath, 'utf8'), 'keep-me-copy')
+
+  // Invalidated preview cannot download or send.
+  assert.equal((await x.backend.fetch(new Request('http://127.0.0.1' + EMAIL_DRAFT_ROUTE + '?preview=' + livePreview.id + '&attachment=any'))).status, 404)
+  await assert.rejects(x.backend.action({ action: 'send', id: created[3].id, preview: livePreview.id, confirmed: true }))
+
+  // Fast-forward past scheduled sendAt: deleted scheduled draft must never submit.
+  x.tick(700_000)
+  await x.backend.runScheduled()
+  assert.equal(x.sends.length, 0)
+})
+
+test('batch delete preserves sending and concurrently modified drafts while removing unchanged ones', async t => {
+  const x = await setup(t)
+  const a = await x.backend.create({ ...x.fields, subject: '可删 A' })
+  const b = await x.backend.create({ ...x.fields, subject: '发送中 B' })
+  const c = await x.backend.create({ ...x.fields, subject: '已修改 C' })
+  const d = await x.backend.create({ ...x.fields, subject: '可删 D' })
+
+  await x.store.change(b.id, b.revision, draft => { draft.state = 'sending'; draft.attemptAt = new Date().toISOString() })
+  await x.store.change(c.id, c.revision, draft => { draft.subject = '别处已改' })
+  const missingId = '11111111-1111-4111-8111-111111111111'
+
+  const result = await x.backend.action({
+    action: 'deleteMany',
+    confirmed: true,
+    items: [
+      { id: a.id, revision: a.revision },
+      { id: b.id, revision: b.revision },
+      { id: c.id, revision: c.revision },
+      { id: d.id, revision: d.revision },
+      { id: missingId, revision: 1 },
+    ],
+  })
+  assert.deepEqual(result.removed, [a.id, d.id])
+  assert.deepEqual(result.skipped, [
+    { id: b.id, reason: 'busy' },
+    { id: c.id, reason: 'conflict' },
+    { id: missingId, reason: 'missing' },
+  ])
+  assert.deepEqual((await x.store.list()).map(item => item.id).sort(), [b.id, c.id].sort())
+
+  // An all-skipped batch makes no changes and reports every skipped item cleanly.
+  const allSkipped = await x.backend.action({
+    action: 'deleteMany',
+    confirmed: true,
+    items: [
+      { id: b.id, revision: b.revision },
+      { id: c.id, revision: c.revision },
+    ],
+  })
+  assert.deepEqual(allSkipped.removed, [])
+  assert.deepEqual(allSkipped.skipped, [
+    { id: b.id, reason: 'busy' },
+    { id: c.id, reason: 'conflict' },
+  ])
+  assert.equal((await x.store.list()).length, 2)
+})
+
+test('batch delete enforces confirmation, bounds, unique valid ids and carrier CSRF checks', async t => {
+  const x = await setup(t)
+  const draft = await x.backend.create(x.fields)
+  const validItem = { id: draft.id, revision: draft.revision }
+
+  await assert.rejects(x.backend.action({ action: 'deleteMany', items: [validItem] }), /请先确认/)
+  await assert.rejects(x.backend.action({ action: 'deleteMany', confirmed: true, items: [] }), /1 到 50/)
+  await assert.rejects(
+    x.backend.action({ action: 'deleteMany', confirmed: true, items: Array.from({ length: 51 }, (_, i) => ({ id: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, revision: 1 })) }),
+    /1 到 50/,
+  )
+  await assert.rejects(x.backend.action({ action: 'deleteMany', confirmed: true, items: [validItem, validItem] }), /无效/)
+  await assert.rejects(x.backend.action({ action: 'deleteMany', confirmed: true, items: [{ id: 'not-a-uuid', revision: 1 }] }), /无效/)
+  await assert.rejects(x.backend.action({ action: 'deleteMany', confirmed: true, items: [{ id: draft.id, revision: 0 }] }), /无效/)
+  assert.equal((await x.request({ action: 'deleteMany', confirmed: true, items: [validItem] }, { origin: 'https://evil.test' })).status, 403)
+  assert.equal((await x.request({ action: 'deleteMany', confirmed: true, items: [validItem] }, { 'x-dsh-email-draft': '' })).status, 403)
+  assert.equal((await x.store.list()).length, 1, 'rejected requests never delete drafts')
+})
