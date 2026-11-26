@@ -35,15 +35,15 @@ function gate(rules, configured = ['work', 'home'], sendApproval = true) {
 }
 test('saved trust skips only its account, includes Cc, leaves reply approval and delegates host permissions', async () => {
   const run = gate(JSON.stringify({ work: policy }))
-  await run.run('email_send', { to: 'Alice@example.test', cc: 'bob@team.test' }); assert.deepEqual(run.counts(), { asks: 0, nexts: 1 })
-  await run.run('email_send', { account: 'home', to: 'Alice@example.test' })
-  await run.run('email_send', { account: 'work', to: 'Alice@example.test', cc: 'stranger@else.test' })
+  await run.run('email_send', { text: '正文', to: 'Alice@example.test', cc: 'bob@team.test' }); assert.deepEqual(run.counts(), { asks: 0, nexts: 1 })
+  await run.run('email_send', { text: '正文', account: 'home', to: 'Alice@example.test' })
+  await run.run('email_send', { text: '正文', account: 'work', to: 'Alice@example.test', cc: 'stranger@else.test' })
   await run.run('email_reply', { account: 'work', uid: 1 })
   assert.deepEqual(run.counts(), { asks: 3, nexts: 4 })
 })
 test('broken saved rules keep approval instead of granting access', async () => {
   const run = gate('work: { skipApproval: invalid }')
-  await run.run('email_send', { to: 'Alice@example.test' }); assert.deepEqual(run.counts(), { asks: 1, nexts: 1 })
+  await run.run('email_send', { text: '正文', to: 'Alice@example.test' }); assert.deepEqual(run.counts(), { asks: 1, nexts: 1 })
 })
 test('trusted recipients and global opt-out both preserve a downstream host denial', async () => {
   for (const sendApproval of [true, false]) {
@@ -53,7 +53,7 @@ test('trusted recipients and global opt-out both preserve a downstream host deni
       getEffectiveSettings: () => ({ accounts: new Map([['work', {}]]), defaultAccount: 'work' }),
     })
     const denied = { kind: 'deny', reason: 'Host access policy denies sending' }
-    const result = await listener({ name: 'email_send', arguments: { to: sendApproval ? 'Alice@example.test' : 'unknown@else.test' } }, async () => denied)
+    const result = await listener({ name: 'email_send', arguments: { to: sendApproval ? 'Alice@example.test' : 'unknown@else.test', text: '正文' } }, async () => denied)
     assert.equal(result, denied)
     assert.equal(requests, 0)
   }
@@ -67,9 +67,9 @@ test('blocked Cc and addresses outrank trusted rules and global approval off', a
   await assert.rejects(assertRecipientsAllowed('bob@team.test', 'hidden@blocked.test', p), { code: 'recipient-denied' })
   assert.equal((await matchRecipients('bob@sub.blocked.test', '', p)).blocked, false)
   const run = gate(JSON.stringify(rules), undefined, false)
-  assert.equal((await run.run('email_send', { to: 'Alice@example.test' })).kind, 'deny')
+  assert.equal((await run.run('email_send', { text: '正文', to: 'Alice@example.test' })).kind, 'deny')
   assert.deepEqual(run.counts(), { asks: 0, nexts: 0 })
-  await run.run('email_send', { to: 'bob@team.test' }); assert.deepEqual(run.counts(), { asks: 0, nexts: 1 })
+  await run.run('email_send', { text: '正文', to: 'bob@team.test' }); assert.deepEqual(run.counts(), { asks: 0, nexts: 1 })
 })
 test('the shared SMTP boundary blocks direct, prepared, reply-all and forward paths before connection', async () => {
   const settings = resolveEmailSettings({ user: 'sender@example.test', password: 'synthetic', imap: { host: '127.0.0.1' }, smtp: { host: '127.0.0.1' }, sendApproval: false, trustedRecipientsYaml: 'default: { denyDomains: [blocked.test] }' })
