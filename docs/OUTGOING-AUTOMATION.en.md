@@ -8,6 +8,8 @@ Open mail in the workbench, choose Reply / Reply all / Forward, then edit the dr
 
 Safe paragraphs, links, lists, tables and common inline text/border/spacing styles are preserved. Scripts, events, forms, unsafe links, remote images and CSS URLs are removed. The preview renders inert structured nodes. Delivery uses MIME text/HTML alternatives. Reply drafts retain thread references; forwarded messages are not forced to use In-Reply-To.
 
+**Inline images (cid):** `<img src="cid:file-name">` survives only when that file is also listed in `attachments` for the same call; the SMTP path then assembles a real `multipart/related` inline part (`Content-ID`) instead of dropping the picture. A missing attachment, an out-of-range `imgN`, or a `data:`, `file:` or remote URL still degrades to the alt text, so one extra tag in untrusted HTML never unlocks external resources. Width and height are kept only between 2 and 2000. Inline images rely on the IMAP/SMTP MIME builder; AgentMail sends through its API and does not support them yet.
+
 Quote language can follow the UI or explicitly use Chinese, English or French. Set an optional IANA timezone. Tools accept locale/timeZone overrides. Account preferences take priority; unknown server-side locale defaults to English. Dates and missing-date placeholders are localized.
 
 `email_send`, `email_reply` and `email_draft` accept optional html, including HTML-only input. A draft's reply object accepts uid/folder/mode for associated replies and forwards. Trusted reply skipping is off by default; opt in separately. Every actual To/Cc must match a saved skipApproval policy. Block rules and DSH permissions still apply. Reviewed reply envelopes are pinned rather than re-resolved after confirmation.

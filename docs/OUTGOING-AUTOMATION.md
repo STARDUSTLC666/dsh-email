@@ -10,6 +10,14 @@
 
 HTML 支持段落、链接、列表、表格与常用内联文字/边框/间距样式。脚本、事件、表单、危险链接、远程图片和 CSS URL 不会发出；预览通过惰性结构化节点显示，不执行 HTML。发出的邮件为纯文本 + HTML 的 MIME 替代正文。回复保留原邮件线程关联；转发保留相关引用，不强制伪装成原线程回复。
 
+**内联图片（cid）**：`<img src="cid:文件名">` 只有在同一次调用把该文件放进了 `attachments` 时才会保留，发信时它成为标准 `multipart/related` 内联图（`Content-ID`），收件人看到图而不是被裁掉的破图；引用不存在的文件、`imgN` 越界、`data:`、`file:` 或远程地址一律降级为 `alt` 文本，不会因为 HTML 里多写一行就允许任意外部资源。示例：
+
+```json
+{"to":"team@example.test","subject":"【报告】周报","text":"见下图","html":"<p>见下图</p><img src=\"cid:趋势.png\" alt=\"闭环率趋势\" width=\"520\" height=\"280\">","attachments":["D:/report/趋势.png"]}
+```
+
+图片宽高只在 2–2000 之间保留。这条通道走 IMAP/SMTP 的 MIME 组装，AgentMail 通过其 API 发信，暂不支持内联图。
+
 「邮箱账号」的全局设置可选引用语言：跟随界面、中文、英语、法语；可填写 IANA 时区，例如 `Asia/Shanghai`。工具可传 `locale` / `timeZone` 覆盖。服务端无法获知浏览器语言时默认英语，账号显式设置优先。日期按可读本地格式显示，原邮件没有日期时显示相应语言的占位。
 
 工具 `email_send`、`email_reply`、`email_draft` 接受可选 `html`；可只填 HTML。`email_draft` 的 `reply: {uid, folder, mode}` 创建带关联的回复/转发草稿。发信仍受禁止收件人规则和宿主权限约束。

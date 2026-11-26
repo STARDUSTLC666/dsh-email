@@ -1493,12 +1493,17 @@ export class EmailPool {
     const name = this.resolveName(accountName)
     const cfg = this.account(name)
     const attachments = await readSmtpAttachments(attachmentPaths ?? [], this.settings.maxAttachmentBytes, signal)
+    const body = prepareMailBody(text, html, { cids: attachments.map(file => file.filename) })
+    // Tag only the files the sanitized HTML really references, so cid:imgN always resolves.
+    for (const [index, file] of attachments.entries()) {
+      if (body.html?.includes('src="cid:img' + (index + 1) + '"')) file.cid = 'img' + (index + 1)
+    }
     const info = await this.sendMail(name, cfg, {
       from: senderOf(cfg),
       to,
       cc,
       subject,
-      ...prepareMailBody(text, html),
+      ...body,
       disableFileAccess: true, disableUrlAccess: true,
       attachments,
     }, signal)
@@ -1611,9 +1616,9 @@ export async function validateAttachmentPaths(paths: string[], maxBytes: number,
 }
 
 /** Hand SMTP stable bytes so MIME processing never needs file or URL access. */
-async function readSmtpAttachments(paths: string[], maxBytes: number, signal?: AbortSignal): Promise<Array<{ filename: string; content: Buffer }>> {
+async function readSmtpAttachments(paths: string[], maxBytes: number, signal?: AbortSignal): Promise<Array<{ filename: string; content: Buffer; cid?: string }>> {
   const files = await validateAttachmentPaths(paths, maxBytes, signal)
-  const attachments: Array<{ filename: string; content: Buffer }> = []
+  const attachments: Array<{ filename: string; content: Buffer; cid?: string }> = []
   let remaining = maxBytes
   for (const { path } of files) {
     signal?.throwIfAborted()
