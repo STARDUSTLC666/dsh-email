@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { buildEmailTools } from '../lib/tools.js'
@@ -26,14 +26,16 @@ function toolFor(sent) {
   return buildEmailTools(runtime).find(def => def.name === 'email_send')
 }
 
-async function workspace() {
-  return await mkdtemp(join(tmpdir(), 'dsh-email-body-'))
+async function workspace(t) {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-email-body-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  return dir
 }
 
 const sendArgs = call => ({ account: call[0], to: call[1], subject: call[2], text: call[3], cc: call[4], attachments: call[5], html: call[7] })
 
-test('textFile is read and sent as the plain-text body', async () => {
-  const dir = await workspace()
+test('textFile is read and sent as the plain-text body', async t => {
+  const dir = await workspace(t)
   await writeFile(join(dir, 'body.txt'), '见正文\n', 'utf8')
   const sent = [], tool = toolFor(sent)
   await tool.execute({ to: 'a@example.test', subject: 'From file', textFile: join(dir, 'body.txt') }, {})
@@ -42,8 +44,8 @@ test('textFile is read and sent as the plain-text body', async () => {
   assert.equal(sendArgs(sent[0]).html, undefined)
 })
 
-test('htmlFile is read and sent as the HTML body', async () => {
-  const dir = await workspace()
+test('htmlFile is read and sent as the HTML body', async t => {
+  const dir = await workspace(t)
   await writeFile(join(dir, 'body.html'), '<p>hi</p>', 'utf8')
   const sent = [], tool = toolFor(sent)
   await tool.execute({ to: 'a@example.test', subject: 'From file', htmlFile: join(dir, 'body.html') }, {})
@@ -51,8 +53,8 @@ test('htmlFile is read and sent as the HTML body', async () => {
   assert.equal(sendArgs(sent[0]).text, undefined)
 })
 
-test('explicit text/html wins over the files', async () => {
-  const dir = await workspace()
+test('explicit text/html wins over the files', async t => {
+  const dir = await workspace(t)
   await writeFile(join(dir, 'body.html'), '<p>from file</p>', 'utf8')
   const sent = [], tool = toolFor(sent)
   await tool.execute({ to: 'a@example.test', subject: 'Both', text: 'inline text', htmlFile: join(dir, 'body.html') }, {})
@@ -66,16 +68,16 @@ test('explicit text/html wins over the files', async () => {
   assert.equal(sendArgs(sent2[0]).html, '<p>inline</p>')
 })
 
-test('a relative path resolves against the session workspace, not the process cwd', async () => {
-  const dir = await workspace()
+test('a relative path resolves against the session workspace, not the process cwd', async t => {
+  const dir = await workspace(t)
   await writeFile(join(dir, 'rel.txt'), 'relative ok', 'utf8')
   const sent = [], tool = toolFor(sent)
   await tool.execute({ to: 'a@example.test', subject: 'Relative', textFile: 'rel.txt' }, { agent: { session: { header: { cwd: dir } } } })
   assert.equal(sendArgs(sent[0]).text, 'relative ok')
 })
 
-test('a missing body file fails loudly and sends nothing', async () => {
-  const dir = await workspace()
+test('a missing body file fails loudly and sends nothing', async t => {
+  const dir = await workspace(t)
   const sent = [], tool = toolFor(sent)
   await assert.rejects(
     () => tool.execute({ to: 'a@example.test', subject: 'Missing', textFile: join(dir, 'nope.txt') }, {}),
@@ -84,18 +86,52 @@ test('a missing body file fails loudly and sends nothing', async () => {
   assert.equal(sent.length, 0)
 })
 
-test('a body file over 512 KiB is refused', async () => {
-  const dir = await workspace()
-  await writeFile(join(dir, 'big.html'), '<p>' + 'x'.repeat(512 * 1024) + '</p>', 'utf8')
+test('a body file over 256 KiB is refused, matching the HTML sanitizer cap', async t => {
+  const dir = await workspace(t)
+  await writeFile(join(dir, 'big.html'), '<p>' + 'x'.repeat(256 * 1024) + '</p>', 'utf8')
   const sent = [], tool = toolFor(sent)
   await assert.rejects(
     () => tool.execute({ to: 'a@example.test', subject: 'Big', htmlFile: join(dir, 'big.html') }, {}),
-    /超过 512 KiB/,
+    /超过 256 KiB/,
   )
   assert.equal(sent.length, 0)
 })
 
-test('no inline body and no body file is still refused', async () => {
+test('a directory is refused instead of being read', async t => {
+  const dir = await workspace(t)
+  const sent = [], tool = toolFor(sent)
+  await assert.rejects(
+    () => tool.execute({ to: 'a@example.test', subject: 'Dir', textFile: dir }, {}),
+    /不是普通文件/,
+  )
+  assert.equal(sent.length, 0)
+})
+
+test('a body file that is not valid UTF-8 is refused instead of being sent as mojibake', async t => {
+  const dir = await workspace(t)
+  await writeFile(join(dir, 'bad.html'), Buffer.from([0x3c, 0x70, 0x3e, 0xc3, 0x28, 0x3c, 0x2f, 0x70, 0x3e]))
+  const sent = [], tool = toolFor(sent)
+  await assert.rejects(
+    () => tool.execute({ to: 'a@example.test', subject: 'Bad utf8', htmlFile: join(dir, 'bad.html') }, {}),
+    /UTF-8 文本/,
+  )
+  assert.equal(sent.length, 0)
+})
+
+test('reading stops when the execution is cancelled', async t => {
+  const dir = await workspace(t)
+  await writeFile(join(dir, 'body.txt'), 'body', 'utf8')
+  const sent = [], tool = toolFor(sent)
+  const controller = new AbortController()
+  controller.abort()
+  await assert.rejects(
+    () => tool.execute({ to: 'a@example.test', subject: 'Cancelled', textFile: join(dir, 'body.txt') }, { signal: controller.signal }),
+    /abort/i,
+  )
+  assert.equal(sent.length, 0)
+})
+
+test('no inline body and no body file is still refused', async t => {
   const sent = [], tool = toolFor(sent)
   await assert.rejects(
     () => tool.execute({ to: 'a@example.test', subject: 'Empty', text: '  ', htmlFile: '' }, {}),

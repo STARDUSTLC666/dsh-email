@@ -1,5 +1,6 @@
 /** Outgoing-mail approval is independent of tool execution. */
 import type { EmailRuntime } from './runtime.js'
+import { isAbsolute, relative, resolve } from 'node:path'
 import type { EmailReplyArgs, EmailSendArgs } from './types.js'
 import { matchRecipients, parseRecipientPolicies } from './recipient-policy.js'
 import { createHash } from 'node:crypto'
@@ -119,7 +120,22 @@ export function installSendApproval(ctx: ApprovalContext, runtime: Runtime): voi
     if (exec.name === 'email_send') {
       const args = (exec.arguments ?? {}) as EmailSendArgs
       const attachCount = Array.isArray(args.attachments) ? args.attachments.length : 0
+      const extra = (exec.arguments ?? {}) as Record<string, unknown>
+      const bodyFiles = [extra.textFile, extra.htmlFile].filter((file): file is string => typeof file === 'string' && file.trim() !== '')
       reason = '发送邮件给 ' + args.to + (args.cc ? '，抄送 ' + args.cc : '') + '，主题「' + args.subject + '」' + (attachCount > 0 ? '，附件 ' + attachCount + ' 个' : '')
+      if (bodyFiles.length > 0) {
+        // The body is read from disk after the user approves, so the dialog has to say which
+        // files it is about to trust — and flag paths outside the session workspace.
+        const cwd = (exec as { agent?: { session?: { header?: { cwd?: string } } } }).agent?.session?.header?.cwd
+        const base = typeof cwd === 'string' && cwd.trim() ? cwd : process.cwd()
+        const outside = bodyFiles.filter(file => {
+          const rel = relative(base, resolve(base, file.trim()))
+          return rel.startsWith('..') || isAbsolute(rel)
+        })
+        reason += '，正文来自文件 ' + bodyFiles.map(file => file.trim()).join('、')
+          + (outside.length > 0 ? '（会话工作区之外，请确认内容：' + outside.map(file => file.trim()).join('、') + '）' : '')
+          + '；审批通过后才读取，期间文件可能被替换'
+      }
     } else {
       const args = (exec.arguments ?? {}) as EmailReplyArgs
       const mode = typeof args.mode === 'string' && args.mode.trim() !== '' ? args.mode.trim().toLowerCase() : 'reply'
