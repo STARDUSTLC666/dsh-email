@@ -122,7 +122,7 @@ test('email_send runs the approval round-trip with recipient, subject and attach
   assert.ok(gate)
   assert.equal(gate.opts.prepend, true)
   const out = await gate.fn(
-    { name: 'email_send', arguments: { to: 'boss@corp.com', subject: '周报', attachments: ['a.txt', 'b.txt'] } },
+    { name: 'email_send', arguments: { to: 'boss@corp.com', subject: '周报', text: '正文', attachments: ['a.txt', 'b.txt'] } },
     async () => 'PASSED-THROUGH',
   )
   assert.equal(out, 'PASSED-THROUGH')
@@ -166,7 +166,7 @@ test('sendApproval: false in the live settings skips the ask', async () => {
   const ctx = fakeCtx({ sendApproval: false })
   apply(ctx, QQ)
   const gate = ctx.listeners.find(l => l.event === 'tools/pre-execute')
-  const out = await gate.fn({ name: 'email_send', arguments: { to: 'x@y.z', subject: 's' } }, async () => 'PASSED-THROUGH')
+  const out = await gate.fn({ name: 'email_send', arguments: { to: 'x@y.z', subject: 's', text: '正文' } }, async () => 'PASSED-THROUGH')
   assert.equal(out, 'PASSED-THROUGH')
 })
 
@@ -174,7 +174,7 @@ test('gate passes through when the account is not configured', async () => {
   const ctx = fakeCtx()
   apply(ctx, {})
   const gate = ctx.listeners.find(l => l.event === 'tools/pre-execute')
-  const out = await gate.fn({ name: 'email_send', arguments: { to: 'x@y.z', subject: 's' } }, async () => 'PASSED-THROUGH')
+  const out = await gate.fn({ name: 'email_send', arguments: { to: 'x@y.z', subject: 's', text: '正文' } }, async () => 'PASSED-THROUGH')
   assert.equal(out, 'PASSED-THROUGH')
 })
 
@@ -224,7 +224,7 @@ test('approval "rejected" denies with an actionable message covering Full Access
   apply(ctx, QQ)
   const gate = ctx.listeners.find(l => l.event === 'tools/pre-execute')
   const decision = await gate.fn(
-    { name: 'email_send', arguments: { to: 'boss@corp.com', subject: 's' } },
+    { name: 'email_send', arguments: { to: 'boss@corp.com', subject: 's', text: '正文' } },
     async () => 'PASSED-THROUGH',
   )
   assert.equal(decision.kind, 'deny')
@@ -249,7 +249,7 @@ test('approval "allowed-once" proceeds to the tool', async () => {
   ctx.approval.request = async () => 'allowed-once'
   apply(ctx, QQ)
   const gate = ctx.listeners.find(l => l.event === 'tools/pre-execute')
-  const out = await gate.fn({ name: 'email_send', arguments: { to: 'x@y.z', subject: 's' } }, async () => 'PASSED-THROUGH')
+  const out = await gate.fn({ name: 'email_send', arguments: { to: 'x@y.z', subject: 's', text: '正文' } }, async () => 'PASSED-THROUGH')
   assert.equal(out, 'PASSED-THROUGH')
 })
 
@@ -258,7 +258,7 @@ test('sendApproval: false bypasses the approval round-trip entirely', async () =
   ctx.approval.request = async () => { throw new Error('must not be called') }
   apply(ctx, QQ)
   const gate = ctx.listeners.find(l => l.event === 'tools/pre-execute')
-  const out = await gate.fn({ name: 'email_send', arguments: { to: 'x@y.z', subject: 's' } }, async () => 'PASSED-THROUGH')
+  const out = await gate.fn({ name: 'email_send', arguments: { to: 'x@y.z', subject: 's', text: '正文' } }, async () => 'PASSED-THROUGH')
   assert.equal(out, 'PASSED-THROUGH')
 })
 
@@ -267,7 +267,7 @@ test('no approval channel denies with the headless hint', async () => {
   ctx.approval = undefined
   apply(ctx, QQ)
   const gate = ctx.listeners.find(l => l.event === 'tools/pre-execute')
-  const decision = await gate.fn({ name: 'email_send', arguments: { to: 'x@y.z', subject: 's' } }, async () => 'PASSED-THROUGH')
+  const decision = await gate.fn({ name: 'email_send', arguments: { to: 'x@y.z', subject: 's', text: '正文' } }, async () => 'PASSED-THROUGH')
   assert.equal(decision.kind, 'deny')
   assert.match(decision.reason, /headless|审批通道/)
 })
