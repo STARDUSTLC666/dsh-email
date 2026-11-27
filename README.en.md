@@ -8,7 +8,7 @@ Opens in the tactile **Letter Desk (`Desk`)** airmail stack with 1-click switch 
 
 [![npm](https://img.shields.io/npm/v/dsh-email)](https://www.npmjs.com/package/dsh-email) [![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-downloads.svg)](https://www.npmjs.com/package/dsh-email) [![total downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-total-downloads.svg)](https://www.npmjs.com/package/dsh-email)
 
-**[Features](#features) · [Install](#install) · [Workflow](#start-using-it) · [Full guide](https://github.com/STARDUSTLC666/dsh-email/blob/main/docs/REFERENCE.en.md)**
+**[Launch Film](#launch-film) · [Features](#features) · [Interface & Theme Previews](#interface--theme-previews) · [Install](#install) · [Workflow](#start-using-it) · [Full guide](https://github.com/STARDUSTLC666/dsh-email/blob/main/docs/REFERENCE.en.md)**
 
 <picture>
   <source media="(prefers-color-scheme: dark) and (max-width: 640px)" srcset="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/docs/assets/intro/workflow-en-mobile-dark.svg">
@@ -16,6 +16,22 @@ Opens in the tactile **Letter Desk (`Desk`)** airmail stack with 1-click switch 
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/docs/assets/intro/workflow-en-dark.svg">
   <img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/docs/assets/intro/workflow-en-light.svg" alt="Handle mail in DSH and review replies before sending. · workflow illustration" width="100%">
 </picture>
+
+## Launch Film
+
+<p align="center">
+  <a href="https://github.com/STARDUSTLC666/dsh-email/blob/main/assets/promo/dsh-email-v1.0.0-promo-1080p.mp4" title="Watch the full 1080p launch film with audio (81.6s)">
+    <img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/promo/dsh-email-v1.0.0-teaser.webp" alt="dsh-email v1.0.0 animated launch teaser — click to watch the full 1080p promo video with audio" width="100%">
+  </a>
+</p>
+
+<p align="center">
+  <strong><a href="https://github.com/STARDUSTLC666/dsh-email/blob/main/assets/promo/dsh-email-v1.0.0-promo-1080p.mp4">▶ Watch Full 1080p Launch Film with Audio (81.6s · MP4)</a></strong>
+  &nbsp;·&nbsp;
+  <a href="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/promo/dsh-email-v1.0.0-cover.webp">View Poster Cover</a>
+  <br>
+  <sub>Highlights the 3-layer tactile Letter Desk & 3D header flip, 6-layer zero-credential server discovery, 1-click classic 3-Pane, <code>tools/pre-execute</code> send approval gate, local SQLite 50K pinyin Contacts & 13 themes × 8 fonts. BGM: <em>Lights</em> by Sappheiros (<a href="https://www.free-stock-music.com/">Free Stock Music</a>, <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>, trimmed/edited for runtime)</sub>
+</p>
 
 ## Features
 
@@ -27,14 +43,42 @@ Opens in the tactile **Letter Desk (`Desk`)** airmail stack with 1-click switch 
 | **Local Contacts Autocomplete** | Learns correspondents locally in SQLite and autocompletes To/Cc by name, email, full pinyin, pinyin initials, or employee ID |
 | **Courier, Locales & Hooks** | Interactive Whale-Girl **Courier** for live mail checks; 8 UI languages, 13 styles × 8 fonts, in-process `emailTasks` arrivals & opt-in mail-triggered DSH tasks |
 
-<details>
-<summary>See a workbench example (Letter Desk)</summary>
+## Interface & Theme Previews
 
-![dsh-email Letter Desk workbench example](https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/docs/assets/intro/screen-en.webp)
+All 9 live captures below were taken from a controlled local IMAP/SMTP verification workbench in DSH Web (covering Letter Desk, 3D header flip, classic 3-Pane, server auto-discovery, deny-first recipient policies, local SQLite pinyin autocomplete, and refreshed themes with synthetic data). Click any image to view full size.
 
-Captured with `dsh-email 0.32.0` running in Harness Web `0.2.2-rc.3` (Letter Desk + default YouYuan Mono font, sample data).
-
-</details>
+<table>
+<tr>
+  <th>Letter Desk Airmail Stack (Frutiger)</th>
+  <th>3D Flip to Raw Envelope Headers</th>
+  <th>Classic 3-Pane · Tracker Shield · Inline Chart</th>
+</tr>
+<tr>
+  <td width="33%"><a href="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-desk-frutiger-zh.webp"><img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-desk-frutiger-zh.webp" alt="dsh-email Letter Desk airmail card stack in Frutiger theme" width="100%"></a></td>
+  <td width="33%"><a href="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-desk-flipped-zh.webp"><img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-desk-flipped-zh.webp" alt="dsh-email Letter Desk 3D flip revealing raw envelope headers and MIME metadata" width="100%"></a></td>
+  <td width="33%"><a href="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-threepane-imap-zh.webp"><img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-threepane-imap-zh.webp" alt="dsh-email classic 3-Pane view with hierarchical unread badges, remote tracking image shield, and inline CID bar chart" width="100%"></a></td>
+</tr>
+<tr>
+  <th>Multi-Protocol Accounts & Auto-Discovery</th>
+  <th>Deny-First Recipient Policy & Dry-Run Check</th>
+  <th>Local SQLite Pinyin & Employee-ID Autocomplete</th>
+</tr>
+<tr>
+  <td width="33%"><a href="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-accounts-autodiscover-zh.webp"><img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-accounts-autodiscover-zh.webp" alt="dsh-email Accounts panel with multi-account setup, enterprise & OAuth providers, and one-click domain auto-discovery" width="100%"></a></td>
+  <td width="33%"><a href="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-policy-approval-zh.webp"><img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-policy-approval-zh.webp" alt="dsh-email Recipient Policy panel showing trusted/denied domains and addresses with dry-run matching" width="100%"></a></td>
+  <td width="33%"><a href="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-compose-pinyin-zh.webp"><img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-compose-pinyin-zh.webp" alt="dsh-email Compose modal with live SQLite pinyin initials and employee-ID recipient autocomplete" width="100%"></a></td>
+</tr>
+<tr>
+  <th>Theme Preview: Airy Mint</th>
+  <th>Theme Preview: Songhui Vermilion</th>
+  <th>Theme Preview: Blueprint</th>
+</tr>
+<tr>
+  <td width="33%"><a href="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-skin-mint-zh.webp"><img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-skin-mint-zh.webp" alt="dsh-email Airy Mint refreshed theme with style-matched font" width="100%"></a></td>
+  <td width="33%"><a href="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-skin-songhui-zh.webp"><img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-skin-songhui-zh.webp" alt="dsh-email Songhui Vermilion theme with style-matched serif font" width="100%"></a></td>
+  <td width="33%"><a href="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-skin-blueprint-zh.webp"><img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-skin-blueprint-zh.webp" alt="dsh-email Blueprint engineering theme with monospace font" width="100%"></a></td>
+</tr>
+</table>
 
 ## Install
 

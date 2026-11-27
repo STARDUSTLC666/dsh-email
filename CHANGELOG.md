@@ -1,5 +1,21 @@
 # 更新记录
 
+## 1.0.0 (2026-11-27)
+
+- **1.0.0 正式版里程碑**：面向 DeepSeek Harness（`>=0.2.2-rc.3`）的开源多账号 AI 邮件工作台正式进入 1.0.0 稳定版。
+  - **全协议多账号与零凭据识服**：覆盖 IMAP / POP3 / SMTP、Google & Outlook OAuth2（全链路代理支持）、AgentMail、腾讯企业邮预设与 6 层零凭据域名自动识别（离线库 / MX / SRV / Autoconfig / ISPDB）。
+  - **三视图无缝切换**：默认「信桌」3 层实体航空书信叠卡（支持 3D 翻面直视原始信封头）、1 键切换经典「三栏」层级目录与 Gmail 式单行「列表」视图，并记住上次选中的视图。
+  - **安全读信与审批发信边界**：默认拦截外部追踪图片、内置 HTML 净化器、`tools/pre-execute` 独立发信审批闸门与收件人禁止规则优先；支持本地图文草稿（含 `cid:` 内联光栅图、`textFile`/`htmlFile` 长正文与批量删除）、定时发送与 5 分钟 IMAP 可撤销删信。
+  - **本地 SQLite 拼音通讯录与统一视觉体系**：基于 `node:sqlite` 的 50,000 联系人本机通讯录（姓名 / 邮箱 / 全拼 / 首字母 / 工号 / 多音姓毫秒补全），提供 8 种界面语言与 13 套轻亮重构主题 × 8 套双层专属字体。
+  - **仓库文档升级**：中英文 README 新增 1080p 有声官方宣传片、动图高光预览与 3×3 实机界面及主题画廊（位于 `assets/promo/` 与 `assets/gallery/`，不计入 npm 发包体积）。
+
+- **1.0.0 General Availability Milestone**: Stable `1.0.0` release of the open-source multi-account AI mail workbench for DeepSeek Harness (`>=0.2.2-rc.3`).
+  - **Multi-Protocol Accounts & 6-Layer Auto-Discovery**: Full IMAP / POP3 / SMTP, Google & Outlook OAuth2 (with full proxy routing), AgentMail, Tencent Exmail presets, and zero-credential 6-layer server detection (offline DB / MX / SRV / Autoconfig / ISPDB).
+  - **Three-View Workbench**: Tactile **Letter Desk** stacked airmail cards with 3D raw-header flip, 1-click classic **3-Pane** hierarchical folder view, and Gmail-style one-line **List** view with automatic view persistence.
+  - **Safe Reading & Approval-Gated Delivery**: Remote tracking pixel blocking by default, HTML sanitization, independent `tools/pre-execute` approval gate with deny-first recipient policy, rich local drafts (including `cid:` inline raster images, `textFile`/`htmlFile` bodies, and batch deletion), scheduled delivery, and 5-minute undoable IMAP Trash.
+  - **Local SQLite Pinyin Contacts & Refreshed Themes**: Local `node:sqlite` 50,000-contact directory (name, email, full pinyin, initials, employee ID, polyphonic surnames), 8 UI languages, and 13 refreshed themes × 8 style-matched fonts.
+  - **Repository Showcase Refresh**: Added the 1080p launch film with audio, animated highlight teaser, and 3×3 interface & theme gallery to `README.md` / `README.en.md` under `assets/promo/` and `assets/gallery/` (excluded from the npm tarball).
+
 ## 0.36.0 (2026-11-27)
 
 - **Gmail 式「列表」单行视图（合入 #69 并优化交互）**：

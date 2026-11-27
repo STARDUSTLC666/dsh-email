@@ -8,7 +8,7 @@
 
 [![npm](https://img.shields.io/npm/v/dsh-email)](https://www.npmjs.com/package/dsh-email) [![downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-downloads.svg)](https://www.npmjs.com/package/dsh-email) [![total downloads](https://raw.githubusercontent.com/STARDUSTLC666/dsh-suite/npm-downloads/assets/dsh-email-total-downloads.svg)](https://www.npmjs.com/package/dsh-email)
 
-**[核心能力](#核心能力) · [安装](#安装) · [快速上手](#开始使用) · [完整说明](https://github.com/STARDUSTLC666/dsh-email/blob/main/docs/REFERENCE.zh.md)**
+**[宣传片](#宣传片) · [核心能力](#核心能力) · [界面与风格预览](#界面与风格预览) · [安装](#安装) · [快速上手](#开始使用) · [完整说明](https://github.com/STARDUSTLC666/dsh-email/blob/main/docs/REFERENCE.zh.md)**
 
 <picture>
   <source media="(prefers-color-scheme: dark) and (max-width: 640px)" srcset="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/docs/assets/intro/workflow-zh-mobile-dark.svg">
@@ -16,6 +16,22 @@
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/docs/assets/intro/workflow-zh-dark.svg">
   <img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/docs/assets/intro/workflow-zh-light.svg" alt="在 DSH 里处理邮件，确认后再发出回复。 · 流程示意" width="100%">
 </picture>
+
+## 宣传片
+
+<p align="center">
+  <a href="https://github.com/STARDUSTLC666/dsh-email/blob/main/assets/promo/dsh-email-v1.0.0-promo-1080p.mp4" title="点击观看完整 1080p 有声宣传片（81.6s）">
+    <img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/promo/dsh-email-v1.0.0-teaser.webp" alt="dsh-email v1.0.0 官方宣传片高光动图预览：点击观看完整 1080p 有声版" width="100%">
+  </a>
+</p>
+
+<p align="center">
+  <strong><a href="https://github.com/STARDUSTLC666/dsh-email/blob/main/assets/promo/dsh-email-v1.0.0-promo-1080p.mp4">▶ 观看完整 1080p 有声宣传片（81.6s · MP4）</a></strong>
+  &nbsp;·&nbsp;
+  <a href="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/promo/dsh-email-v1.0.0-cover.webp">查看高清封面海报</a>
+  <br>
+  <sub>全片实景演示「信桌」3 层航空书信叠卡与 3D 翻面、6 层零凭据自动识服、1 键切经典「三栏」、<code>tools/pre-execute</code> 发信审批闸门、本地 SQLite 5 万拼音通讯录与 13 套主题 × 8 套字体切换。BGM: <em>Lights</em> by Sappheiros (<a href="https://www.free-stock-music.com/">Free Stock Music</a>, <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>, 经剪辑适配片长)</sub>
+</p>
 
 ## 核心能力
 
@@ -27,14 +43,42 @@
 | **本地拼音通讯录** | 读信自动收集往来地址，写信 To/Cc 支持姓名、邮箱、全拼、拼音首字母与工号补全，数据仅保存在本机 SQLite |
 | **信使互动与扩展能力** | 顶栏可召唤互动鲸鱼娘「信使」一键查新信；支持 8 种界面语言、13 套风格 × 8 套字体、进程内 `emailTasks` 订阅与可选「邮件任务」（默认关闭） |
 
-<details>
-<summary>查看工作台实景截图（信桌航空信叠卡）</summary>
+## 界面与风格预览
 
-![dsh-email 信桌工作台示例](https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/docs/assets/intro/screen-zh.webp)
+以下 9 张实机截屏均采自 DSH Web 本地受控 IMAP/SMTP 验证环境（覆盖「信桌」叠卡、3D 翻面、经典三栏、自动识服、审批规则、SQLite 拼音补全与多套焕新主题，使用脱敏示例数据），点击查看大图。
 
-截图来自 Harness Web `0.2.2-rc.3` 中运行的 `dsh-email 0.32.0`（信桌分拣台 + 默认幼圆等宽字体，使用受控示例数据）。
-
-</details>
+<table>
+<tr>
+  <th>「信桌」航空书信叠卡（晴空水晶）</th>
+  <th>3D 翻面直视原始信封头（Headers）</th>
+  <th>经典「三栏」目录 · 追踪拦截 · 内嵌图表</th>
+</tr>
+<tr>
+  <td width="33%"><a href="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-desk-frutiger-zh.webp"><img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-desk-frutiger-zh.webp" alt="dsh-email 信桌航空书信叠卡工作台，晴空水晶主题" width="100%"></a></td>
+  <td width="33%"><a href="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-desk-flipped-zh.webp"><img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-desk-flipped-zh.webp" alt="dsh-email 信桌卡片 3D 翻面查看原始信封头与 MIME 协议元数据" width="100%"></a></td>
+  <td width="33%"><a href="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-threepane-imap-zh.webp"><img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-threepane-imap-zh.webp" alt="dsh-email 经典三栏视图，含层级文件夹未读角标、外链追踪图拦截横幅与离线内嵌柱状图" width="100%"></a></td>
+</tr>
+<tr>
+  <th>全协议多账号与 6 层零凭据自动识服</th>
+  <th>收件人禁止优先规则与发信审批边界</th>
+  <th>本地 SQLite 拼音 / 首字母 / 工号补全</th>
+</tr>
+<tr>
+  <td width="33%"><a href="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-accounts-autodiscover-zh.webp"><img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-accounts-autodiscover-zh.webp" alt="dsh-email 邮箱账号面板，支持多账号管理、腾讯企业邮与 Gmail OAuth、按域名一键自动识别与测试连接" width="100%"></a></td>
+  <td width="33%"><a href="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-policy-approval-zh.webp"><img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-policy-approval-zh.webp" alt="dsh-email 收件人规则配置页，支持可信与禁止域名/地址列表及免发送模拟检查" width="100%"></a></td>
+  <td width="33%"><a href="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-compose-pinyin-zh.webp"><img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-compose-pinyin-zh.webp" alt="dsh-email 写邮件弹窗，键入拼音首字母实时补全本地 SQLite 通讯录中的联系人与工号邮箱" width="100%"></a></td>
+</tr>
+<tr>
+  <th>主题风格：晴空薄荷（Airy Mint）</th>
+  <th>主题风格：宋韵朱砂（Songhui）</th>
+  <th>主题风格：工程晒图（Blueprint）</th>
+</tr>
+<tr>
+  <td width="33%"><a href="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-skin-mint-zh.webp"><img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-skin-mint-zh.webp" alt="dsh-email 晴空薄荷主题与专属字体实机效果" width="100%"></a></td>
+  <td width="33%"><a href="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-skin-songhui-zh.webp"><img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-skin-songhui-zh.webp" alt="dsh-email 宋韵朱砂主题与专属字体实机效果" width="100%"></a></td>
+  <td width="33%"><a href="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-skin-blueprint-zh.webp"><img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-email/main/assets/gallery/v100-skin-blueprint-zh.webp" alt="dsh-email 工程晒图主题与专属等宽字体实机效果" width="100%"></a></td>
+</tr>
+</table>
 
 ## 安装
 
