@@ -1,4 +1,3 @@
-/** Outgoing-mail approval is independent of tool execution. */
 import type { EmailRuntime } from './runtime.js';
 import type { EmailService } from './mail-service.js';
 import { type FolderMutationSnapshot } from './imap-folders.js';

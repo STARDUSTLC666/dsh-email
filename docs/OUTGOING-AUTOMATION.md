@@ -10,7 +10,7 @@
 
 HTML 支持段落、链接、列表、表格与常用内联文字/边框/间距样式。脚本、事件、表单、危险链接、远程图片和 CSS URL 不会发出；预览通过惰性结构化节点显示，不执行 HTML。发出的邮件为纯文本 + HTML 的 MIME 替代正文。回复保留原邮件线程关联；转发保留相关引用，不强制伪装成原线程回复。
 
-**内联图片（cid）**：`<img src="cid:文件名">` 只有在同一次调用把该文件放进了 `attachments` 时才会保留，发信时它成为标准 `multipart/related` 内联图（`Content-ID`），收件人看到图而不是被裁掉的破图；引用不存在的文件、`imgN` 越界、`data:`、`file:` 或远程地址一律降级为 `alt` 文本，不会因为 HTML 里多写一行就允许任意外部资源。只有光栅图（PNG / JPEG / GIF / WebP，按文件头判断）能内联，`.svg` / `.html` 这类附件即使写进 `cid:` 也只会留下 `alt` 文本；被引用的附件同时标 `Content-Disposition: inline`，避免客户端把它重复列进附件栏。`img` 没写 `alt` 时用附件文件名兜底；整封信只有图片、没给 `text` 时，纯文本部分自动填 `[文件名]`，不会发出空正文。这条能力只覆盖 `email_send`；`email_draft`（本地草稿，人工在草稿页预览后发送）暂不接 cid。示例：
+**内联图片（cid）**：`<img src="cid:文件名">` 只有在同一次调用把该文件放进了 `attachments` 时才会保留，发信时它成为标准 `multipart/related` 内联图（`Content-ID`），收件人看到图而不是被裁掉的破图；引用不存在的文件、`imgN` 越界、`data:`、`file:` 或远程地址一律降级为 `alt` 文本，不会因为 HTML 里多写一行就允许任意外部资源。只有光栅图（PNG / JPEG / GIF / WebP，按文件头判断，单张不超过 2 MiB）能内联，`.svg` / `.html` 这类附件即使写进 `cid:` 也只会留下 `alt` 文本；被引用的附件同时标 `Content-Disposition: inline`，避免客户端把它重复列进附件栏。`img` 没写 `alt` 时用附件文件名兜底；整封信只有图片、没给 `text` 时，纯文本部分自动填 `[文件名]`，不会发出空正文。这条能力只覆盖 `email_send`；`email_draft`（本地草稿，人工在草稿页预览后发送）暂不接 cid。示例：
 
 ```json
 {"to":"team@example.test","subject":"【报告】周报","text":"见下图","html":"<p>见下图</p><img src=\"cid:趋势.png\" alt=\"闭环率趋势\" width=\"520\" height=\"280\">","attachments":["D:/report/趋势.png"]}

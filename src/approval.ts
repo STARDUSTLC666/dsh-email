@@ -1,6 +1,7 @@
 /** Outgoing-mail approval is independent of tool execution. */
+import { realpathSync } from 'node:fs'
+import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import type { EmailRuntime } from './runtime.js'
-import { isAbsolute, relative, resolve } from 'node:path'
 import type { EmailReplyArgs, EmailSendArgs } from './types.js'
 import { matchRecipients, parseRecipientPolicies } from './recipient-policy.js'
 import { createHash } from 'node:crypto'
@@ -47,6 +48,26 @@ interface ApprovalContext {
   get(name: 'approval'): {
     request(input: { agent?: unknown; toolName: string; callId?: string; reason: string; signal?: AbortSignal }): Promise<string>
   } | undefined
+}
+
+/** Check whether `targetPath` escapes `base`, including symlinks/junctions, without misclassifying `..foo.txt`. */
+function isOutsideWorkspace(base: string, targetPath: string): boolean {
+  const resolvedBase = resolve(base)
+  const resolvedTarget = resolve(resolvedBase, targetPath)
+  const escapes = (root: string, candidate: string): boolean => {
+    const rel = relative(root, candidate)
+    return rel === '..' || rel.startsWith('..' + sep) || isAbsolute(rel)
+  }
+  if (escapes(resolvedBase, resolvedTarget)) return true
+  try {
+    return escapes(realpathSync(resolvedBase), realpathSync(resolvedTarget))
+  } catch {
+    try {
+      return escapes(realpathSync(resolvedBase), resolve(realpathSync(dirname(resolvedTarget)), basename(resolvedTarget)))
+    } catch {
+      return false
+    }
+  }
 }
 
 export function installSendApproval(ctx: ApprovalContext, runtime: Runtime): void {
@@ -119,22 +140,24 @@ export function installSendApproval(ctx: ApprovalContext, runtime: Runtime): voi
     let reason: string
     if (exec.name === 'email_send') {
       const args = (exec.arguments ?? {}) as EmailSendArgs
-      const hasBodyFile = (typeof args.textFile === 'string' && args.textFile.trim() !== '')
-        || (typeof args.htmlFile === 'string' && args.htmlFile.trim() !== '')
-      if (!hasBodyFile && !(typeof args.text === 'string' && args.text.trim() !== '') && !(typeof args.html === 'string' && args.html.trim() !== ''))
-        return { kind: 'deny', reason: '邮件正文为空（text / html 都没有内容），未发送 / The message body is empty' }
+      const hasInlineText = typeof args.text === 'string' && args.text.trim() !== ''
+      const hasInlineHtml = typeof args.html === 'string' && args.html.trim() !== ''
+      // Only body files that will actually be read (when the corresponding inline field is empty)
+      // participate in the empty-body check and the approval disclosure.
+      const bodyFiles = [
+        !hasInlineText ? args.textFile : undefined,
+        !hasInlineHtml ? args.htmlFile : undefined,
+      ].filter((file): file is string => typeof file === 'string' && file.trim() !== '')
+      if (!hasInlineText && !hasInlineHtml && bodyFiles.length === 0)
+        return { kind: 'deny', reason: '邮件正文为空（text / html / textFile / htmlFile 都没有内容），未发送 / The message body is empty' }
       const attachCount = Array.isArray(args.attachments) ? args.attachments.length : 0
-      const bodyFiles = [args.textFile, args.htmlFile].filter((file): file is string => typeof file === 'string' && file.trim() !== '')
       reason = '发送邮件给 ' + args.to + (args.cc ? '，抄送 ' + args.cc : '') + '，主题「' + args.subject + '」' + (attachCount > 0 ? '，附件 ' + attachCount + ' 个' : '')
       if (bodyFiles.length > 0) {
         // The body is read from disk after the user approves, so the dialog has to say which
         // files it is about to trust — and flag paths outside the session workspace.
         const cwd = (exec as { agent?: { session?: { header?: { cwd?: string } } } }).agent?.session?.header?.cwd
         const base = typeof cwd === 'string' && cwd.trim() ? cwd : process.cwd()
-        const outside = bodyFiles.filter(file => {
-          const rel = relative(base, resolve(base, file.trim()))
-          return rel.startsWith('..') || isAbsolute(rel)
-        })
+        const outside = bodyFiles.filter(file => isOutsideWorkspace(base, file.trim()))
         reason += '，正文来自文件 ' + bodyFiles.map(file => file.trim()).join('、')
           + (outside.length > 0 ? '（会话工作区之外，请确认内容：' + outside.map(file => file.trim()).join('、') + '）' : '')
           + '；审批通过后才读取，期间文件可能被替换'

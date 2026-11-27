@@ -58,34 +58,35 @@ function attachmentPaths(value: unknown, exec?: unknown): string[] | undefined {
   return normalizeAttachmentPaths(value)?.map(path => resolve(base, path))
 }
 
-/** 正文文件的上限：净化器的 html 上限是 256 KiB，这里留一倍余量。 */
 /** Aligned with sanitizeOutgoingHtml()'s 256 KiB HTML cap. */
 const MAX_BODY_FILE_BYTES = 256 * 1024
 
 /**
- * 读 textFile / htmlFile：路径按会话工作区解析（与 attachments 同一口径）。
- * 打不开或超过上限就抛错——把「文件不存在」当成空正文，等于又回到空信静默发送的老问题。
- */
-/**
- * Read a body file for `email_send`. The cap matches sanitizeOutgoingHtml()'s 256 KiB so an
- * oversized file is refused before anything is parsed, streamed instead of buffered whole so a
- * pathological path cannot exhaust memory, and interrupted when the tool execution is cancelled.
+ * Read a body file (`textFile` / `htmlFile`) for `email_send`, resolved against the session
+ * workspace (same rule as `attachments`). Streamed with a hard 256 KiB cap, regular-file checks,
+ * UTF-8 validation, and `AbortSignal` support so pathological paths cannot block or exhaust memory.
  */
 async function readBodyFile(value: unknown, exec: unknown, label: string): Promise<string | undefined> {
-  if (typeof value !== 'string' || value.trim() === '') return undefined
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== 'string') throw new Error(label + ' 必须是文件路径字符串')
+  if (value.trim() === '') return undefined
+  const signal = executionSignal(exec)
+  signal?.throwIfAborted()
   const context = exec as { agent?: { session?: { header?: { cwd?: string } } } } | undefined
   const cwd = context?.agent?.session?.header?.cwd
   const base = typeof cwd === 'string' && cwd.trim() ? cwd : process.cwd()
   const path = resolve(base, value.trim())
-  const signal = executionSignal(exec)
   let handle: Awaited<ReturnType<typeof open>> | undefined
   try {
     // Check the path is a regular file before opening it: a FIFO, socket or device file would
     // block the read and never look at the abort signal.
     const info = await stat(path)
+    signal?.throwIfAborted()
     if (!info.isFile()) throw new Error('不是普通文件 / not a regular file')
     handle = await open(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0))
+    signal?.throwIfAborted()
     const opened = await handle.stat()
+    signal?.throwIfAborted()
     if (!opened.isFile()) throw new Error('不是普通文件 / not a regular file')
     if (opened.size > MAX_BODY_FILE_BYTES) throw new Error('文件超过 256 KiB / larger than 256 KiB')
     const chunks: Buffer[] = []
@@ -108,7 +109,7 @@ async function readBodyFile(value: unknown, exec: unknown, label: string): Promi
       throw new Error('不是 UTF-8 文本 / not UTF-8 text')
     }
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') throw error
+    if (signal?.aborted || (error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError'))) throw error
     throw new Error(label + ' 读取失败：' + path + '（' + (error instanceof Error ? error.message : String(error)) + '）')
   } finally {
     await handle?.close().catch(() => {})

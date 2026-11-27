@@ -1,5 +1,27 @@
 # 更新记录
 
+## 0.35.0 (2026-11-27)
+
+- **`email_send` 空正文拦截与审批前预检（合入 #66、#68）**：
+  - `email_send` 未提供任何正文（`text` / `html` / `textFile` / `htmlFile` 全为空或空白）时，在发信审批弹窗弹出前与工具执行层均直接拒绝，不再弹出无意义的发信确认框，也不会静默发出空信。
+- **`email_send` 支持 `cid:` 内联光栅图片（合入 #66 并加固）**：
+  - 允许通过 `<img src="cid:文件名">` 或 `<img src="cid:imgN">` 引用同一次调用中作为 `attachments` 传入的光栅图片（按文件头校验 PNG / JPEG / GIF / WebP，单张不超过 2 MiB），生成 `multipart/related` 与 `Content-Disposition: inline` 内联附件；非光栅附件（`.svg` / `.html` / `.txt` 等）仍保持普通附件且正文引用降级为 `alt` 文本。
+  - 修复非光栅附件排在图片附件前面时的下标错位缺陷，确保 `imgN` 与原始 `attachments` 严格 1:1 对应；无 `alt` 或纯图正文自动补充 `[文件名]` / 文本兜底。当前能力覆盖 `email_send`（IMAP/SMTP）。
+- **`email_send` 支持从本地文件读取长正文 `textFile` / `htmlFile`（合入 #67 并加固）**：
+  - 支持将长正文写入 UTF-8 普通文件（单文件上限 256 KiB，与 HTML 净化器对齐），按会话工作区解析相对路径，显式 `text` / `html` 参数优先。
+  - 采用非阻塞句柄打开、`fstat` 普通文件校验、64 KiB 分块流式读取与硬字节上限、NUL/非法 UTF-8 拒绝及全链路 `AbortSignal` 取消支持（含 `TimeoutError` / 自定义取消原因透传）。
+  - 审批弹窗明确展示实际会读取的 `textFile` / `htmlFile` 路径与 TOCTOU 提示，并通过精确路径包含与 `realpath` 符号链接解析对会话工作区之外的文件路径给出显式警示。
+
+- **`email_send` Empty-Body Guard & Pre-Approval Check (Merges #66, #68)**:
+  - Rejects `email_send` calls carrying no body across `text`, `html`, `textFile`, and `htmlFile` both before requesting user approval (avoiding pointless confirmation prompts) and inside tool execution (preventing silent blank emails).
+- **`email_send` Inline Raster Images via `cid:` (Merges #66 + Hardening)**:
+  - Supports `<img src="cid:filename">` and `<img src="cid:imgN">` referencing raster attachments passed in the same call (header-sniffed PNG / JPEG / GIF / WebP up to 2 MiB each) as `multipart/related` parts with `Content-Disposition: inline`; non-raster attachments (`.svg`, `.html`, `.txt`, etc.) remain ordinary attachments and degrade to `alt` text.
+  - Preserves original attachment indices with empty slots for non-raster files so preceding non-image attachments never shift `imgN` indices or get tagged inline; adds filename `alt` and plain-text fallbacks for image-only HTML. Applies to `email_send` (IMAP/SMTP).
+- **`email_send` Body Files `textFile` / `htmlFile` (Merges #67 + Hardening)**:
+  - Reads long bodies from UTF-8 regular files (capped at 256 KiB to match `sanitizeOutgoingHtml`), resolved against the session workspace, with explicit inline `text`/`html` taking precedence.
+  - Enforces non-blocking open, `fstat` regular-file verification, 64 KiB chunked streaming with a hard 256 KiB cap, NUL/invalid-UTF-8 rejection, and full `AbortSignal` propagation (including timeouts and custom abort reasons).
+  - Discloses active body file paths and TOCTOU semantics in the approval prompt, flagging paths outside the session workspace (including symlink/junction escapes) without false positives on leading-dot filenames.
+
 ## 0.34.1 (2026-11-26)
 
 - **代理通道加固（#64 补丁）**：

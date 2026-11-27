@@ -1,9 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { buildEmailTools } from '../lib/tools.js'
+import { installSendApproval } from '../lib/approval.js'
 
 function toolFor(sent) {
   const runtime = {
@@ -138,4 +139,122 @@ test('no inline body and no body file is still refused', async t => {
     /请填写 text\/html 正文，或用 textFile\/htmlFile 指向正文文件/,
   )
   assert.equal(sent.length, 0)
+})
+
+test('NUL bytes and custom abort reasons are handled properly', async t => {
+  const dir = await workspace(t)
+  await writeFile(join(dir, 'nul.txt'), Buffer.from('hello\0world'))
+  const sent = [], tool = toolFor(sent)
+  await assert.rejects(
+    () => tool.execute({ to: 'a@example.test', subject: 'NUL', textFile: join(dir, 'nul.txt') }, {}),
+    /UTF-8 文本/,
+  )
+  const controller = new AbortController()
+  controller.abort(new Error('custom-cancel-reason'))
+  await assert.rejects(
+    () => tool.execute({ to: 'a@example.test', subject: 'Abort', textFile: join(dir, 'missing-never-touched.txt') }, { signal: controller.signal }),
+    /custom-cancel-reason/,
+  )
+  assert.equal(sent.length, 0)
+})
+
+test('approval dialog lists active body files, flags outside/symlink escapes, and ignores ..foo false positives', async t => {
+  const root = await workspace(t)
+  const ws = join(root, 'ws')
+  const outsideDir = join(root, 'outside')
+  await mkdir(ws)
+  await mkdir(outsideDir)
+  await writeFile(join(ws, 'report.txt'), 'ok', 'utf8')
+  await writeFile(join(ws, '..notes.txt'), 'leading dots inside ws', 'utf8')
+  await writeFile(join(outsideDir, 'secret.env'), 'SECRET=1', 'utf8')
+  await symlink(outsideDir, join(ws, 'escape'), process.platform === 'win32' ? 'junction' : 'dir')
+
+  function askReason(args) {
+    let gate, captured = ''
+    const settings = { accounts: new Map([['work', { user: 'self@example.test' }]]), defaultAccount: 'work' }
+    const runtime = { getSettingsValue: () => ({ sendApproval: true }), getEffectiveSettings: () => settings, getPool: () => ({}), watch: async () => {} }
+    installSendApproval({
+      on(_event, fn) { gate = fn },
+      get() { return { request: async req => { captured = req.reason; return 'allowed-once' } } },
+    }, runtime)
+    return gate({ name: 'email_send', arguments: args, agent: { session: { header: { cwd: ws } } } }, async () => ({ kind: 'allow' }))
+      .then(decision => ({ decision, reason: captured }))
+  }
+
+  // Inside workspace (including filename starting with `..`): listed, NOT flagged as outside
+  const inside = await askReason({ to: 'a@example.test', subject: 'Inside', textFile: '..notes.txt' })
+  assert.equal(inside.decision.kind, 'allow')
+  assert.match(inside.reason, /正文来自文件 \.\.notes\.txt/)
+  assert.match(inside.reason, /审批通过后才读取/)
+  assert.doesNotMatch(inside.reason, /会话工作区之外/)
+
+  // Explicit outside path: flagged as outside workspace
+  const outside = await askReason({ to: 'a@example.test', subject: 'Outside', textFile: '../outside/secret.env' })
+  assert.equal(outside.decision.kind, 'allow')
+  assert.match(outside.reason, /会话工作区之外.*secret\.env/)
+
+  // Symlink / junction inside workspace pointing outside: realpath catches the escape
+  const viaLink = await askReason({ to: 'a@example.test', subject: 'Symlink', htmlFile: 'escape/secret.env' })
+  assert.equal(viaLink.decision.kind, 'allow')
+  assert.match(viaLink.reason, /会话工作区之外.*escape\/secret\.env/)
+
+  // When inline text wins over textFile, unused textFile is not disclosed as read
+  const overridden = await askReason({ to: 'a@example.test', subject: 'Inline wins', text: 'inline', textFile: '../outside/secret.env' })
+  assert.equal(overridden.decision.kind, 'allow')
+  assert.doesNotMatch(overridden.reason, /正文来自文件/)
+})
+
+test('end-to-end: approval gate + htmlFile + non-raster prefix + inline PNG over real local SMTP', async t => {
+  const { simpleParser } = await import('mailparser')
+  const { EmailPool, resolveEmailSettings } = await import('../lib/index.js')
+  const { createSmtpPeer } = await import('./helpers/smtp-peer.mjs')
+  const smtp = await createSmtpPeer()
+  t.after(() => smtp.close())
+  const ws = await workspace(t)
+  const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c6300010000050001', 'hex')
+  await writeFile(join(ws, 'report.html'), '<h2>Weekly</h2><img src="cid:chart.png" width="400">', 'utf8')
+  await writeFile(join(ws, 'summary.txt'), 'attached summary', 'utf8')
+  await writeFile(join(ws, 'chart.png'), PNG)
+  const settings = resolveEmailSettings({
+    user: 'me@example.test',
+    password: 'synthetic-smtp-fixture',
+    proxy: 'direct',
+    imap: { host: '127.0.0.1', port: 993, secure: true },
+    smtp: { host: '127.0.0.1', port: smtp.port, secure: false },
+  })
+  const pool = new EmailPool(settings)
+  t.after(() => pool.dispose())
+  const runtime = {
+    getPool: () => pool,
+    getEffectiveSettings: () => settings,
+    getSettingsValue: () => ({ sendApproval: true }),
+    watch: async () => {},
+  }
+  const sendTool = buildEmailTools(runtime).find(def => def.name === 'email_send')
+  let gate, reason = ''
+  installSendApproval({
+    on(_event, fn) { gate = fn },
+    get() { return { request: async req => { reason = req.reason; return 'allowed-once' } } },
+  }, runtime)
+  const exec = {
+    name: 'email_send',
+    arguments: { to: 'team@example.test', subject: 'Weekly Report', htmlFile: 'report.html', attachments: ['summary.txt', 'chart.png'] },
+    agent: { session: { header: { cwd: ws } } },
+  }
+  const decision = await gate(exec, async () => {
+    await sendTool.execute(exec.arguments, exec)
+    return { kind: 'allow' }
+  })
+  assert.equal(decision.kind, 'allow')
+  assert.match(reason, /正文来自文件 report\.html/)
+  assert.doesNotMatch(reason, /会话工作区之外/)
+  assert.equal(smtp.messages.length, 1)
+  const parsed = await simpleParser(smtp.messages[0], { keepCidLinks: true })
+  assert.match(parsed.html, /<h2>Weekly<\/h2>/)
+  assert.match(parsed.html, /src="cid:img2"/)
+  const inlineImg = parsed.attachments.find(a => a.filename === 'chart.png')
+  const plainFile = parsed.attachments.find(a => a.filename === 'summary.txt')
+  assert.equal(inlineImg.cid, 'img2')
+  assert.equal(inlineImg.contentDisposition, 'inline')
+  assert.equal(plainFile.cid, undefined)
 })
