@@ -25,8 +25,8 @@ function toolFor(sent) {
 
 test('email_send refuses a call with neither text nor html instead of delivering a blank message', async () => {
   const sent = [], tool = toolFor(sent)
-  await assert.rejects(() => tool.execute({ to: 'a@example.test', subject: 'Blank' }, {}), /请填写 text 或 html 正文/)
-  await assert.rejects(() => tool.execute({ to: 'a@example.test', subject: 'Blank', text: '   ', html: '' }, {}), /请填写 text 或 html 正文/)
+  await assert.rejects(() => tool.execute({ to: 'a@example.test', subject: 'Blank' }, {}), /请填写 text\/html 正文，或用 textFile\/htmlFile 指向正文文件/)
+  await assert.rejects(() => tool.execute({ to: 'a@example.test', subject: 'Blank', text: '   ', html: '' }, {}), /请填写 text\/html 正文，或用 textFile\/htmlFile 指向正文文件/)
   assert.equal(sent.length, 0)
 })
 

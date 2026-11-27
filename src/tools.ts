@@ -1,4 +1,6 @@
 import { resolve } from 'node:path'
+import { constants } from 'node:fs'
+import { open, stat } from 'node:fs/promises'
 import { clampInt, PROVIDER_PRESETS } from './config.js'
 import { messageOf } from './mail-client.js'
 import { NOT_LOGGED_IN_MESSAGE, oauth2StateOf } from './oauth2.js'
@@ -54,6 +56,63 @@ function attachmentPaths(value: unknown, exec?: unknown): string[] | undefined {
   const cwd = context?.agent?.session?.header?.cwd
   const base = typeof cwd === 'string' && cwd.trim() ? cwd : process.cwd()
   return normalizeAttachmentPaths(value)?.map(path => resolve(base, path))
+}
+
+/** 正文文件的上限：净化器的 html 上限是 256 KiB，这里留一倍余量。 */
+/** Aligned with sanitizeOutgoingHtml()'s 256 KiB HTML cap. */
+const MAX_BODY_FILE_BYTES = 256 * 1024
+
+/**
+ * 读 textFile / htmlFile：路径按会话工作区解析（与 attachments 同一口径）。
+ * 打不开或超过上限就抛错——把「文件不存在」当成空正文，等于又回到空信静默发送的老问题。
+ */
+/**
+ * Read a body file for `email_send`. The cap matches sanitizeOutgoingHtml()'s 256 KiB so an
+ * oversized file is refused before anything is parsed, streamed instead of buffered whole so a
+ * pathological path cannot exhaust memory, and interrupted when the tool execution is cancelled.
+ */
+async function readBodyFile(value: unknown, exec: unknown, label: string): Promise<string | undefined> {
+  if (typeof value !== 'string' || value.trim() === '') return undefined
+  const context = exec as { agent?: { session?: { header?: { cwd?: string } } } } | undefined
+  const cwd = context?.agent?.session?.header?.cwd
+  const base = typeof cwd === 'string' && cwd.trim() ? cwd : process.cwd()
+  const path = resolve(base, value.trim())
+  const signal = executionSignal(exec)
+  let handle: Awaited<ReturnType<typeof open>> | undefined
+  try {
+    // Check the path is a regular file before opening it: a FIFO, socket or device file would
+    // block the read and never look at the abort signal.
+    const info = await stat(path)
+    if (!info.isFile()) throw new Error('不是普通文件 / not a regular file')
+    handle = await open(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0))
+    const opened = await handle.stat()
+    if (!opened.isFile()) throw new Error('不是普通文件 / not a regular file')
+    if (opened.size > MAX_BODY_FILE_BYTES) throw new Error('文件超过 256 KiB / larger than 256 KiB')
+    const chunks: Buffer[] = []
+    let total = 0
+    for (;;) {
+      signal?.throwIfAborted()
+      const chunk = Buffer.allocUnsafe(64 * 1024)
+      const { bytesRead } = await handle.read(chunk, 0, chunk.byteLength, null)
+      if (bytesRead === 0) break
+      total += bytesRead
+      // The size may grow between fstat and the read; the streaming total is the hard limit.
+      if (total > MAX_BODY_FILE_BYTES) throw new Error('文件超过 256 KiB / larger than 256 KiB')
+      chunks.push(chunk.subarray(0, bytesRead))
+    }
+    const bytes = Buffer.concat(chunks)
+    if (bytes.includes(0)) throw new Error('不是 UTF-8 文本 / not UTF-8 text')
+    try {
+      return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+    } catch {
+      throw new Error('不是 UTF-8 文本 / not UTF-8 text')
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') throw error
+    throw new Error(label + ' 读取失败：' + path + '（' + (error instanceof Error ? error.message : String(error)) + '）')
+  } finally {
+    await handle?.close().catch(() => {})
+  }
 }
 
 export interface EmailToolDefinition {
@@ -175,17 +234,25 @@ export function buildEmailTools(runtime: Pick<EmailRuntime, 'getPool' | 'getEffe
         const args = rawArgs as EmailSendArgs
         if (typeof args.to !== 'string' || args.to.trim() === '') throw new Error('to 不能为空')
         if (typeof args.subject !== 'string' || args.subject.trim() === '') throw new Error('subject 不能为空')
-        // Mirrors email_reply: a send with neither text nor html would succeed and deliver a blank message.
-        if (!(typeof args.text === 'string' && args.text.trim()) && !(typeof args.html === 'string' && args.html.trim())) throw new Error('请填写 text 或 html 正文')
+        // 显式参数优先；参数没给（或只有空白）时才读文件，两处都空就是真正的空正文。
+        const text = typeof args.text === 'string' && args.text.trim() !== ''
+          ? args.text
+          : await readBodyFile(args.textFile, exec, 'textFile')
+        const html = typeof args.html === 'string' && args.html.trim() !== ''
+          ? args.html
+          : await readBodyFile(args.htmlFile, exec, 'htmlFile')
+        if (!(typeof text === 'string' && text.trim() !== '') && !(typeof html === 'string' && html.trim() !== '')) {
+          throw new Error('请填写 text/html 正文，或用 textFile/htmlFile 指向正文文件')
+        }
         return await getPool().send(
           args.account,
           args.to.trim(),
           args.subject.trim(),
-          typeof args.text === 'string' ? args.text : undefined,
+          typeof text === 'string' ? text : undefined,
           typeof args.cc === 'string' && args.cc.trim() !== '' ? args.cc.trim() : undefined,
           attachmentPaths(args.attachments, exec),
           executionSignal(exec),
-          args.html,
+          typeof html === 'string' ? html : undefined,
         )
       }
     },
