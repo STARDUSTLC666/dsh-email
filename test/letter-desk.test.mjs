@@ -79,8 +79,8 @@ function createStatefulHarness({
       truncated: false,
     },
   },
+  storage = new Map(),
 } = {}) {
-  const storage = new Map()
   const focusLog = []
   const viewTransitions = []
   const rpcLog = []
@@ -706,4 +706,25 @@ test('列表 (list) view keeps one-line rows and reads a message in place instea
   back.props.onClick()
   await h.flush()
   assert.equal(h.findAll(n => n.props?.['data-view'] === 'list')[0].props['data-reading'], false)
+})
+
+test('视图选择会被记住：重开工作台直接回到上次的列表视图', async () => {
+  const storage = new Map()
+  const first = createStatefulHarness({ storage })
+  await first.flush()
+  assert.equal(first.tree.props['data-email-view'], 'desk')
+
+  first.findAll(n => n.props?.['data-view-option'] === 'list')[0].props.onClick()
+  await first.flush()
+  assert.equal(storage.get('dsh-email.view-mode'), 'list')
+
+  const reopened = createStatefulHarness({ storage })
+  await reopened.flush()
+  assert.equal(reopened.tree.props['data-email-view'], 'list')
+  assert.equal(reopened.findAll(n => n.props?.['data-view-option'] === 'list')[0].props['aria-pressed'], true)
+
+  // A stale or hand-edited value falls back to the default desk without breaking the workbench.
+  const junk = createStatefulHarness({ storage: new Map([['dsh-email.view-mode', 'unknown']]) })
+  await junk.flush()
+  assert.equal(junk.tree.props['data-email-view'], 'desk')
 })

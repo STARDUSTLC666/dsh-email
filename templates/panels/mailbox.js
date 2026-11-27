@@ -1,5 +1,24 @@
 const { mailbox: mailCss, ui: uiCss, drafts: draftCss, settings: settingsCss, clsx } = emailUi;
 
+// Remember the mailbox mode the user picked. A fresh install still lands on
+// 信桌 (Desk); the stored value is validated so an older or hand-edited entry
+// can never leave the workbench in an unknown layout.
+const VIEW_MODE_KEY = 'dsh-email.view-mode';
+const VIEW_MODES = ['desk', '3pane', 'list'];
+function storedViewMode() {
+  try {
+    const value = window.localStorage?.getItem(VIEW_MODE_KEY);
+    return VIEW_MODES.includes(value) ? value : 'desk';
+  } catch {
+    return 'desk';
+  }
+}
+function rememberViewMode(mode) {
+  try {
+    window.localStorage?.setItem(VIEW_MODE_KEY, mode);
+  } catch { /* storage can be unavailable or full; the view still switches */ }
+}
+
 function moveMailSpotlight(event) {
   if (event.pointerType === 'touch') return;
   const row = event.target?.closest?.('[data-dsh-row]');
@@ -1053,7 +1072,7 @@ function MailStationerySheet({
 }
 
 function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
-  const [viewMode, setViewMode] = useState('desk');
+  const [viewMode, setViewMode] = useState(storedViewMode);
   const [deckIndex, setDeckIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -1368,6 +1387,7 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
       }
       setSheetOpen(false);
       setViewMode(nextMode);
+      rememberViewMode(nextMode);
     });
   }
 
