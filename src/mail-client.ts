@@ -15,6 +15,7 @@ import { getFreshAccessToken, OAuth2Error } from './oauth2.js'
 import { redactCredentials } from './credential-redaction.js'
 export { redactCredentials } from './credential-redaction.js'
 import { prepareMailBody } from './outgoing-body.js'
+import { rasterMime } from './rich-body.js'
 import { escapeMailHtml } from './mail-html.js'
 import { attribution, replyDate, replyWords, type ReplyOptions } from './reply-locale.js'
 import { assertRecipientsAllowed } from './recipient-policy.js'
@@ -1493,12 +1494,27 @@ export class EmailPool {
     const name = this.resolveName(accountName)
     const cfg = this.account(name)
     const attachments = await readSmtpAttachments(attachmentPaths ?? [], this.settings.maxAttachmentBytes, signal)
+    // Only attachments that really are raster images may be inlined: otherwise a caller could put
+    // an .svg / .html / .txt in `attachments`, reference it with <img src="cid:..."> and bypass the
+    // "only raster formats are displayable" boundary that rich-body.ts enforces on the way in.
+    const inlinable = attachments
+      .filter(file => rasterMime(file.content) !== undefined)
+      .map(file => file.filename)
+    const body = prepareMailBody(text, html, { cids: inlinable })
+    // Tag only the files the sanitized HTML really references, so cid:imgN always resolves.
+    for (const [index, file] of attachments.entries()) {
+      if (!body.html?.includes('src="cid:img' + (index + 1) + '"')) continue
+      file.cid = 'img' + (index + 1)
+      // Outlook / Apple Mail / QQ list an inline part in the attachment bar again unless the part
+      // says `inline` explicitly.
+      file.contentDisposition = 'inline'
+    }
     const info = await this.sendMail(name, cfg, {
       from: senderOf(cfg),
       to,
       cc,
       subject,
-      ...prepareMailBody(text, html),
+      ...body,
       disableFileAccess: true, disableUrlAccess: true,
       attachments,
     }, signal)
@@ -1611,9 +1627,9 @@ export async function validateAttachmentPaths(paths: string[], maxBytes: number,
 }
 
 /** Hand SMTP stable bytes so MIME processing never needs file or URL access. */
-async function readSmtpAttachments(paths: string[], maxBytes: number, signal?: AbortSignal): Promise<Array<{ filename: string; content: Buffer }>> {
+async function readSmtpAttachments(paths: string[], maxBytes: number, signal?: AbortSignal): Promise<Array<{ filename: string; content: Buffer; cid?: string; contentDisposition?: 'inline' }>> {
   const files = await validateAttachmentPaths(paths, maxBytes, signal)
-  const attachments: Array<{ filename: string; content: Buffer }> = []
+  const attachments: Array<{ filename: string; content: Buffer; cid?: string; contentDisposition?: 'inline' }> = []
   let remaining = maxBytes
   for (const { path } of files) {
     signal?.throwIfAborted()
