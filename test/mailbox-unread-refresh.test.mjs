@@ -41,6 +41,7 @@ function workbench({ refuseRead = false } = {}) {
     senderLabelOf: () => 'Fixture sender',
     formatAddressList: list => (list || []).map(item => item.address).join(', '),
     clsx: (...values) => values.filter(Boolean).join(' '), mailCss: css, uiCss: css, moveMailSpotlight() {},
+    storedViewMode: () => 'desk', rememberViewMode() {},
     MailFolderRail: 'MailFolderRail', MailMessage: 'MailMessage', MailWorkflowBar: 'MailWorkflowBar',
     MailTrashDialog: 'MailTrashDialog', MailFoldersDialog: 'MailFoldersDialog',
     MailDeskRibbon: 'MailDeskRibbon', MailLetterStackCard: 'MailLetterStackCard',

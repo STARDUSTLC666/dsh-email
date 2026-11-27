@@ -15,6 +15,33 @@
   grid-template-columns: var(--mail-rail-width, 224px) 9px var(--mail-list-width, 336px) 9px minmax(0, 1fr);
 }
 
+/* Gmail-style list view: the folder rail stays, the list takes the remaining
+   width as one-line rows, and opening a message replaces the list instead of
+   adding a third pane. */
+.columns[data-view="list"] {
+  grid-template-columns: var(--mail-rail-width, 224px) 9px minmax(0, 1fr);
+}
+
+.columns[data-view="list"] .listSplit {
+  display: none;
+}
+
+.columns[data-view="list"] .list,
+.columns[data-view="list"] .reader {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.columns[data-view="list"][data-reading="false"] .reader,
+.columns[data-view="list"][data-reading="true"] .list {
+  display: none;
+}
+
+.columns[data-view="list"] .readerBack {
+  display: flex;
+  align-items: center;
+}
+
 .workflow {
   flex: none;
   border-block-end: 0.5px solid var(--dsw-alias-border-l2);
@@ -437,6 +464,38 @@
 
 .messageRow[data-unread="false"] .subject {
   color: var(--dsw-alias-label-secondary);
+}
+
+/* One-line rows for the list view: sender, subject and time share a single line. */
+.columns[data-view="list"] .messageButtonCompact {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding-block: 5px;
+}
+
+.compactLine {
+  flex: 1;
+  gap: 8px;
+}
+
+.compactSender {
+  flex: 0 0 auto;
+  max-inline-size: 36%;
+}
+
+.compactSubject {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+.compactLine .timestamp {
+  flex: none;
+}
+
+/* Keep the subject readable once read; bold still marks unread mail. */
+.columns[data-view="list"] .messageRow[data-unread="false"] .subject {
+  color: var(--dsw-alias-label-primary);
 }
 
 .timestamp {

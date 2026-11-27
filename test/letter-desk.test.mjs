@@ -79,8 +79,8 @@ function createStatefulHarness({
       truncated: false,
     },
   },
+  storage = new Map(),
 } = {}) {
-  const storage = new Map()
   const focusLog = []
   const viewTransitions = []
   const rpcLog = []
@@ -657,4 +657,74 @@ test('Skipping all letters shows Desk Complete celebration card and CSS honors 3
   const layerPaperRe = new RegExp(`\\.${h.mailCss.letterCardLayer}>\\.${h.mailCss.letterPaper}\\{[^}]*height:100%`)
   assert.match(h.EMAIL_CSS, layerPaperRe, 'stacked background letter cards must stretch to 100% height to peek out cleanly')
   assert.match(h.EMAIL_CSS, /prefers-reduced-motion:\s*reduce/)
+})
+
+test('列表 (list) view keeps one-line rows and reads a message in place instead of a third pane', async () => {
+  const h = createStatefulHarness()
+  await h.flush()
+
+  const toList = h.findAll(n => n.props?.['data-view-option'] === 'list')[0]
+  assert.ok(toList, 'the segmented toggle offers a 列表 option')
+  toList.props.onClick()
+  await h.flush()
+
+  assert.equal(h.tree.props['data-email-view'], 'list')
+  const columns = h.findAll(n => n.props?.['data-view'] === 'list')[0]
+  assert.ok(columns, 'list view reuses the mailbox columns layout')
+  assert.equal(columns.props['data-reading'], false)
+  assert.equal(h.findAll(n => n.type === 'aside').length, 1, 'the folder rail stays in list view')
+  assert.match(
+    h.EMAIL_CSS,
+    new RegExp(`\\.${h.mailCss.columns}\\[data-view=list\\] \\.${h.mailCss.listSplit}\\{display:none\\}`),
+    'the list/reader splitter is removed from the one-pane layout',
+  )
+
+  // One compact line per row: sender, subject and timestamp share the same line.
+  const rows = h.findAll(n => Object.hasOwn(n.props || {}, 'data-dsh-row'))
+  assert.equal(rows.length, 3)
+  assert.ok(rows.every(row => h.findAll(n => typeof n.props?.className === 'string'
+    && n.props.className.split(' ').includes(h.mailCss.compactLine), row).length === 1))
+  const firstLine = h.findAll(n => typeof n.props?.className === 'string'
+    && n.props.className.split(' ').includes(h.mailCss.compactLine), rows[0])[0]
+  assert.match(h.textOf(firstLine), /Alice Lin/)
+  assert.match(h.textOf(firstLine), /第一封：Q4 设计评审纪要/)
+
+  // Opening a message hides the list and shows the reader in the same column.
+  const firstButton = h.findAll(n => n.type === 'button'
+    && typeof n.props?.className === 'string'
+    && n.props.className.split(' ').includes(h.mailCss.messageButton), rows[0])[0]
+  assert.ok(firstButton)
+  firstButton.props.onClick({ currentTarget: firstButton.dom })
+  await h.flush()
+
+  assert.equal(h.findAll(n => n.props?.['data-view'] === 'list')[0].props['data-reading'], true)
+  assert.match(h.textOf(h.tree), /完整正文：实体书信分拣桌已就绪/)
+  assert.match(h.EMAIL_CSS, /\[data-view=list\]\[data-reading=false\]/)
+
+  const back = h.findAll(n => n.type === 'button' && h.textOf(n).includes('返回邮件列表'))[0]
+  assert.ok(back, 'the in-place reader offers a way back to the list')
+  back.props.onClick()
+  await h.flush()
+  assert.equal(h.findAll(n => n.props?.['data-view'] === 'list')[0].props['data-reading'], false)
+})
+
+test('视图选择会被记住：重开工作台直接回到上次的列表视图', async () => {
+  const storage = new Map()
+  const first = createStatefulHarness({ storage })
+  await first.flush()
+  assert.equal(first.tree.props['data-email-view'], 'desk')
+
+  first.findAll(n => n.props?.['data-view-option'] === 'list')[0].props.onClick()
+  await first.flush()
+  assert.equal(storage.get('dsh-email.view-mode'), 'list')
+
+  const reopened = createStatefulHarness({ storage })
+  await reopened.flush()
+  assert.equal(reopened.tree.props['data-email-view'], 'list')
+  assert.equal(reopened.findAll(n => n.props?.['data-view-option'] === 'list')[0].props['aria-pressed'], true)
+
+  // A stale or hand-edited value falls back to the default desk without breaking the workbench.
+  const junk = createStatefulHarness({ storage: new Map([['dsh-email.view-mode', 'unknown']]) })
+  await junk.flush()
+  assert.equal(junk.tree.props['data-email-view'], 'desk')
 })

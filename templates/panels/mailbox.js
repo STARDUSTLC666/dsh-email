@@ -1,5 +1,24 @@
 const { mailbox: mailCss, ui: uiCss, drafts: draftCss, settings: settingsCss, clsx } = emailUi;
 
+// Remember the mailbox mode the user picked. A fresh install still lands on
+// 信桌 (Desk); the stored value is validated so an older or hand-edited entry
+// can never leave the workbench in an unknown layout.
+const VIEW_MODE_KEY = 'dsh-email.view-mode';
+const VIEW_MODES = ['desk', '3pane', 'list'];
+function storedViewMode() {
+  try {
+    const value = window.localStorage?.getItem(VIEW_MODE_KEY);
+    return VIEW_MODES.includes(value) ? value : 'desk';
+  } catch {
+    return 'desk';
+  }
+}
+function rememberViewMode(mode) {
+  try {
+    window.localStorage?.setItem(VIEW_MODE_KEY, mode);
+  } catch { /* storage can be unavailable or full; the view still switches */ }
+}
+
 function moveMailSpotlight(event) {
   if (event.pointerType === 'touch') return;
   const row = event.target?.closest?.('[data-dsh-row]');
@@ -666,7 +685,15 @@ function MailViewToggle({ viewMode, onChange, disabled }) {
       'data-view-option': '3pane',
       disabled,
       onClick: () => { if (viewMode !== '3pane') onChange('3pane'); },
-    }, h(W.Icon, { name: 'columns', size: 13 }), h('span', null, dt('三栏', '3-Pane'))));
+    }, h(W.Icon, { name: 'columns', size: 13 }), h('span', null, dt('三栏', '3-Pane'))),
+    h('button', {
+      type: 'button',
+      className: mailCss.viewToggleBtn,
+      'aria-pressed': viewMode === 'list',
+      'data-view-option': 'list',
+      disabled,
+      onClick: () => { if (viewMode !== 'list') onChange('list'); },
+    }, h(W.Icon, { name: 'list', size: 13 }), h('span', null, dt('列表', 'List'))));
 }
 
 function MailDeskRibbon({
@@ -1045,7 +1072,7 @@ function MailStationerySheet({
 }
 
 function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
-  const [viewMode, setViewMode] = useState('desk');
+  const [viewMode, setViewMode] = useState(storedViewMode);
   const [deckIndex, setDeckIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -1360,6 +1387,7 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
       }
       setSheetOpen(false);
       setViewMode(nextMode);
+      rememberViewMode(nextMode);
     });
   }
 
@@ -1720,6 +1748,7 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
   const threePaneView = h('div', {
     className: mailCss.columns,
     'data-reading': selected !== null,
+    'data-view': viewMode,
     style: { '--mail-rail-width': railSplit.size + 'px', '--mail-list-width': listSplit.size + 'px' },
   },
     h(MailFolderRail, { accounts, account, folder, folders, busy, loading: foldersLoading,
@@ -1752,20 +1781,30 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
           const subject = row.subject || dt('（无主题）','(No subject)');
           const from = who(row.from);
           const isSelected = selected === row.uid;
+          const compact = viewMode === 'list';
           return h('div', { key: row.uid, className: mailCss.messageRow, 'data-dsh-row': '', 'data-selected': isSelected, 'data-active': isSelected ? 'true' : 'false', 'data-unread': unseen },
             canTrash ? h(W.Checkbox, { hiddenLabel: true, label: dt('选择邮件：', 'Select message: ') + subject,
               checked: checked.includes(row.uid), disabled: busy || listLoading,
               onChange: value => setChecked(old => value ? [...old, row.uid] : old.filter(uid => uid !== row.uid)) }) : null,
             h('span', { className: 'dsh-pixel-cursor', 'aria-hidden': 'true' }, '▶'),
-            h(W.Button, { variant: 'ghost', className: mailCss.messageButton, disabled: busy, 'aria-pressed': isSelected,
+            h(W.Button, { variant: 'ghost', className: clsx(mailCss.messageButton, compact && mailCss.messageButtonCompact), disabled: busy, 'aria-pressed': isSelected,
               onClick: event => openMessage(row.uid, event.currentTarget) },
-              h('span', { className: mailCss.messageLine },
-                unseen ? h('span', { className: mailCss.unreadDot, role: 'img', 'aria-label': dt('未读','Unread') }) : null,
-                h('strong', { className: mailCss.sender, title: from }, senderLabelOf(row.from?.[0]) || from),
-                row.flagged ? h(W.Icon, { name: 'star', size: 13 }) : null,
-                h('time', { className: mailCss.timestamp, dateTime: row.date }, formatDate(row.date))),
-              h('span', { className: mailCss.messageLine }, h('span', { className: mailCss.subject, title: subject }, subject),
-                row.hasAttachments ? h(W.Icon, { name: 'clip', size: 13, role: 'img', 'aria-hidden': undefined, 'aria-label': dt('附件', 'Attachments') }) : null)),
+              compact
+                ? h('span', { className: clsx(mailCss.messageLine, mailCss.compactLine) },
+                    unseen ? h('span', { className: mailCss.unreadDot, role: 'img', 'aria-label': dt('未读','Unread') }) : null,
+                    row.flagged ? h(W.Icon, { name: 'star', size: 13 }) : null,
+                    h('strong', { className: clsx(mailCss.sender, mailCss.compactSender), title: from }, senderLabelOf(row.from?.[0]) || from),
+                    h('span', { className: clsx(mailCss.subject, mailCss.compactSubject), title: subject }, subject),
+                    row.hasAttachments ? h(W.Icon, { name: 'clip', size: 13, role: 'img', 'aria-hidden': undefined, 'aria-label': dt('附件', 'Attachments') }) : null,
+                    h('time', { className: mailCss.timestamp, dateTime: row.date }, formatDate(row.date)))
+                : h(React.Fragment, null,
+                    h('span', { className: mailCss.messageLine },
+                      unseen ? h('span', { className: mailCss.unreadDot, role: 'img', 'aria-label': dt('未读','Unread') }) : null,
+                      h('strong', { className: mailCss.sender, title: from }, senderLabelOf(row.from?.[0]) || from),
+                      row.flagged ? h(W.Icon, { name: 'star', size: 13 }) : null,
+                      h('time', { className: mailCss.timestamp, dateTime: row.date }, formatDate(row.date))),
+                    h('span', { className: mailCss.messageLine }, h('span', { className: mailCss.subject, title: subject }, subject),
+                      row.hasAttachments ? h(W.Icon, { name: 'clip', size: 13, role: 'img', 'aria-hidden': undefined, 'aria-label': dt('附件', 'Attachments') }) : null))),
             h('div', { className: clsx('dsh-row-actions', mailCss.rowActions) },
               row.flagsSupported !== false ? h(React.Fragment, null,
                 h(W.IconButton, {
@@ -1817,7 +1856,7 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
           h('span', { className: mailCss.listNote }, dt('第 ', 'Page ') + (Math.floor(offset / pageLimit) + 1) + dt(' 页', '')),
           h(W.Button, { icon: 'right', disabled: loading || busy || !hasMore, onClick: () => setOffset(n => n + pageLimit) }, dt('下一页', 'Next page'))),
         result?.headerScan?.nextScanOffset !== undefined ? h(W.Button, { icon: 'search', disabled: loading || busy, onClick: () => { setOffset(0); setScanOffset(result.headerScan.nextScanOffset); } }, dt('继续搜索更早邮件', 'Search older headers')) : null)),
-    h(W.SplitResizer, { ...listSplit.resizerProps, label: dt('调整邮件列表宽度', 'Resize message list pane') }),
+    h(W.SplitResizer, { ...listSplit.resizerProps, className: mailCss.listSplit, label: dt('调整邮件列表宽度', 'Resize message list pane') }),
     h('section', { className: mailCss.reader, 'aria-label': dt('邮件详情', 'Message details'), 'aria-busy': reading || undefined },
       selected !== null ? h('div', { className: mailCss.readerBack, ref: readerBack },
         h(W.Button, { variant: 'ghost', icon: 'left', disabled: busy, onClick: backToList }, dt('返回邮件列表','Back to messages'))) : null,

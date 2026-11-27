@@ -6069,8 +6069,8 @@ __stardustUpdatesGuard(React, "dsh-email.settings", { dirty: !!hasIncompleteDraf
                     selector: '[data-tour="mail-filter"]',
                     fallback: "#" + tabId + "-tab-mailbox",
                     side: "bottom",
-                    title: dt("信桌 / 三栏切换与顶部检索条", "Desk / 3-Pane toggle & ribbon"),
-                    desc: dt("顶部收拢了账号与文件夹切换、搜索、未读/附件筛选和「待阅」计数；点右侧「信桌 / 三栏」可 1 键在默认书信分拣桌与经典三栏视图间切换。", "Switch accounts and folders, search or filter by unread/attachments, see your remaining count, and toggle 1-click between the default Letter Desk and classic 3-Pane view."),
+                    title: dt("信桌 / 三栏 / 列表切换与顶部检索条", "Desk / 3-Pane / List toggle & ribbon"),
+                    desc: dt("顶部收拢了账号与文件夹切换、搜索、未读/附件筛选和「待阅」计数；点右侧「信桌 / 三栏 / 列表」可 1 键在默认书信分拣桌、经典三栏与 Gmail 式单行列表间切换。", "Switch accounts and folders, search or filter by unread/attachments, see your remaining count, and toggle 1-click between the default Letter Desk, classic 3-Pane and a Gmail-style one-line List view."),
                 },
                 {
                     id: "letter-card",
