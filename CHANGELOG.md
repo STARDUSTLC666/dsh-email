@@ -1,5 +1,21 @@
 # 更新记录
 
+## 0.36.0 (2026-11-27)
+
+- **Gmail 式「列表」单行视图（合入 #69 并优化交互）**：
+  - 「收发邮件」视图切换器新增**「列表 / List」**选项，与「信桌」「三栏」并列。
+  - 列表模式保留左侧文件夹栏、去掉第三栏阅读区，每封邮件单行展示未读圆点、星标、发件人、主题、附件图标与时间；点开邮件后列表区域整块切换为全宽阅读页，支持点击顶部「返回邮件列表」或点击左侧当前文件夹返回列表，并补齐阅读页返回按钮的键盘焦点移动。
+  - 切换到「列表」视图时自动清除残留选中状态，避免从「信桌」合上信纸或从「三栏」切换时误直跳全屏阅读页。
+- **记住上次选中的视图（合入 #69）**：
+  - 视图选择（`desk` / `3pane` / `list`）自动保存在浏览器 `localStorage`（`dsh-email.view-mode`），重开工作台自动恢复；遇到未知值安全回落到默认「信桌」。纯前端改动，不涉及后端、配置或账号数据。
+
+- **Gmail-Style One-Line List View (Merges #69 + Interaction Polish)**:
+  - Added a **List** option alongside **Desk** and **3-Pane** in the Mailbox view toggle.
+  - Keeps the left folder rail, drops the third reader pane, and renders each message on one line (unread dot, star, sender, subject, attachment icon, timestamp); opening a message replaces the list in place with a full-width reader, supporting **Back to messages** (with keyboard focus transfer) as well as clicking the active folder in the rail to return to the list.
+  - Clears any stale selection when switching into **List** view so switching from Letter Desk (after folding a letter back) or 3-Pane always lands on the list.
+- **Remember Last Selected View (Merges #69)**:
+  - Persists the selected view (`desk` / `3pane` / `list`) in `localStorage` (`dsh-email.view-mode`) and falls back safely to **Desk** on unknown values. Frontend-only; no backend, config, or account-data changes.
+
 ## 0.35.0 (2026-11-27)
 
 - **`email_send` 空正文拦截与审批前预检（合入 #66、#68）**：

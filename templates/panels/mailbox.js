@@ -1141,7 +1141,7 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
     dragRef.current = null;
   }, [active, account, folder, query, offset, scanOffset, unread, withAttachments, refresh]);
   useEffect(() => {
-    if (viewMode !== '3pane' || selected === null || !readerBack.current?.getClientRects?.().length) return;
+    if (viewMode === 'desk' || selected === null || !readerBack.current?.getClientRects?.().length) return;
     readerBack.current.querySelector('button')?.focus({ preventScroll: true });
   }, [selected, viewMode]);
   useEffect(() => {
@@ -1316,7 +1316,10 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
     setAccount(value);
   }
   function changeFolder(value) {
-    if (folder === value) return;
+    if (folder === value) {
+      if (viewMode === 'list' && selected !== null) backToList();
+      return;
+    }
     reset();
     setResult(null);
     setFolder(value);
@@ -1384,6 +1387,10 @@ function MailboxWorkbench({ active, onConfigure, onDraft, onAccountChange }) {
       if (nextMode === 'desk' && selected !== null) {
         const idx = visibleRows.findIndex(row => row.uid === selected);
         if (idx >= 0) setDeckIndex(idx);
+      }
+      if (nextMode === 'list') {
+        setSelected(null);
+        openedRow.current = null;
       }
       setSheetOpen(false);
       setViewMode(nextMode);

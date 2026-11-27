@@ -728,3 +728,39 @@ test('视图选择会被记住：重开工作台直接回到上次的列表视�
   await junk.flush()
   assert.equal(junk.tree.props['data-email-view'], 'desk')
 })
+
+test('从信桌合上信纸后切列表仍直接展示列表，在列表中点击当前文件夹也可退出阅读页', async () => {
+  const h = createStatefulHarness()
+  await h.flush()
+
+  // Unfold a letter in Desk, then fold back to Desk (leaves `selected` populated)
+  const unfoldBtn = h.findAll(n => n.props?.['data-email-unfold'] === 'true')[0]
+  assert.ok(unfoldBtn)
+  unfoldBtn.props.onClick()
+  await h.flush()
+  const foldBack = h.findAll(n => n.props?.['data-email-fold-back'] === 'true')[0]
+  assert.ok(foldBack)
+  foldBack.props.onClick()
+  await h.flush()
+
+  // Switch to List view: must land on the list, not jump straight back into full-screen reader
+  h.findAll(n => n.props?.['data-view-option'] === 'list')[0].props.onClick()
+  await h.flush()
+  assert.equal(h.tree.props['data-email-view'], 'list')
+  assert.equal(h.findAll(n => n.props?.['data-view'] === 'list')[0].props['data-reading'], false)
+
+  // Open a message in List view, then click the active folder in the left rail to return to the list
+  const firstRow = h.findAll(n => Object.hasOwn(n.props || {}, 'data-dsh-row'))[0]
+  const firstButton = h.findAll(n => n.type === 'button'
+    && typeof n.props?.className === 'string'
+    && n.props.className.split(' ').includes(h.mailCss.messageButton), firstRow)[0]
+  firstButton.props.onClick({ currentTarget: firstButton.dom })
+  await h.flush()
+  assert.equal(h.findAll(n => n.props?.['data-view'] === 'list')[0].props['data-reading'], true)
+
+  const activeFolderBtn = h.findAll(n => n.type === 'button' && n.props?.['aria-current'] === 'location')[0]
+  assert.ok(activeFolderBtn)
+  activeFolderBtn.props.onClick()
+  await h.flush()
+  assert.equal(h.findAll(n => n.props?.['data-view'] === 'list')[0].props['data-reading'], false)
+})
