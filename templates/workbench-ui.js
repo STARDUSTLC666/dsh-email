@@ -54,6 +54,7 @@ function createWorkbenchUI(React, require) {
     image: ['M3 4h18v16H3z', 'm3 17 6-6 5 5 2-2 5 5M16 8h.01'],
     layers: ['m12 3 9 4.5-9 4.5L3 7.5 12 3Z', 'm3 12 9 4.5 9-4.5', 'm3 16.5 9 4.5 9-4.5'],
     columns: ['M3 4h18v16H3z', 'M9 4v16', 'M15 4v16'],
+    list: ['M4 6h16', 'M4 12h16', 'M4 18h16'],
     flip: ['M3 12a9 9 0 0 1 15.5-6.3L21 8', 'M21 3v5h-5', 'M21 12a9 9 0 0 1-15.5 6.3L3 16', 'M3 21v-5h5'],
     expand: ['M15 3h6v6', 'M9 21H3v-6', 'm21 3-7 7', 'm3 21 7-7'],
   };
