@@ -1,5 +1,10 @@
 # 更新记录
 
+## 1.0.1 (2026-11-28)
+
+- 更新详情页现在会保留较新检查的结果，慢轮询返回时不再把版本或任务状态退回旧值。
+- Keep newer update-check results and job status when an older background request finishes later.
+
 ## 1.0.0 (2026-11-27)
 
 - **1.0.0 正式版里程碑**：面向 DeepSeek Harness（`>=0.2.2-rc.3`）的开源多账号 AI 邮件工作台正式进入 1.0.0 稳定版。
